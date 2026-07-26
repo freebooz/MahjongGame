@@ -68,12 +68,10 @@ Register-ScheduledTask -TaskName GuiyangMahjong-WSL-Server -Action $action -Trig
 .\Scripts\Configure-WslFirewall.ps1 -RemoteAddresses LocalSubnet
 ```
 
-## Fake 与真实 UE 游戏服
+## UE 游戏服
 
-`.env` 中的 `GAME_SERVER_VARIANT` 决定 game-node 镜像内容：
-
-- `fake`：Linux 集成测试用的受控子进程，可验证 Auth → Lobby → Allocator、注册、心跳、回收和状态恢复。
-- `unreal`：生产形态，使用 `Artifacts/LinuxServer` 中已 Cook/Stage 的 UE LinuxServer。
+game-node 只接受 `Artifacts/LinuxServer` 中已 Cook/Stage 的真实 UE LinuxServer。
+仓库和部署入口不再提供模拟 GameServer；缺少真实产物时镜像构建会直接失败。
 
 Windows 构建机先安装 UE 5.8 v26 Linux 交叉工具链并设置 `LINUX_MULTIARCH_ROOT`，然后执行：
 
@@ -81,7 +79,7 @@ Windows 构建机先安装 UE 5.8 v26 Linux 交叉工具链并设置 `LINUX_MULT
 .\Scripts\Build-LinuxServer.ps1 -EngineRoot F:\UnrealEngine-5.8.0-release -Configuration Shipping
 ```
 
-构建输出为 `Artifacts/LinuxServer`，包含 `build-manifest.json`。将完整目录同步到 Linux 仓库，把 `.env` 改为 `GAME_SERVER_VARIANT=unreal`，再升级：
+构建输出为 `Artifacts/LinuxServer`，包含 `build-manifest.json`。将完整目录同步到 Linux 仓库后升级：
 
 ```bash
 sudo ./Deploy/linux/deploy.sh upgrade --version <immutable-version>

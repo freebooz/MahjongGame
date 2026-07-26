@@ -1,4 +1,4 @@
-"""Headless validation for the Blender 5.2 tabletop-only Unreal asset."""
+"""Headless validation for the Blender 5.1 rounded PBR Unreal tabletop."""
 
 from __future__ import annotations
 
@@ -25,7 +25,6 @@ MODEL_MANIFEST = (
 )
 EXPECTED_SLOTS = {
     "M_Table_Walnut_PBR",
-    "M_Table_Joint_AO_PBR",
     "M_Table_Felt_Green_PBR",
 }
 
@@ -58,7 +57,7 @@ def main() -> None:
         raise RuntimeError(f"Missing tabletop mesh {MESH_PATH}")
     size = mesh.get_bounds().box_extent * 2.0
     dimensions = (float(size.x), float(size.y), float(size.z))
-    expected = (115.0, 115.0, 6.5)
+    expected = (115.0, 115.0, 17.0)
     if any(
         abs(value - wanted) > 0.25
         for value, wanted in zip(sorted(dimensions), sorted(expected))
@@ -66,8 +65,8 @@ def main() -> None:
         raise RuntimeError(f"Unexpected tabletop dimensions: {dimensions}")
 
     slots = material_slot_names(mesh)
-    if len(slots) != 3 or set(slots) != EXPECTED_SLOTS:
-        raise RuntimeError(f"Expected three tabletop material slots, found {slots}")
+    if len(slots) != 2 or set(slots) != EXPECTED_SLOTS:
+        raise RuntimeError(f"Expected two tabletop material slots, found {slots}")
     assigned_materials = []
     for index, slot in enumerate(mesh.get_editor_property("static_materials")):
         material = slot.get_editor_property("material_interface")
@@ -80,7 +79,7 @@ def main() -> None:
     )
     textures = [path for path in assets if "/Textures/T_" in path]
     materials = [path for path in assets if "/Materials/M_Table_" in path]
-    if len(textures) != 8 or len(materials) != 3:
+    if len(textures) != 8 or len(materials) != 2:
         raise RuntimeError(
             f"Legacy table assets remain: textures={len(textures)} materials={len(materials)}"
         )

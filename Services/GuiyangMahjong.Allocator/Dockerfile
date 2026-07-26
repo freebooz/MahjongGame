@@ -1,36 +1,21 @@
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 COPY Services/GuiyangMahjong.Allocator/GuiyangMahjong.Allocator.csproj Services/GuiyangMahjong.Allocator/
-COPY Services/GuiyangMahjong.FakeGameServer/GuiyangMahjong.FakeGameServer.csproj Services/GuiyangMahjong.FakeGameServer/
-RUN dotnet restore Services/GuiyangMahjong.Allocator/GuiyangMahjong.Allocator.csproj \
-    && dotnet restore Services/GuiyangMahjong.FakeGameServer/GuiyangMahjong.FakeGameServer.csproj \
-      --runtime linux-x64
+RUN dotnet restore Services/GuiyangMahjong.Allocator/GuiyangMahjong.Allocator.csproj
 COPY Contracts/ Contracts/
 COPY Services/GuiyangMahjong.Allocator/ Services/GuiyangMahjong.Allocator/
-COPY Services/GuiyangMahjong.FakeGameServer/ Services/GuiyangMahjong.FakeGameServer/
 RUN dotnet publish Services/GuiyangMahjong.Allocator/GuiyangMahjong.Allocator.csproj \
-      --configuration Release --output /output/allocator --no-restore \
-    && dotnet publish Services/GuiyangMahjong.FakeGameServer/GuiyangMahjong.FakeGameServer.csproj \
-      --configuration Release --runtime linux-x64 --self-contained false \
-      --output /output/fake-server --no-restore
+      --configuration Release --output /output/allocator --no-restore
 
 FROM build AS server-artifact
-ARG GAME_SERVER_VARIANT=fake
 COPY Artifacts/LinuxServer/ /input/linux-server/
 RUN set -eux; \
     mkdir -p /output/game-server; \
-    if [ "$GAME_SERVER_VARIANT" = "fake" ]; then \
-      cp -a /output/fake-server/. /output/game-server/; \
-      mv /output/game-server/GuiyangMahjong.FakeGameServer /output/game-server/GuiyangMahjongServer; \
-    elif [ "$GAME_SERVER_VARIANT" = "unreal" ]; then \
-      cp -a /input/linux-server/. /output/game-server/; \
-      server_binary="$(find /output/game-server -type f -path '*/Binaries/Linux/GuiyangMahjongServer' -print -quit)"; \
-      test -n "$server_binary"; \
-      chmod 0755 "$server_binary"; \
-      ln -s "${server_binary#/output/game-server/}" /output/game-server/GuiyangMahjongServer; \
-    else \
-      echo "Unsupported GAME_SERVER_VARIANT=$GAME_SERVER_VARIANT" >&2; exit 2; \
-    fi; \
+    cp -a /input/linux-server/. /output/game-server/; \
+    server_binary="$(find /output/game-server -type f -path '*/Binaries/Linux/GuiyangMahjongServer' -print -quit)"; \
+    test -n "$server_binary"; \
+    chmod 0755 "$server_binary"; \
+    ln -s "${server_binary#/output/game-server/}" /output/game-server/GuiyangMahjongServer; \
     chmod 0755 /output/game-server/GuiyangMahjongServer
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0

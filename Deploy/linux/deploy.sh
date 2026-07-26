@@ -13,6 +13,7 @@ BACKUP_FILE=""
 BOOTSTRAP=false
 PULL_ONLY=false
 REFRESH_BASE_IMAGES=false
+REFRESH_ADVERTISED_IP=false
 CONFIRM=false
 DEPLOY_STARTED=false
 ACTIVE_VERSION_BEFORE=""
@@ -26,6 +27,7 @@ while (($#)); do
     --bootstrap) BOOTSTRAP=true; shift ;;
     --pull-only) PULL_ONLY=true; shift ;;
     --refresh-base-images) REFRESH_BASE_IMAGES=true; shift ;;
+    --refresh-advertised-ip) REFRESH_ADVERTISED_IP=true; shift ;;
     --confirm) CONFIRM=true; shift ;;
     *) echo "Unknown argument: $1" >&2; exit 2 ;;
   esac
@@ -49,6 +51,7 @@ Options:
   --bootstrap             Install Docker Engine when it is missing.
   --pull-only             Pull prebuilt images instead of building locally.
   --refresh-base-images   Refresh Dockerfile base-image metadata before a local build.
+  --refresh-advertised-ip Refresh ADVERTISED_IP from the host's current primary IPv4.
   --backup-file PATH      Backup archive for restore.
   --confirm               Confirm destructive restore.
 EOF
@@ -73,7 +76,16 @@ if ! flock -n 9; then
 fi
 
 compose() {
-  docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" "$@"
+  # Docker Compose gives the parent shell higher precedence than --env-file.
+  # Remove only keys declared by the root-owned deployment file so stale login
+  # profiles or CI variables cannot silently split service credentials.
+  local -a clean_environment=(env)
+  local key
+  while IFS='=' read -r key _; do
+    [[ "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue
+    clean_environment+=(-u "$key")
+  done <"$ENV_FILE"
+  "${clean_environment[@]}" docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" "$@"
 }
 
 env_value() {
@@ -202,8 +214,7 @@ ensure_environment() {
     cat >"$ENV_FILE" <<EOF
 MAHJONG_VERSION=${VERSION:-dev}
 IMAGE_REGISTRY=local
-GAME_SERVER_VARIANT=fake
-GAME_SERVER_MAP=
+GAME_SERVER_MAP=/Game/Maps/MahjongRoomMap?game=/Script/GuiyangMahjongServer.GuiyangMahjongGameMode
 MAHJONG_DATA_ROOT=/var/lib/guiyang-mahjong
 ADVERTISED_IP=$advertised_ip
 AUTH_PORT=18082
@@ -218,6 +229,18 @@ JOIN_TICKET_SIGNING_KEY=$(random_secret 32)
 LOBBY_INTERNAL_TOKEN=$(random_secret 32)
 ALLOCATOR_SERVICE_TOKEN=$(random_secret 32)
 EOF
+  fi
+  if [[ "$REFRESH_ADVERTISED_IP" == true ]]; then
+    local refreshed_advertised_ip
+    refreshed_advertised_ip="$(detect_advertised_ip)"
+    [[ -n "$refreshed_advertised_ip" ]] \
+      || { echo "Could not refresh the advertised IPv4 address." >&2; exit 1; }
+    if grep -q '^ADVERTISED_IP=' "$ENV_FILE"; then
+      sed -i "s/^ADVERTISED_IP=.*/ADVERTISED_IP=$refreshed_advertised_ip/" "$ENV_FILE"
+    else
+      printf 'ADVERTISED_IP=%s\n' "$refreshed_advertised_ip" >>"$ENV_FILE"
+    fi
+    echo "Refreshed ADVERTISED_IP=$refreshed_advertised_ip"
   fi
   chown root:root "$ENV_FILE"
   chmod 0600 "$ENV_FILE"
@@ -246,19 +269,16 @@ validate_environment() {
       exit 1
     fi
   done
-  local advertised_ip variant game_server_map port_start port_end
+  local advertised_ip game_server_map port_start port_end
   advertised_ip="$(env_value ADVERTISED_IP)"
   [[ "$advertised_ip" != "0.0.0.0" && "$advertised_ip" != "::" ]] \
     || { echo "ADVERTISED_IP must be a client-reachable address." >&2; exit 1; }
-  variant="$(env_value GAME_SERVER_VARIANT)"; variant="${variant:-fake}"
-  [[ "$variant" == fake || "$variant" == unreal ]] \
-    || { echo "GAME_SERVER_VARIANT must be fake or unreal." >&2; exit 1; }
   game_server_map="$(env_value GAME_SERVER_MAP)"
-  if [[ "$variant" == unreal && "$game_server_map" != "/Game/Maps/MahjongRoomMap?game=/Script/GuiyangMahjongServer.GuiyangMahjongGameMode" ]]; then
-    echo "GAME_SERVER_MAP must select MahjongRoomMap and inject GuiyangMahjongGameMode for the Unreal server variant." >&2
+  if [[ "$game_server_map" != "/Game/Maps/MahjongRoomMap?game=/Script/GuiyangMahjongServer.GuiyangMahjongGameMode" ]]; then
+    echo "GAME_SERVER_MAP must select MahjongRoomMap and inject GuiyangMahjongGameMode." >&2
     exit 1
   fi
-  if [[ "$variant" == unreal && ( "$advertised_ip" == 127.* || "$advertised_ip" == "::1" ) ]]; then
+  if [[ "$advertised_ip" == 127.* || "$advertised_ip" == "::1" ]]; then
     echo "A real UE server cannot advertise a loopback address to external clients." >&2
     exit 1
   fi
@@ -351,6 +371,23 @@ wait_endpoint() {
   done
 }
 
+reconcile_postgres_credentials() {
+  local deadline=$((SECONDS + 60)) password
+  until compose exec -T postgres pg_isready -U mahjong -d mahjong >/dev/null 2>&1; do
+    ((SECONDS < deadline)) \
+      || { echo "PostgreSQL did not become ready for credential reconciliation." >&2; return 1; }
+    sleep 1
+  done
+  password="$(env_value POSTGRES_PASSWORD)"
+  # POSTGRES_PASSWORD initializes an empty volume but does not update an existing role.
+  # Feed the desired value through stdin so it never appears in a process argument or log.
+  printf "\\set role_password '%s'\nALTER ROLE mahjong WITH PASSWORD :'role_password';\n" "$password" \
+    | compose exec -T -u postgres postgres \
+        psql --no-psqlrc --set=ON_ERROR_STOP=1 --username=mahjong --dbname=mahjong >/dev/null
+  compose restart auth lobby >/dev/null
+  echo "POSTGRES_CREDENTIALS_OK"
+}
+
 collect_diagnostics() {
   [[ -f "$ENV_FILE" ]] || return 0
   local data_root stamp target
@@ -385,6 +422,7 @@ deploy() {
     BUILDKIT_PROGRESS=plain compose "${build_arguments[@]}"
   fi
   compose up --detach --remove-orphans
+  reconcile_postgres_credentials
   wait_endpoint Auth "http://127.0.0.1:$(env_value AUTH_PORT)/health/ready"
   wait_endpoint Allocator "http://127.0.0.1:$(env_value ALLOCATOR_PORT)/health/ready"
   wait_endpoint Lobby "http://127.0.0.1:$(env_value LOBBY_PORT)/health/ready"

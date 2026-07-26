@@ -2,7 +2,7 @@ param(
     [int]$LobbyPort = 28080,
     [int]$AllocatorPort = 28081,
     [int]$GameServerPortStart = 29000,
-    [string]$GameServerExecutablePath = 'dotnet',
+    [string]$GameServerExecutablePath = '',
     [string[]]$GameServerPrefixArguments = @(),
     [int]$RegistrationTimeoutSeconds = 10,
     [int]$HeartbeatTimeoutSeconds = 3,
@@ -22,10 +22,10 @@ $joinKey = 'integration-join-ticket-key-which-is-long-enough'
 $root = Split-Path -Parent $PSScriptRoot
 $lobbyDll = Join-Path $root 'Services/GuiyangMahjong.Lobby/bin/Release/net10.0/GuiyangMahjong.Lobby.dll'
 $allocatorDll = Join-Path $root 'Services/GuiyangMahjong.Allocator/bin/Release/net10.0/GuiyangMahjong.Allocator.dll'
-$fakeDll = Join-Path $root 'Services/GuiyangMahjong.FakeGameServer/bin/Release/net10.0/GuiyangMahjong.FakeGameServer.dll'
 $outboxDirectory = Join-Path $root "Saved/Automation/Phase6SettlementOutbox-$PID"
-if ($GameServerExecutablePath -eq 'dotnet' -and $GameServerPrefixArguments.Count -eq 0) {
-    $GameServerPrefixArguments = @($fakeDll)
+if ([string]::IsNullOrWhiteSpace($GameServerExecutablePath) -or
+    -not (Test-Path -LiteralPath $GameServerExecutablePath)) {
+    throw "A real GameServer executable is required: $GameServerExecutablePath"
 }
 
 function Wait-Health([string]$Url) {

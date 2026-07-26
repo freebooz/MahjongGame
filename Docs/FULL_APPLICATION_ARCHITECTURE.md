@@ -105,7 +105,6 @@ flowchart LR
 | UE Dedicated Server | `GuiyangMahjongServer` Server Target | Linux | 单桌权威房间、规则、动作、超时、复制、重连快照、结算上报 | 多桌调度、全局大厅 |
 | PostgreSQL | Compose 使用 PostgreSQL 17 | Linux/托管数据库 | Auth 身份和刷新会话；Lobby 房间、活动租约、战绩 | WebSocket 推送、游戏实时复制 |
 | Redis | Compose 使用 Redis 8 | Linux/托管缓存 | Lobby 分布式幂等、Presence、热缓存、事件序号和 Pub/Sub | 最终权威战绩 |
-| FakeGameServer | `Services/GuiyangMahjong.FakeGameServer` | .NET 10 | Allocator 自动化测试替身 | 正式游戏运行 |
 | EditorTools | `GuiyangMahjongEditorTools` | UE Editor | UI/资产生成、编辑器命令和自动化 | Shipping Runtime |
 
 ## 5. UE 工程模块边界
@@ -671,7 +670,7 @@ sudo ./Deploy/linux/deploy.sh install --bootstrap --version <immutable-version>
 - Auth，宿主端口 18082；
 - Lobby，宿主端口 18080。
 - Allocator/game-node，管理端口 18081；
-- 每房间一个 FakeGameServer 或真实 UE LinuxServer 子进程，UDP 19000–19099。
+- 每房间一个真实 UE LinuxServer 子进程，UDP 19000–19099。
 
 ### 16.3 部署事务
 
@@ -700,7 +699,7 @@ Artifacts/LinuxServer/
 Artifacts/LinuxServer/build-manifest.json
 ```
 
-构建机需要 UE 5.8 v26 Clang 20.1.8 Linux 交叉工具链。产物必须是 Linux ELF，不依赖 Wine 或 Windows DLL；`GAME_SERVER_VARIANT=unreal` 时被复制到 game-node 镜像。
+构建机需要 UE 5.8 v26 Clang 20.1.8 Linux 交叉工具链。产物必须是 Linux ELF，不依赖 Wine 或 Windows DLL，并会被复制到 game-node 镜像。
 
 ### 17.3 真实 GameServer 控制面联调
 

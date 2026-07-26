@@ -214,6 +214,23 @@ void UMobileMahjongHUDWidget::RefreshRoomState(const FMahjongRoomState& State, c
 void UMobileMahjongHUDWidget::NativeTick(const FGeometry& MyGeometry, const float InDeltaTime)
 {
     Super::NativeTick(MyGeometry, InDeltaTime);
+    if (!Table3DActor)
+    {
+        // The client presentation Blueprint is loaded asynchronously. Public/private state may
+        // already be cached by the HUD before its ChildActor table exists, so acquire it here and
+        // immediately replay the latest snapshot instead of waiting for another network update.
+        if (AGuiyangMahjongPlayerController* PC =
+            Cast<AGuiyangMahjongPlayerController>(GetOwningPlayer()))
+        {
+            Table3DActor = Cast<AMahjong3DTableActor>(PC->EnsureMahjongRoomPresentation());
+            if (Table3DActor)
+            {
+                Refresh3DTable();
+                UE_LOG(LogMahjongUI, Display,
+                    TEXT("Applied cached table state after async room presentation became ready"));
+            }
+        }
+    }
     if (bVisualReviewMode)
     {
         Txt_Countdown->SetText(FText::AsNumber(12));

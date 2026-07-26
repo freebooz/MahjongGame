@@ -11,6 +11,13 @@
 #include "Misc/Parse.h"
 #include "TimerManager.h"
 
+AGuiyangMahjongPlayerController::AGuiyangMahjongPlayerController()
+{
+    // ClientRestart and replicated Pawn state can run after the room camera is selected.
+    // Keep camera ownership in the client presentation layer for the whole controller lifetime.
+    bAutoManageActiveCameraTarget = false;
+}
+
 void AGuiyangMahjongPlayerController::BeginPlay()
 {
     Super::BeginPlay();

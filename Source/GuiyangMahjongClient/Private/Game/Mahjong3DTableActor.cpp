@@ -229,7 +229,7 @@ void AMahjong3DTableActor::AddRemainingWall()
             const int32 Column = Index / 2;
             const int32 Level = Index % 2;
             // Wall columns touch edge-to-edge and each upper tile sits on the full tile thickness.
-            const FVector Base(StartX + Column * TileTightPitch, -245.0f,
+            const FVector Base(StartX + Column * TileTightPitch, -WallDistanceFromCenter,
                 TileDepth * 0.5f + Level * TileDepth);
             AddTile(nullptr, false, false, RotateAroundTable(Base, RelativeWallSide),
                 RotateAroundTable(FRotator::ZeroRotator, RelativeWallSide));
@@ -247,7 +247,8 @@ void AMahjong3DTableActor::AddHands()
         for (int32 Index = 0; Index < Tiles.Num(); ++Index)
         {
             AddTile(&Tiles[Index], true, true,
-                FVector(StartX + Index * TileTightPitch, -338.0f, TileHeight * 0.5f + 9.0f),
+                FVector(StartX + Index * TileTightPitch, -HandDistanceFromCenter,
+                    TileHeight * 0.5f + 9.0f),
                 FRotator::ZeroRotator, Tiles[Index].UniqueId == SelectedTileId);
         }
     }
@@ -260,7 +261,8 @@ void AMahjong3DTableActor::AddHands()
         const float StartX = -0.5f * (Count - 1) * TileTightPitch;
         for (int32 Index = 0; Index < Count; ++Index)
         {
-            const FVector Base(StartX + Index * TileTightPitch, -338.0f, TileHeight * 0.5f + 9.0f);
+            const FVector Base(StartX + Index * TileTightPitch, -HandDistanceFromCenter,
+                TileHeight * 0.5f + 9.0f);
             AddTile(nullptr, false, true, RotateAroundTable(Base, RelativeSeat),
                 RotateAroundTable(FRotator::ZeroRotator, RelativeSeat));
         }
@@ -280,11 +282,13 @@ void AMahjong3DTableActor::AddDiscards()
             if (&Previous == &Record) break;
             if (!Previous.bClaimed && GetRelativeSeat(Previous.SeatIndex) == RelativeSeat) ++SeatSequence;
         }
-        const int32 Column = SeatSequence % 6;
-        const int32 Row = SeatSequence / 6;
-        const float DiscardStartX = -0.5f * 5.0f * TileTightPitch;
+        const int32 SafeDiscardColumns = FMath::Clamp(DiscardColumns, 5, 9);
+        const int32 Column = SeatSequence % SafeDiscardColumns;
+        const int32 Row = SeatSequence / SafeDiscardColumns;
+        const float DiscardStartX =
+            -0.5f * static_cast<float>(SafeDiscardColumns - 1) * TileTightPitch;
         const FVector Base(DiscardStartX + Column * TileTightPitch,
-            -126.0f - Row * TileTightLongPitch, 14.0f);
+            -DiscardFirstRowDistanceFromCenter - Row * TileTightLongPitch, 14.0f);
         AddTile(&Record.Tile, true, false, RotateAroundTable(Base, RelativeSeat),
             RotateAroundTable(FRotator::ZeroRotator, RelativeSeat),
             Record.Sequence == CachedPublicState.Discards.Last().Sequence);
@@ -315,7 +319,7 @@ void AMahjong3DTableActor::AddMelds()
             // Exposed melds use the same upright orientation and tight pitch as the player's hand.
             // Keep them on a parallel inner row so they remain readable without overlapping the hand.
             const float StartX = -0.5f * (MeldTileCountBySeat[RelativeSeat] - 1) * TileTightPitch;
-            const FVector Base(StartX + PackedIndex * TileTightPitch, -292.0f,
+            const FVector Base(StartX + PackedIndex * TileTightPitch, -MeldDistanceFromCenter,
                 TileHeight * 0.5f + 9.0f);
             AddTile(Tile.IsValid() ? &Tile : nullptr, Tile.IsValid(), true,
                 RotateAroundTable(Base, RelativeSeat), RotateAroundTable(FRotator::ZeroRotator, RelativeSeat));

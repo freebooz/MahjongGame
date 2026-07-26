@@ -26,7 +26,6 @@ public:
     virtual void Initialize(FSubsystemCollectionBase& Collection) override;
     virtual void Deinitialize() override;
 
-    UFUNCTION(BlueprintCallable, Category="麻将|登录") void TryAutoLogin();
     UFUNCTION(BlueprintCallable, Category="麻将|登录") void LoginAsGuest();
     UFUNCTION(BlueprintCallable, Category="麻将|登录") void LoginWithWechat();
     UFUNCTION(BlueprintCallable, Category="麻将|登录") void Logout();
@@ -66,6 +65,5 @@ private:
     bool ApplyRemoteSessionResponse(const FHttpResponsePtr& Response, bool bInitialLogin);
     void ScheduleRemoteRefresh();
     void FailLogin(const FString& ChineseReason);
-    void SaveAutoLoginPreference();
     static FString MakePlayerSuffix(const FString& PlayerId);
 };

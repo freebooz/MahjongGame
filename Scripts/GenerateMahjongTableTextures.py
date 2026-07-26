@@ -7,8 +7,8 @@ The output uses the Unreal-friendly metallic/roughness workflow:
 * Roughness: linear grayscale texture
 * AO: linear grayscale texture
 
-Only Python's standard library is required so the texture build is reproducible on
-machines that do not have Pillow installed.
+The generator uses NumPy and Pillow to keep the full 2K build deterministic and
+fast enough for iterative art review.
 """
 
 from __future__ import annotations
@@ -22,6 +22,9 @@ import zlib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
+
+import numpy as np
+from PIL import Image
 
 
 PixelFunction = Callable[[int, int, int], tuple[int, int, int]]
@@ -39,8 +42,8 @@ class MaterialSpec:
 
 
 MATERIALS = (
-    MaterialSpec("M_Table_Walnut_PBR", "Wood", (94, 36, 12), 0.24, 0.0, "wood", 0.95),
-    MaterialSpec("M_Table_Felt_Green_PBR", "Felt", (13, 74, 28), 0.86, 0.0, "felt", 1.02),
+    MaterialSpec("M_Table_Walnut_PBR", "Wood", (92, 34, 10), 0.29, 0.0, "wood", 0.30),
+    MaterialSpec("M_Table_Felt_Green_PBR", "Felt", (6, 52, 18), 0.84, 0.0, "felt", 0.52),
 )
 
 
@@ -114,7 +117,7 @@ def color_variation(spec: MaterialSpec, x: int, y: int, size: int) -> float:
         directional_nap = math.sin((x * 0.18 + y) * math.tau / 113.0)
         return h * 0.045 + directional_nap * 0.010
     if spec.pattern == "wood":
-        return h * 0.50
+        return h * 0.42
     if spec.pattern == "grille":
         return -0.58 if h < -0.5 else h * 0.12
     if spec.pattern == "powder":
@@ -193,6 +196,126 @@ def write_rgb_png(path: Path, size: int, pixel: PixelFunction) -> None:
     path.write_bytes(data)
 
 
+def vector_height(spec: MaterialSpec, size: int) -> np.ndarray:
+    """Vectorized deterministic height field used by all PBR channels."""
+
+    y_pixels, x_pixels = np.mgrid[0:size, 0:size]
+    x = x_pixels.astype(np.float32)
+    y = y_pixels.astype(np.float32)
+    u = x / np.float32(size)
+    v = y / np.float32(size)
+    rng = np.random.default_rng(1701 if spec.pattern == "wood" else 5107)
+    noise_field = rng.random((size, size), dtype=np.float32) - np.float32(0.5)
+    tau = np.float32(math.tau)
+    if spec.pattern == "wood":
+        flowing = (
+            u * np.float32(5.6)
+            + np.sin(v * tau * np.float32(3.1)) * np.float32(0.52)
+            + np.sin((v * np.float32(7.0) + u * np.float32(1.9)) * tau)
+            * np.float32(0.18)
+        )
+        grain = np.sin(flowing * tau)
+        cathedral = np.sin(
+            (u * np.float32(2.2) + np.sin(v * tau * np.float32(1.7)) * np.float32(0.72))
+            * tau
+        )
+        pores = (
+            np.sin((u * np.float32(42.0) + v * np.float32(2.4)) * tau)
+            * np.float32(0.10)
+        )
+        return (
+            grain * np.float32(0.39)
+            + cathedral * np.float32(0.20)
+            + pores
+            + noise_field * np.float32(0.09)
+        )
+
+    warp = np.sin(x * tau / np.float32(3.7))
+    weft = np.sin(y * tau / np.float32(4.3))
+    interlace = warp * weft
+    diagonal = np.sin((x + y * np.float32(1.17)) * tau / np.float32(17.0))
+    nap = np.sin((x * np.float32(0.23) + y) * tau / np.float32(61.0))
+    coarse_size = max(1, math.ceil(size / 7))
+    coarse = rng.random((coarse_size, coarse_size), dtype=np.float32)
+    coarse = np.repeat(np.repeat(coarse, 7, axis=0), 7, axis=1)[:size, :size]
+    coarse -= np.float32(0.5)
+    return (
+        warp * np.float32(0.25)
+        + weft * np.float32(0.22)
+        + interlace * np.float32(0.19)
+        + diagonal * np.float32(0.09)
+        + nap * np.float32(0.07)
+        + noise_field * np.float32(0.15)
+        + coarse * np.float32(0.10)
+    )
+
+
+def save_vectorized_pbr(spec: MaterialSpec, size: int, output_dir: Path) -> None:
+    height = vector_height(spec, size)
+    if spec.pattern == "wood":
+        variation = height * np.float32(0.32)
+    else:
+        y_pixels, x_pixels = np.mgrid[0:size, 0:size]
+        directional_nap = np.sin(
+            (x_pixels.astype(np.float32) * np.float32(0.18) + y_pixels)
+            * np.float32(math.tau / 113.0)
+        )
+        variation = height * np.float32(0.045) + directional_nap * np.float32(0.010)
+
+    base = np.asarray(spec.base_color, dtype=np.float32)[None, None, :]
+    multiplier = np.maximum(np.float32(0.12), np.float32(1.0) + variation)
+    base_color = np.clip(base * multiplier[:, :, None], 0.0, 255.0).astype(np.uint8)
+
+    left = np.roll(height, 1, axis=1)
+    right = np.roll(height, -1, axis=1)
+    down = np.roll(height, 1, axis=0)
+    up = np.roll(height, -1, axis=0)
+    nx = (left - right) * np.float32(spec.normal_strength)
+    ny = (up - down) * np.float32(spec.normal_strength)
+    nz = np.ones_like(nx)
+    length = np.sqrt(nx * nx + ny * ny + nz * nz)
+    normal = np.stack(
+        (
+            nx / length * np.float32(0.5) + np.float32(0.5),
+            ny / length * np.float32(0.5) + np.float32(0.5),
+            nz / length * np.float32(0.5) + np.float32(0.5),
+        ),
+        axis=2,
+    )
+    normal = np.clip(normal * np.float32(255.0), 0.0, 255.0).astype(np.uint8)
+
+    roughness = np.clip(
+        np.float32(spec.roughness) + height * np.float32(0.055),
+        np.float32(0.03),
+        np.float32(1.0),
+    )
+    roughness_rgb = np.repeat(
+        (roughness * np.float32(255.0)).astype(np.uint8)[:, :, None], 3, axis=2
+    )
+    ao = np.float32(0.94) + np.clip(
+        height * np.float32(0.035), np.float32(-0.08), np.float32(0.04)
+    )
+    ao_rgb = np.repeat(
+        (np.clip(ao, 0.0, 1.0) * np.float32(255.0)).astype(np.uint8)[:, :, None],
+        3,
+        axis=2,
+    )
+
+    channels = {
+        "BaseColor": base_color,
+        "Normal": normal,
+        "Roughness": roughness_rgb,
+        "AO": ao_rgb,
+    }
+    for channel, pixels in channels.items():
+        Image.fromarray(pixels, mode="RGB").save(
+            output_dir / f"T_{spec.stem}_{channel}_2K.png",
+            format="PNG",
+            optimize=True,
+            compress_level=7,
+        )
+
+
 def sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as stream:
@@ -222,15 +345,7 @@ def main() -> None:
         MATERIALS if args.only == "All" else tuple(spec for spec in MATERIALS if spec.stem == args.only)
     )
     for spec in selected_materials:
-        channels = {
-            "BaseColor": base_color_pixel(spec),
-            "Normal": normal_pixel(spec),
-            "Roughness": roughness_pixel(spec),
-            "AO": ao_pixel(spec),
-        }
-        for channel, pixel in channels.items():
-            path = output_dir / f"T_{spec.stem}_{channel}_2K.png"
-            write_rgb_png(path, args.size, pixel)
+        save_vectorized_pbr(spec, args.size, output_dir)
     generated = []
     for spec in MATERIALS:
         generated.append(
