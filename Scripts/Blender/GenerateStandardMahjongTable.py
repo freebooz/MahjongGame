@@ -29,7 +29,7 @@ import bpy
 from mathutils import Vector
 
 
-SCRIPT_VERSION = "3.2.0"
+SCRIPT_VERSION = "3.4.0"
 MODEL_COLLECTION = "MG_MahjongTableTop"
 PRESENTATION_COLLECTION = "MG_MahjongTableTop_Presentation"
 ASSET_NAME = "SM_StandardMahjongTable"
@@ -56,9 +56,10 @@ class TabletopDimensions:
     bullnose_bottom_z: float = -0.030
     outer_corner_radius: float = 0.024
     outer_corner_arc_segments: int = 5
-    miter_joint_width: float = 0.0030
-    miter_joint_center_line_width: float = 0.0018
-    miter_joint_recess: float = 0.0015
+    # A furniture-tight joint: the previous 3 mm opening read as a structural
+    # crack at gameplay distance. Keep a sub-millimetre seam so the four-rail
+    # construction remains legible without looking incorrectly assembled.
+    miter_joint_width: float = 0.0006
     felt_corner_radius: float = 0.012
     felt_corner_segments: int = 16
 
@@ -310,15 +311,6 @@ def create_felt_material() -> bpy.types.Material:
     return material
 
 
-def create_joint_material() -> bpy.types.Material:
-    material, shader, _tree = principled_material(
-        "M_Table_Joint_AO_PBR", (0.0012, 0.00028, 0.00008, 1.0), 0.88
-    )
-    set_input(shader, "Specular IOR Level", 0.08)
-    material["surface"] = "recessed_miter_joint"
-    return material
-
-
 def rounded_rectangle(
     width: float,
     depth: float,
@@ -445,81 +437,12 @@ def apply_directional_wood_uv(obj: bpy.types.Object, grain_axis: str) -> None:
     obj["wood_uv_v_tiles"] = 4.0
 
 
-def create_miter_joint_grooves(
-    dimensions: TabletopDimensions,
-    material: bpy.types.Material,
-    collection: bpy.types.Collection,
-) -> bpy.types.Object:
-    """Create dark recessed inserts below the four real geometric joint gaps."""
-
-    half = dimensions.size * 0.5
-    inner = dimensions.playing_size * 0.5
-    width = dimensions.miter_joint_width * 0.60
-    center_width = dimensions.miter_joint_center_line_width
-    top_z = dimensions.frame_top - dimensions.miter_joint_recess
-    bottom_z = dimensions.frame_bottom + 0.0002
-    rounded_miter = (
-        half
-        - dimensions.outer_corner_radius
-        + dimensions.outer_corner_radius / math.sqrt(2.0)
-    )
-    diagonals = (
-        ((inner, inner), (rounded_miter, rounded_miter)),
-        ((-inner, inner), (-rounded_miter, rounded_miter)),
-        ((-inner, -inner), (-rounded_miter, -rounded_miter)),
-        ((inner, -inner), (rounded_miter, -rounded_miter)),
-    )
-    vertices: list[tuple[float, float, float]] = []
-    faces: list[tuple[int, int, int, int]] = []
-    for start, end in diagonals:
-        direction = Vector((end[0] - start[0], end[1] - start[1]))
-        direction_normalized = direction.normalized()
-        start_point = Vector(start) + direction_normalized * 0.0004
-        end_point = Vector(end) - direction_normalized * 0.0004
-        perpendicular = Vector((-direction.y, direction.x)).normalized() * (width * 0.5)
-        base = len(vertices)
-        vertices.extend(
-            (
-                (start_point.x + perpendicular.x, start_point.y + perpendicular.y, bottom_z),
-                (end_point.x + perpendicular.x, end_point.y + perpendicular.y, bottom_z),
-                (end_point.x - perpendicular.x, end_point.y - perpendicular.y, bottom_z),
-                (start_point.x - perpendicular.x, start_point.y - perpendicular.y, bottom_z),
-                (start_point.x + perpendicular.x, start_point.y + perpendicular.y, top_z),
-                (end_point.x + perpendicular.x, end_point.y + perpendicular.y, top_z),
-                (end_point.x - perpendicular.x, end_point.y - perpendicular.y, top_z),
-                (start_point.x - perpendicular.x, start_point.y - perpendicular.y, top_z),
-            )
-        )
-        faces.extend(
-            (
-                (base, base + 3, base + 2, base + 1),
-                (base + 4, base + 5, base + 6, base + 7),
-                (base, base + 1, base + 5, base + 4),
-                (base + 1, base + 2, base + 6, base + 5),
-                (base + 2, base + 3, base + 7, base + 6),
-                (base + 3, base, base + 4, base + 7),
-            )
-        )
-    mesh = bpy.data.meshes.new("Miter_Joint_Grooves_Mesh")
-    mesh.from_pydata(vertices, [], faces)
-    mesh.materials.append(material)
-    mesh.update(calc_edges=True)
-    grooves = bpy.data.objects.new("Miter_Joint_Grooves", mesh)
-    collection.objects.link(grooves)
-    grooves["asset_role"] = "miter_joint_recess_and_ao"
-    grooves["joint_width_mm"] = dimensions.miter_joint_width * 1000.0
-    grooves["joint_center_line_width_mm"] = center_width * 1000.0
-    grooves["physical_gap"] = True
-    return grooves
-
-
 def join_frame_segments(
     segment_parts: dict[str, list[bpy.types.Object]],
-    grooves: bpy.types.Object,
+    joint_width_mm: float,
 ) -> bpy.types.Object:
     """Join four objects while preserving four disconnected geometry islands."""
 
-    groove_width_mm = float(grooves.get("joint_width_mm", 0.0))
     bpy.ops.object.select_all(action="DESELECT")
     active = None
     for segment_name, parts in segment_parts.items():
@@ -528,9 +451,6 @@ def join_frame_segments(
             group.add(range(len(part.data.vertices)), 1.0, "REPLACE")
             part.select_set(True)
             active = active or part
-    groove_group = grooves.vertex_groups.new(name="Miter_Joint_Grooves")
-    groove_group.add(range(len(grooves.data.vertices)), 1.0, "REPLACE")
-    grooves.select_set(True)
     bpy.context.view_layer.objects.active = active
     bpy.ops.object.join()
     frame = bpy.context.object
@@ -540,7 +460,8 @@ def join_frame_segments(
     frame["segment_names"] = ",".join(FRAME_PART_NAMES)
     frame["segment_count"] = 4
     frame["joint_angle_degrees"] = 45.0
-    frame["joint_groove_width_mm"] = groove_width_mm
+    frame["joint_width_mm"] = joint_width_mm
+    frame["joint_fill_geometry"] = False
     frame["shared_uv"] = True
     frame["mobile_game_ready"] = True
     frame.select_set(False)
@@ -550,7 +471,6 @@ def join_frame_segments(
 def create_mitered_frame(
     dimensions: TabletopDimensions,
     wood_material: bpy.types.Material,
-    joint_material: bpy.types.Material,
     collection: bpy.types.Collection,
 ) -> bpy.types.Object:
     """Create four discrete rails meeting at exact 45-degree miter seams."""
@@ -656,8 +576,10 @@ def create_mitered_frame(
             part["mobile_game_ready"] = True
             apply_directional_wood_uv(part, grain_axis)
         segment_parts[name] = [base, cap]
-    grooves = create_miter_joint_grooves(dimensions, joint_material, collection)
-    return join_frame_segments(segment_parts, grooves)
+    return join_frame_segments(
+        segment_parts,
+        dimensions.miter_joint_width * 1000.0,
+    )
 
 
 def create_felt_surface(
@@ -847,6 +769,7 @@ def write_manifest(
         "frame_mesh_layout": {
             "object_count": 1,
             "segment_count": 4,
+            "joint_fill_geometry": False,
             "segments": list(FRAME_PART_NAMES),
             "shared_uv": True,
             "grain_direction": {
@@ -874,7 +797,6 @@ def write_manifest(
         "mobile_triangle_budget": 5000,
         "materials": [
             "M_Table_Walnut_PBR",
-            "M_Table_Joint_AO_PBR",
             "M_Table_Felt_Green_PBR",
         ],
         "material_workflow": "PBR metallic-roughness",
@@ -910,9 +832,8 @@ def main() -> None:
     model_collection = create_collection(MODEL_COLLECTION)
     presentation_collection = create_collection(PRESENTATION_COLLECTION)
     walnut = create_walnut_material()
-    joint_material = create_joint_material()
     felt_material = create_felt_material()
-    frame = create_mitered_frame(dimensions, walnut, joint_material, model_collection)
+    frame = create_mitered_frame(dimensions, walnut, model_collection)
     felt = create_felt_surface(dimensions, felt_material, model_collection)
     objects = [frame, felt]
     smart_uv(felt)

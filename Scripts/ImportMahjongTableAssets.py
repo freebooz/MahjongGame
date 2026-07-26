@@ -4,8 +4,8 @@ Run with UnrealEditor-Cmd and ``-ExecutePythonScript``.  The legacy static-mesh
 package is deleted before importing the new FBX at the same content path.  This
 prevents Unreal's reimport pipeline from retaining the old eleven-slot material
 layout while native code, maps, and Blueprints continue using the stable path.
-Obsolete leg/controller materials and textures are removed only after the new
-three-slot mesh has been saved and validated.
+Obsolete leg/controller/joint-fill materials and textures are removed only after
+the new two-slot mesh has been saved and validated.
 """
 
 from __future__ import annotations
@@ -33,12 +33,10 @@ REPORT_PATH = PROJECT_ROOT / "Saved" / "Reports" / "MahjongTableImportReport.jso
 TEXTURED_SLOTS = ("M_Table_Walnut_PBR", "M_Table_Felt_Green_PBR")
 EXPECTED_SLOTS = (
     "M_Table_Walnut_PBR",
-    "M_Table_Joint_AO_PBR",
     "M_Table_Felt_Green_PBR",
 )
 MATERIAL_ASSET_BY_SLOT = {
     "M_Table_Walnut_PBR": "M_Table_Walnut_Miter_PBR",
-    "M_Table_Joint_AO_PBR": "M_Table_Joint_AO_PBR",
     "M_Table_Felt_Green_PBR": "M_Table_Felt_Green_Fiber_PBR",
 }
 EXPECTED_DIMENSIONS_CM = (115.0, 115.0, 6.5)
@@ -278,25 +276,6 @@ def build_material(material_spec: dict):
     return material
 
 
-def build_joint_material():
-    slot_name = "M_Table_Joint_AO_PBR"
-    material, created = get_or_create_material(MATERIAL_ASSET_BY_SLOT[slot_name])
-    if not created:
-        return material
-    color = expression(material, unreal.MaterialExpressionConstant3Vector, -320, -60)
-    set_prop(color, "constant", unreal.LinearColor(0.002, 0.0005, 0.00012, 1.0))
-    roughness = expression(material, unreal.MaterialExpressionConstant, -320, 130)
-    set_prop(roughness, "r", 0.88)
-    library = unreal.MaterialEditingLibrary
-    library.connect_material_property(color, "", unreal.MaterialProperty.MP_BASE_COLOR)
-    library.connect_material_property(
-        roughness, "", unreal.MaterialProperty.MP_ROUGHNESS
-    )
-    library.recompile_material(material)
-    unreal.EditorAssetLibrary.save_loaded_asset(material, only_if_is_dirty=False)
-    return material
-
-
 def material_slot_names(mesh) -> list[str]:
     names = []
     for slot in mesh.get_editor_property("static_materials"):
@@ -308,8 +287,8 @@ def material_slot_names(mesh) -> list[str]:
 
 def assign_materials(mesh, materials: dict[str, object]) -> list[str]:
     slots = material_slot_names(mesh)
-    if len(slots) != 3:
-        raise RuntimeError(f"Reimported mesh must have three material slots, found {slots}")
+    if len(slots) != 2:
+        raise RuntimeError(f"Reimported mesh must have two material slots, found {slots}")
     missing = []
     for index, slot_name in enumerate(slots):
         material = materials.get(slot_name)
@@ -339,7 +318,7 @@ def triangle_count(mesh) -> int:
 
 
 def validate(mesh, slots: list[str], texture_count: int) -> tuple[tuple[float, float, float], int]:
-    if set(slots) != set(EXPECTED_SLOTS) or len(slots) != 3:
+    if set(slots) != set(EXPECTED_SLOTS) or len(slots) != 2:
         raise RuntimeError(f"Unexpected material slots: {slots}")
     if texture_count != 8:
         raise RuntimeError(f"Expected eight imported PBR textures, found {texture_count}")
@@ -454,7 +433,6 @@ def main() -> None:
     for material_spec in texture_manifest["materials"]:
         material = build_material(material_spec)
         materials[material_spec["material_slot"]] = material
-    materials["M_Table_Joint_AO_PBR"] = build_joint_material()
     slots = assign_materials(mesh, materials)
     dimensions, triangles = validate(mesh, slots, len(imported_textures))
 

@@ -1,6 +1,6 @@
 {
   "generator": "Blender 5.2 GenerateStandardMahjongTable.py",
-  "generator_version": "3.2.0",
+  "generator_version": "3.4.0",
   "blender_version": "5.2.0 LTS",
   "asset_root": "SM_StandardMahjongTable",
   "asset_scope": "tabletop_only",
@@ -8,6 +8,7 @@
   "frame_mesh_layout": {
     "object_count": 1,
     "segment_count": 4,
+    "joint_fill_geometry": false,
     "segments": [
       "Frame_Front",
       "Frame_Back",
@@ -61,13 +62,12 @@
   "mesh_object_count": 2,
   "geometry": {
     "SM_Mahjong_Table_Frame_MiterJoint": {
-      "vertices": 1264,
-      "polygons": 2456,
-      "triangles": 2480,
+      "vertices": 1232,
+      "polygons": 2432,
+      "triangles": 2432,
       "material": "M_Table_Walnut_PBR",
       "material_slots": [
-        "M_Table_Walnut_PBR",
-        "M_Table_Joint_AO_PBR"
+        "M_Table_Walnut_PBR"
       ]
     },
     "Mahjong_Felt_Surface": {
@@ -80,11 +80,10 @@
       ]
     }
   },
-  "triangle_count": 2736,
+  "triangle_count": 2688,
   "mobile_triangle_budget": 5000,
   "materials": [
     "M_Table_Walnut_PBR",
-    "M_Table_Joint_AO_PBR",
     "M_Table_Felt_Green_PBR"
   ],
   "material_workflow": "PBR metallic-roughness",
@@ -103,32 +102,30 @@
     "bullnose_bottom_z": -0.03,
     "outer_corner_radius": 0.024,
     "outer_corner_arc_segments": 5,
-    "miter_joint_width": 0.003,
-    "miter_joint_center_line_width": 0.0018,
-    "miter_joint_recess": 0.0015,
+    "miter_joint_width": 0.0006,
     "felt_corner_radius": 0.012,
     "felt_corner_segments": 16
   },
   "files": [
     {
       "path": "SourceArt/3D/MahjongTable/SM_StandardMahjongTable.blend",
-      "bytes": 169187,
-      "sha256": "298a1e902d2bf700985f2c86de7825edf2be90a99e7c250a2d816e791252ca1b"
+      "bytes": 167023,
+      "sha256": "b1a8a542981498ff1637f1ec5089f04f792c6f1e44feac88d42c9ad6f526de23"
     },
     {
       "path": "SourceArt/3D/MahjongTable/SM_StandardMahjongTable.fbx",
-      "bytes": 302476,
-      "sha256": "a5f51fe9c5dbc34703918f316e2e7347dd7ab99b255e152902fc84c05d6910df"
+      "bytes": 301340,
+      "sha256": "c8f2be765b92bb0b8c3a2564efd3ef1bec0b4410a868ed9212cff2321d0541a2"
     },
     {
       "path": "SourceArt/3D/MahjongTable/SM_StandardMahjongTable.glb",
-      "bytes": 222436,
-      "sha256": "9a8770e5c7607a5811aefd49db20e5d8c4195678a9ddf7f78fbc735771f2a905"
+      "bytes": 218952,
+      "sha256": "cc46ec046c082f857e4c3fbf22c35d6dc27bc07401609a1fa997331149b69277"
     },
     {
       "path": "SourceArt/3D/MahjongTable/StandardMahjongTable_Preview.png",
-      "bytes": 843005,
-      "sha256": "aae726c7fd5d18db3a52a22f954cc416b5796d4c2041e6ff7a37f328ec08cf66"
+      "bytes": 845980,
+      "sha256": "e81a0025be1e08dd11e2b144d8575573b41d64986db03569488729f89dba6f55"
     }
   ]
 }
