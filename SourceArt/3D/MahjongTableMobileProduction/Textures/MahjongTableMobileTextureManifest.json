@@ -1,0 +1,94 @@
+{
+  "status": "ok",
+  "generator": "GenerateMobileMahjongFeltTextures.py",
+  "mobile_profile": true,
+  "materials": {
+    "M_Table_Felt_Mobile": {
+      "asset": "M_Table_Felt_DeepForest_Mobile",
+      "texture_set": "TableFeltMobileDeepForest",
+      "resolution_suffix": "8K",
+      "blend": "opaque"
+    },
+    "M_Table_Felt_Edge_Mobile": {
+      "asset": "M_Table_Felt_Edge_Mobile",
+      "texture_set": null,
+      "blend": "opaque_constant",
+      "base_color": [
+        0.004,
+        0.016,
+        0.01
+      ],
+      "metallic": 0.0,
+      "roughness": 0.9
+    },
+    "M_Table_Controller_Gunmetal_Mobile": {
+      "asset": "M_Table_Controller_Gunmetal_Mobile",
+      "texture_set": null,
+      "blend": "opaque_constant",
+      "base_color": [
+        0.008,
+        0.01,
+        0.012
+      ],
+      "metallic": 0.8,
+      "roughness": 0.24
+    },
+    "M_Table_Controller_Display_Mobile": {
+      "asset": "M_Table_Controller_Display_Mobile",
+      "texture_set": "TableControllerDirectionDisplayMobile",
+      "resolution_suffix": "512",
+      "blend": "opaque"
+    },
+    "M_Table_Controller_Glass_Mobile": {
+      "asset": "M_Table_Controller_Glass_Mobile",
+      "texture_set": null,
+      "blend": "translucent",
+      "base_color": [
+        0.18,
+        0.25,
+        0.28
+      ],
+      "roughness": 0.025,
+      "opacity": 0.14,
+      "refraction": 1.46
+    }
+  },
+  "files": [
+    {
+      "channel": "BaseColor",
+      "name": "T_TableFeltMobileDeepForest_BaseColor_8K.png",
+      "bytes": 50340845,
+      "sha256": "ae04190ef311a50e60eb91b5ffcd054179f64f37d495041ff97509d53f318a52"
+    },
+    {
+      "channel": "Normal",
+      "name": "T_TableFeltMobileDeepForest_Normal_8K.png",
+      "bytes": 133048153,
+      "sha256": "387857682d32dcbae6364cbaaaceac7c6de21cd39f46f8a4cf5fb51ec4e9d1e9"
+    },
+    {
+      "channel": "ORM",
+      "name": "T_TableFeltMobileDeepForest_ORM_8K.png",
+      "bytes": 29710606,
+      "sha256": "452547a8229f07209bbc1572c136d4c568b2e5cbc1acb1628bf1901281dfcf22"
+    },
+    {
+      "channel": "BaseColor",
+      "name": "T_TableControllerDirectionDisplayMobile_BaseColor_512.png",
+      "bytes": 61175,
+      "sha256": "6c6c80fde0bbb8459ccef6161bfb1b97ea7365f23212b111403037f0edbd22d4"
+    },
+    {
+      "channel": "Normal",
+      "name": "T_TableControllerDirectionDisplayMobile_Normal_512.png",
+      "bytes": 1878,
+      "sha256": "9c1e5a4dfef7836bcec976f1c837e6b69a73d38deb3adc2db6f1f6f6a35d573e"
+    },
+    {
+      "channel": "ORM",
+      "name": "T_TableControllerDirectionDisplayMobile_ORM_512.png",
+      "bytes": 1880,
+      "sha256": "8d6ca0986eb6494d1c53b611644113ac9a354ea64b89b7993fb2b8b24f0108da"
+    }
+  ]
+}

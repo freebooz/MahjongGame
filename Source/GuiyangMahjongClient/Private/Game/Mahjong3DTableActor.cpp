@@ -119,13 +119,13 @@ FRotator AMahjong3DTableActor::ResolveTileMeshRotation(
     FRotator MeshRotation = Rotation;
     if (bUpright)
     {
-        // Mahjong50's atlas face points along local +Y. Upright tiles are arranged from the
-        // table center outwards, so rotate the face towards the owning player (local -Y).
-        MeshRotation.Yaw += 180.0f;
+        // The rebuilt Mahjong50 face uses Blender/FBX's conventional local -Y
+        // front. Zero yaw already points an upright south-seat tile toward its
+        // owning player, so no legacy 180-degree compensation is required.
     }
     else
     {
-        // A positive roll turns the local +Y atlas face towards world +Z.
+        // With a local -Y face, positive roll points the face toward world +Z.
         MeshRotation.Roll += bFaceUp ? 90.0f : -90.0f;
     }
     return MeshRotation;

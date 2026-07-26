@@ -1394,17 +1394,17 @@ bool FMahjongThreeDTableLayoutTest::RunTest(const FString& Parameters)
 
     const FRotator UprightRotation =
         AMahjong3DTableActor::ResolveTileMeshRotation(FRotator::ZeroRotator, true, true);
-    const FVector UprightFaceNormal = UprightRotation.RotateVector(FVector::YAxisVector);
+    const FVector UprightFaceNormal = UprightRotation.RotateVector(-FVector::YAxisVector);
     TestTrue(TEXT("Local upright Mahjong50 face must point toward the south-side camera"),
         UprightFaceNormal.Y < -0.99f);
     const FRotator FlatFaceUpRotation =
         AMahjong3DTableActor::ResolveTileMeshRotation(FRotator::ZeroRotator, true, false);
     TestTrue(TEXT("Flat face-up Mahjong50 tile must point upward"),
-        FlatFaceUpRotation.RotateVector(FVector::YAxisVector).Z > 0.99f);
+        FlatFaceUpRotation.RotateVector(-FVector::YAxisVector).Z > 0.99f);
     const FRotator FlatFaceDownRotation =
         AMahjong3DTableActor::ResolveTileMeshRotation(FRotator::ZeroRotator, false, false);
     TestTrue(TEXT("Flat face-down Mahjong50 tile must point downward"),
-        FlatFaceDownRotation.RotateVector(FVector::YAxisVector).Z < -0.99f);
+        FlatFaceDownRotation.RotateVector(-FVector::YAxisVector).Z < -0.99f);
 
     UWorld* SharedRoomWorld = LoadObject<UWorld>(nullptr,
         TEXT("/Game/Maps/MahjongRoomMap.MahjongRoomMap"));
@@ -1553,7 +1553,8 @@ bool FMahjongThreeDTableLayoutTest::RunTest(const FString& Parameters)
         TestTrue(TEXT("麻将牌宽度必须约为 36mm"), FMath::IsNearlyEqual(Extent.X * 2.0f, 3.6f, 0.15f));
         TestTrue(TEXT("麻将牌厚度必须约为 26mm"), FMath::IsNearlyEqual(Extent.Y * 2.0f, 2.6f, 0.15f));
         TestTrue(TEXT("麻将牌高度必须约为 50mm"), FMath::IsNearlyEqual(Extent.Z * 2.0f, 5.0f, 0.15f));
-        TestEqual(TEXT("Mahjong50 麻将牌必须包含牌身和牌面两个材质槽"), TileMesh->GetStaticMaterials().Num(), 2);
+        TestEqual(TEXT("Mahjong50 麻将牌必须使用牌身与牌面连续的单一材质槽"),
+            TileMesh->GetStaticMaterials().Num(), 1);
     }
     return true;
 }

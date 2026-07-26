@@ -27,8 +27,8 @@ def validate_new_assets() -> None:
         if not mesh:
             missing.append(path)
             continue
-        if len(mesh.get_editor_property("static_materials")) != 2:
-            raise RuntimeError(f"Expected two material slots on {path}")
+        if len(mesh.get_editor_property("static_materials")) != 1:
+            raise RuntimeError(f"Expected one unified material slot on {path}")
     if missing:
         raise RuntimeError("Missing Mahjong50 tile meshes: " + ", ".join(missing))
     log("validated 34 Mahjong50 runtime tile meshes")

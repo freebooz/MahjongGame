@@ -1,0 +1,148 @@
+{
+  "status": "production",
+  "generator": "GenerateAutomaticMahjongTableProductionTextures.py",
+  "resolution": [
+    2048,
+    2048
+  ],
+  "packing": {
+    "ORM": {
+      "R": "AmbientOcclusion",
+      "G": "Roughness",
+      "B": "Metallic"
+    }
+  },
+  "materials": {
+    "M_Table_Frame_BlackAlloy": {
+      "asset": "M_Table_Frame_BlackBronze_PBR",
+      "texture_set": "TableFrameBlackBronze",
+      "blend": "opaque"
+    },
+    "M_Table_Felt_Green_PBR": {
+      "asset": "M_Table_Felt_DeepForest_PBR",
+      "texture_set": "TableFeltDeepForest",
+      "blend": "opaque"
+    },
+    "M_Table_Frame_GoldInlay": {
+      "asset": "M_Table_Frame_GoldInlay_PBR",
+      "texture_set": "TableGold",
+      "blend": "opaque"
+    },
+    "M_Table_Controller_Gunmetal": {
+      "asset": "M_Table_Controller_Gunmetal_PBR",
+      "texture_set": "TableControllerGunmetal",
+      "blend": "opaque"
+    },
+    "M_Table_Controller_GoldLabel": {
+      "asset": "M_Table_Controller_Gold_PBR",
+      "texture_set": "TableGold",
+      "blend": "opaque"
+    },
+    "M_Table_Controller_BlackPanel": {
+      "asset": "M_Table_Controller_BlackPanel_PBR",
+      "texture_set": "TableControllerBlack",
+      "blend": "opaque"
+    },
+    "M_Table_Controller_SectorDividerGold": {
+      "asset": "M_Table_Controller_DividerGold_PBR",
+      "texture_set": "TableGold",
+      "blend": "opaque"
+    },
+    "M_Table_Controller_DirectionGold": {
+      "asset": "M_Table_Controller_DirectionGold_PBR",
+      "texture_set": "TableGold",
+      "blend": "opaque",
+      "emissive_scale": 0.55
+    },
+    "M_Table_Controller_TransparentGlass": {
+      "asset": "M_Table_Controller_SmoothGlass",
+      "texture_set": null,
+      "blend": "translucent",
+      "base_color": [
+        0.2,
+        0.28,
+        0.32
+      ],
+      "roughness": 0.012,
+      "opacity": 0.16,
+      "refraction": 1.46
+    }
+  },
+  "files": [
+    {
+      "name": "T_TableControllerBlack_BaseColor_2K.png",
+      "bytes": 2848035,
+      "sha256": "f64ccb6dd1c23af8237c08a40501851d46bd265cdfe03cd300ed945c5e7dd7c4"
+    },
+    {
+      "name": "T_TableControllerBlack_Normal_2K.png",
+      "bytes": 5965218,
+      "sha256": "93012ef1a560545060a93cee32951bede52a5f2f6a9529f4e925c272f2af7eac"
+    },
+    {
+      "name": "T_TableControllerBlack_ORM_2K.png",
+      "bytes": 3534932,
+      "sha256": "0395a2dc3e3a6f957feda53f98dc2c53447871a603bb7bc592b1897b5f204fd1"
+    },
+    {
+      "name": "T_TableControllerGunmetal_BaseColor_2K.png",
+      "bytes": 2582198,
+      "sha256": "632fcbdfe0fbb78187dc795c9778c07481dbf667d6a38f2b8070dda4aa421692"
+    },
+    {
+      "name": "T_TableControllerGunmetal_Normal_2K.png",
+      "bytes": 6025178,
+      "sha256": "121d418a4db9c218d647ae8f9c3d84880c4d34623e2fbae5bd1b1191f55630d4"
+    },
+    {
+      "name": "T_TableControllerGunmetal_ORM_2K.png",
+      "bytes": 1918921,
+      "sha256": "38b58702007773307585d7cdddd877debc32ae203179683b547382330dcec528"
+    },
+    {
+      "name": "T_TableFeltDeepForest_BaseColor_2K.png",
+      "bytes": 3889406,
+      "sha256": "8cca3ecfe3a85402af71a912668ea8578e5d76d0cf63b0b7616b000c3bf6cc82"
+    },
+    {
+      "name": "T_TableFeltDeepForest_Normal_2K.png",
+      "bytes": 10778644,
+      "sha256": "4f35fc912e4a9497bf0b498f9eb5536d84d057bc7ac9974b53627626bc5a1aba"
+    },
+    {
+      "name": "T_TableFeltDeepForest_ORM_2K.png",
+      "bytes": 3469438,
+      "sha256": "916b5bc0cd404ecd0081c3c471eb4f4a1e50ec3199be8e5844501ce9b80a3e60"
+    },
+    {
+      "name": "T_TableFrameBlackBronze_BaseColor_2K.png",
+      "bytes": 1513599,
+      "sha256": "1ef8653a4ddec1594301293e9074c328d0113581147c8dd77fb98aa18b024152"
+    },
+    {
+      "name": "T_TableFrameBlackBronze_Normal_2K.png",
+      "bytes": 6727314,
+      "sha256": "63597c3e2efffec3f019037b5428cdd8139bef0cd2e396660058283e221e04e8"
+    },
+    {
+      "name": "T_TableFrameBlackBronze_ORM_2K.png",
+      "bytes": 1956683,
+      "sha256": "4e03d209274e8377a082fa203086b5d3e9b3ef9c82c8d87fd2086943ae96f51f"
+    },
+    {
+      "name": "T_TableGold_BaseColor_2K.png",
+      "bytes": 3603049,
+      "sha256": "99d627f54826e115124de5541005a79fec87af65dec2a0dfa6cc2433c201cb52"
+    },
+    {
+      "name": "T_TableGold_Normal_2K.png",
+      "bytes": 5529778,
+      "sha256": "43c2817bf6332d67dc0dd8a7b1f5f0f6726d37569a9ba78f1be5b46a0395f86c"
+    },
+    {
+      "name": "T_TableGold_ORM_2K.png",
+      "bytes": 1919750,
+      "sha256": "a3dc1d3eb41aa5ae8a3aba35242515a547a0f38f2a0b0a50e83bdf047e08ae69"
+    }
+  ]
+}

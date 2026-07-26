@@ -1,0 +1,47 @@
+{
+  "status": "approved_for_unreal_import",
+  "generator": "GenerateMobileMahjongFeltPanel.py",
+  "blender_version": "5.2.0 LTS",
+  "design": "felt_panel_and_low_poly_center_controller_no_frame",
+  "outer_size_mm": [
+    3000.0,
+    3000.0
+  ],
+  "height_mm": 59.0,
+  "mesh_object_count": 4,
+  "configured_review_viewports": 10,
+  "triangle_budget": 7000,
+  "triangle_count": 1248,
+  "materials": [
+    "M_Table_Felt_Mobile",
+    "M_Table_Felt_Edge_Mobile",
+    "M_Table_Controller_Gunmetal_Mobile",
+    "M_Table_Controller_Display_Mobile",
+    "M_Table_Controller_Glass_Mobile"
+  ],
+  "uvless_objects": [],
+  "mobile_profile": {
+    "nanite": false,
+    "material_slots": 5,
+    "felt_texture_resolution": 8192,
+    "controller_texture_resolution": 512,
+    "baked_direction_labels": true
+  },
+  "files": [
+    {
+      "name": "SM_StandardMahjongTable.blend",
+      "bytes": 120853,
+      "sha256": "6c812f47b5af46543e9a972fe82f4eb280526c1560521d4a55633d368de4be57"
+    },
+    {
+      "name": "SM_StandardMahjongTable.fbx",
+      "bytes": 64620,
+      "sha256": "1dae4d9974221d1662a3468fcd60cfb0088843b5af3478dfb6d24683b367344c"
+    },
+    {
+      "name": "SM_StandardMahjongTable.glb",
+      "bytes": 213199420,
+      "sha256": "ed605122c3d46232533c9288ece42369daa5426532aa6f2f9dce164412a5fbb6"
+    }
+  ]
+}

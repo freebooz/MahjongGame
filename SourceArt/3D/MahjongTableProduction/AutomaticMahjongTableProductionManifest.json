@@ -1,0 +1,47 @@
+{
+  "status": "approved_for_unreal_import",
+  "generator": "PrepareAutomaticMahjongTableProduction.py",
+  "blender_version": "5.2.0 LTS",
+  "source_review": "SourceArt/3D/MahjongTableReview/SM_AutomaticMahjongTable_Review.blend",
+  "outer_size_mm": [
+    1500.0,
+    1500.0
+  ],
+  "height_mm": 87.0252,
+  "mesh_object_count": 18,
+  "triangle_count": 27325,
+  "materials": [
+    "M_Table_Controller_BlackPanel",
+    "M_Table_Controller_DirectionGold",
+    "M_Table_Controller_GoldLabel",
+    "M_Table_Controller_Gunmetal",
+    "M_Table_Controller_SectorDividerGold",
+    "M_Table_Controller_TransparentGlass",
+    "M_Table_Felt_Green_PBR",
+    "M_Table_Frame_BlackAlloy",
+    "M_Table_Frame_GoldInlay"
+  ],
+  "generated_uv_objects": [
+    "Controller_SouthIndicator",
+    "Frame_GoldInlay_RoundedContinuous",
+    "SM_Mahjong_Table_Frame_RoundedAlloy"
+  ],
+  "uvless_objects": [],
+  "files": [
+    {
+      "name": "SM_StandardMahjongTable.blend",
+      "bytes": 656881,
+      "sha256": "d187da32544bb59e38c1aec1b2b0d33f2009d6b0964f08ebf61b8b0440419b1b"
+    },
+    {
+      "name": "SM_StandardMahjongTable.fbx",
+      "bytes": 1817308,
+      "sha256": "a4a64be53414c4efd6c4fe2523c4303e84bbe1a2379e14dc4cd81dca30324bb9"
+    },
+    {
+      "name": "SM_StandardMahjongTable.glb",
+      "bytes": 725088,
+      "sha256": "8cd674ec37fad38bc49256958a93e4d6b892e9f6623c9ec7466f8cc7c127e766"
+    }
+  ]
+}
