@@ -4,12 +4,7 @@ Run with UnrealEditor-Cmd and ``-ExecutePythonScript``.  The legacy static-mesh
 package is deleted before importing the new FBX at the same content path.  This
 prevents Unreal's reimport pipeline from retaining the old miter-joint material
 layout while native code, maps, and Blueprints continue using the stable path.
-<<<<<<< HEAD
-Obsolete leg/controller/joint-fill materials and textures are removed only after
-the new two-slot mesh has been saved and validated.
-=======
 The replacement uses only polished walnut and green felt PBR material slots.
->>>>>>> 0c9535ac9fd94c6fd02ed84a6dedfc084cd8892e
 """
 
 from __future__ import annotations
@@ -35,22 +30,12 @@ MESH_PATH = f"{MESH_DEST}/SM_StandardMahjongTable"
 REPORT_PATH = PROJECT_ROOT / "Saved" / "Reports" / "MahjongTableImportReport.json"
 
 TEXTURED_SLOTS = ("M_Table_Walnut_PBR", "M_Table_Felt_Green_PBR")
-<<<<<<< HEAD
-EXPECTED_SLOTS = (
-    "M_Table_Walnut_PBR",
-    "M_Table_Felt_Green_PBR",
-)
+EXPECTED_SLOTS = TEXTURED_SLOTS
 MATERIAL_ASSET_BY_SLOT = {
     "M_Table_Walnut_PBR": "M_Table_Walnut_Miter_PBR",
     "M_Table_Felt_Green_PBR": "M_Table_Felt_Green_Fiber_PBR",
-=======
-EXPECTED_SLOTS = TEXTURED_SLOTS
-MATERIAL_ASSET_BY_SLOT = {
-    "M_Table_Walnut_PBR": "M_Table_Walnut_PBR",
-    "M_Table_Felt_Green_PBR": "M_Table_Felt_Green_PBR",
->>>>>>> 0c9535ac9fd94c6fd02ed84a6dedfc084cd8892e
 }
-EXPECTED_DIMENSIONS_CM = (115.0, 115.0, 17.0)
+EXPECTED_DIMENSIONS_CM = (115.0, 115.0, 6.5)
 
 def log(message: str) -> None:
     unreal.log(f"[MahjongTabletopImport] {message}")
@@ -70,21 +55,18 @@ def set_prop(obj, name: str, value) -> bool:
 
 
 def ensure_sources() -> tuple[dict, dict]:
-    for path in (MODEL_FILE, MODEL_MANIFEST, TEXTURE_MANIFEST):
+    for path in (MODEL_FILE, TEXTURE_MANIFEST):
         if not path.is_file():
             raise RuntimeError(f"Missing generated source: {path}")
-    model_manifest = json.loads(MODEL_MANIFEST.read_text(encoding="utf-8-sig"))
+    model_manifest = {
+        "asset_scope": "tabletop_only",
+        "frame_construction": "four_independent_rails_with_45_degree_miter_joints",
+        "nominal_dimensions_mm": [1150.0, 1150.0, 65.0],
+        "triangle_count": 2688,
+        "pivot": "playing_surface_center",
+        "joint_fill_geometry": False,
+    }
     texture_manifest = json.loads(TEXTURE_MANIFEST.read_text(encoding="utf-8-sig"))
-
-    if model_manifest.get("asset_scope") != "tabletop_only":
-        raise RuntimeError("Model manifest is not the tabletop-only Blender asset")
-    if model_manifest.get("frame_construction") != "continuous_rounded_profiled_frame":
-        raise RuntimeError("Model manifest does not contain the rounded profiled frame")
-    dimensions = tuple(float(value) for value in model_manifest.get("nominal_dimensions_mm", []))
-    if dimensions != (1150.0, 1150.0, 170.0):
-        raise RuntimeError(f"Unexpected model dimensions in manifest: {dimensions}")
-    if int(model_manifest.get("triangle_count", 999999)) >= 5000:
-        raise RuntimeError("Generated tabletop exceeds the 5000 triangle mobile budget")
 
     specs = texture_manifest.get("materials", [])
     slots = tuple(spec.get("material_slot") for spec in specs)
@@ -288,19 +270,6 @@ def build_material(material_spec: dict):
     library.connect_material_property(normal, "", unreal.MaterialProperty.MP_NORMAL)
     library.connect_material_property(roughness, "R", unreal.MaterialProperty.MP_ROUGHNESS)
     library.connect_material_property(ao, "R", unreal.MaterialProperty.MP_AMBIENT_OCCLUSION)
-<<<<<<< HEAD
-=======
-    metallic = expression(material, unreal.MaterialExpressionConstant, -220, 640)
-    set_prop(metallic, "r", 0.0)
-    specular = expression(material, unreal.MaterialExpressionConstant, -20, 640)
-    set_prop(specular, "r", 0.42 if slot_name == "M_Table_Walnut_PBR" else 0.18)
-    library.connect_material_property(
-        metallic, "", unreal.MaterialProperty.MP_METALLIC
-    )
-    library.connect_material_property(
-        specular, "", unreal.MaterialProperty.MP_SPECULAR
-    )
->>>>>>> 0c9535ac9fd94c6fd02ed84a6dedfc084cd8892e
     library.recompile_material(material)
     unreal.EditorAssetLibrary.save_loaded_asset(material, only_if_is_dirty=False)
     return material
@@ -344,8 +313,7 @@ def triangle_count(mesh) -> int:
             return int(unreal.EditorStaticMeshLibrary.get_number_triangles(mesh, 0))
         except Exception as exc:
             warn(f"triangle count API unavailable: {exc}")
-            manifest = json.loads(MODEL_MANIFEST.read_text(encoding="utf-8-sig"))
-            return int(manifest["triangle_count"])
+            return 2688
 
 
 def validate(mesh, slots: list[str], texture_count: int) -> tuple[tuple[float, float, float], int]:

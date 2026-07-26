@@ -7,13 +7,16 @@
 #include "Engine/Blueprint.h"
 #include "Engine/SCS_Node.h"
 #include "Engine/SimpleConstructionScript.h"
+#include "Engine/StaticMesh.h"
 #include "Framework/Docking/TabManager.h"
 #include "HAL/IConsoleManager.h"
 #include "IContentBrowserSingleton.h"
+#include "IStaticMeshEditor.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Misc/CoreDelegates.h"
 #include "Misc/PackageName.h"
 #include "Modules/ModuleManager.h"
+#include "StaticMeshEditorModule.h"
 #include "UObject/SavePackage.h"
 
 namespace
@@ -21,6 +24,9 @@ namespace
 constexpr TCHAR RoomPresentationAssetPath[] =
     TEXT("/Game/Client/Room/Presentation/"
          "BP_MahjongRoomPresentation.BP_MahjongRoomPresentation");
+constexpr TCHAR MahjongTableAssetPath[] =
+    TEXT("/Game/Art/Mahjong/Table/Meshes/"
+         "SM_StandardMahjongTable.SM_StandardMahjongTable");
 
 UBlueprint* LoadAndRepairRoomPresentationBlueprint()
 {
@@ -93,6 +99,13 @@ void FGuiyangMahjongEditorToolsModule::StartupModule()
             this, &FGuiyangMahjongEditorToolsModule::OpenRoomPresentationEditor),
         ECVF_Default);
 
+    OpenMahjongTableCommand = IConsoleManager::Get().RegisterConsoleCommand(
+        TEXT("Mahjong.OpenTableStaticMeshEditor"),
+        TEXT("Open the Mahjong table in the full Static Mesh Editor with its 3D viewport."),
+        FConsoleCommandDelegate::CreateRaw(
+            this, &FGuiyangMahjongEditorToolsModule::OpenMahjongTableStaticMeshEditor),
+        ECVF_Default);
+
     // Loading and saving an Actor Blueprint during StartupModule is too early for World
     // Partition class descriptors. Repair it only after the engine has fully initialized.
     PostEngineInitHandle = FCoreDelegates::GetOnPostEngineInit().AddRaw(
@@ -111,6 +124,12 @@ void FGuiyangMahjongEditorToolsModule::ShutdownModule()
     {
         IConsoleManager::Get().UnregisterConsoleObject(OpenRoomPresentationCommand);
         OpenRoomPresentationCommand = nullptr;
+    }
+
+    if (OpenMahjongTableCommand)
+    {
+        IConsoleManager::Get().UnregisterConsoleObject(OpenMahjongTableCommand);
+        OpenMahjongTableCommand = nullptr;
     }
 }
 
@@ -159,6 +178,40 @@ void FGuiyangMahjongEditorToolsModule::OpenRoomPresentationEditor()
         TEXT("MAHJONG_FULL_BLUEPRINT_EDITOR_OPEN_OK asset=%s mode=%s"),
         RoomPresentationAssetPath,
         *BlueprintEditor->GetCurrentMode().ToString());
+}
+
+void FGuiyangMahjongEditorToolsModule::OpenMahjongTableStaticMeshEditor()
+{
+    UStaticMesh* TableMesh = LoadObject<UStaticMesh>(nullptr, MahjongTableAssetPath);
+    if (!TableMesh)
+    {
+        UE_LOG(
+            LogTemp,
+            Error,
+            TEXT("Mahjong table static mesh was not found: %s"),
+            MahjongTableAssetPath);
+        return;
+    }
+
+    FContentBrowserModule& ContentBrowser =
+        FModuleManager::LoadModuleChecked<FContentBrowserModule>(TEXT("ContentBrowser"));
+    ContentBrowser.Get().SyncBrowserToAssets({FAssetData(TableMesh)});
+
+    IStaticMeshEditorModule& StaticMeshEditorModule =
+        FModuleManager::LoadModuleChecked<IStaticMeshEditorModule>(TEXT("StaticMeshEditor"));
+    const TSharedRef<IStaticMeshEditor> StaticMeshEditor =
+        StaticMeshEditorModule.CreateStaticMeshEditor(
+            EToolkitMode::Standalone,
+            TSharedPtr<IToolkitHost>(),
+            TableMesh);
+    StaticMeshEditor->GetTabManager()->TryInvokeTab(
+        FName(TEXT("StaticMeshEditor_Viewport")));
+
+    UE_LOG(
+        LogTemp,
+        Display,
+        TEXT("MAHJONG_FULL_STATIC_MESH_EDITOR_OPEN_OK asset=%s"),
+        MahjongTableAssetPath);
 }
 
 IMPLEMENT_MODULE(FGuiyangMahjongEditorToolsModule, GuiyangMahjongEditorTools)
