@@ -1,49 +1,66 @@
-"""Save the review blend with material preview and a controller close-up."""
-
-from mathutils import Quaternion, Vector
+"""Configure the live Blender review viewport without changing the blend."""
 
 import bpy
 
 
-configured = 0
-for screen in bpy.data.screens:
-    for area in screen.areas:
-        if area.type != "VIEW_3D":
-            continue
-        space = area.spaces.active
-        space.shading.type = "MATERIAL"
-        space.shading.light = "STUDIO"
-        space.shading.studiolight_rotate_z = 0.35
-        space.shading.studiolight_background_alpha = 0.25
-        space.overlay.show_floor = False
-        space.overlay.show_axis_x = False
-        space.overlay.show_axis_y = False
-        space.overlay.show_axis_z = False
-        region = space.region_3d
-        region.view_location = Vector((0.0, 0.0, 0.0))
-        region.view_rotation = Quaternion((1.0, 0.0, 0.0, 0.0))
-        region.view_distance = 0.46
-        region.view_perspective = "ORTHO"
-        configured += 1
+def configure_live_viewport():
+    controllers = [
+        obj
+        for obj in bpy.context.scene.objects
+        if obj.name.startswith("Controller_")
+    ]
+    if not controllers:
+        raise RuntimeError("No center-controller objects were found")
+    bpy.ops.object.select_all(action="DESELECT")
+    for obj in controllers:
+        obj.select_set(True)
+    bpy.context.view_layer.objects.active = bpy.data.objects.get(
+        "Controller_DirectionDisplay"
+    )
 
-if configured == 0:
-    raise RuntimeError("No Blender 3D viewport was available to configure")
+    configured = 0
+    for window in bpy.context.window_manager.windows:
+        screen = window.screen
+        for area in screen.areas:
+            if area.type != "VIEW_3D":
+                continue
+            region = next(
+                (
+                    candidate
+                    for candidate in area.regions
+                    if candidate.type == "WINDOW"
+                ),
+                None,
+            )
+            if region is None:
+                continue
+            space = area.spaces.active
+            space.shading.type = "MATERIAL"
+            space.overlay.show_floor = False
+            space.overlay.show_axis_x = False
+            space.overlay.show_axis_y = False
+            space.overlay.show_axis_z = False
+            with bpy.context.temp_override(
+                window=window,
+                screen=screen,
+                area=area,
+                region=region,
+            ):
+                bpy.ops.view3d.view_axis(
+                    type="TOP",
+                    align_active=False,
+                    relative=False,
+                )
+                bpy.ops.view3d.view_selected(
+                    use_all_regions=False,
+                )
+            space.region_3d.view_distance *= 1.35
+            configured += 1
+    print(
+        "MOBILE_MAHJONG_TABLE_LIVE_REVIEW_VIEWPORT_OK",
+        f"configured_viewports={configured}",
+    )
+    return None
 
-for obj in bpy.context.scene.objects:
-    obj.select_set(obj.name.startswith("Controller_"))
-bpy.context.view_layer.objects.active = bpy.data.objects.get(
-    "Controller_DirectionDisplay"
-)
 
-bpy.context.scene["review_viewport"] = (
-    "material_preview_controller_top_closeup"
-)
-bpy.ops.wm.save_as_mainfile(
-    filepath=bpy.data.filepath,
-    check_existing=False,
-)
-print(
-    "MOBILE_MAHJONG_TABLE_REVIEW_VIEWPORT_OK",
-    f"configured_viewports={configured}",
-    f"file={bpy.data.filepath}",
-)
+bpy.app.timers.register(configure_live_viewport, first_interval=1.0)

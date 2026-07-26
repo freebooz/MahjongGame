@@ -18,7 +18,7 @@ OUTPUT_DIR = (
     / "MahjongTableMobileProduction"
     / "Textures"
 )
-FELT_SIZE = 8192
+FELT_SIZE = 4096
 SEED = 2026072602
 FELT_SET = "TableFeltMobileDeepForest"
 DISPLAY_SET = "TableControllerDirectionDisplayMobile"
@@ -157,9 +157,9 @@ def generate_felt() -> dict[str, Path]:
     normal[-1, :, :] = horizontal_edge.astype(np.uint8)
 
     files = {
-        "BaseColor": OUTPUT_DIR / f"T_{FELT_SET}_BaseColor_8K.png",
-        "Normal": OUTPUT_DIR / f"T_{FELT_SET}_Normal_8K.png",
-        "ORM": OUTPUT_DIR / f"T_{FELT_SET}_ORM_8K.png",
+        "BaseColor": OUTPUT_DIR / f"T_{FELT_SET}_BaseColor_4K.png",
+        "Normal": OUTPUT_DIR / f"T_{FELT_SET}_Normal_4K.png",
+        "ORM": OUTPUT_DIR / f"T_{FELT_SET}_ORM_4K.png",
     }
     base_image.save(
         files["BaseColor"],
@@ -283,7 +283,7 @@ def main() -> None:
             "M_Table_Felt_Mobile": {
                 "asset": "M_Table_Felt_DeepForest_Mobile",
                 "texture_set": FELT_SET,
-                "resolution_suffix": "8K",
+                "resolution_suffix": "4K",
                 "blend": "opaque",
             },
             "M_Table_Felt_Edge_Mobile": {
@@ -335,7 +335,7 @@ def main() -> None:
     )
     print(
         "MOBILE_MAHJONG_FELT_TEXTURES_OK",
-        "felt_resolution=8192x8192",
+        "felt_resolution=4096x4096",
         "controller_resolution=512x512",
         f"textures={len(all_files)}",
         f"manifest={manifest_path}",

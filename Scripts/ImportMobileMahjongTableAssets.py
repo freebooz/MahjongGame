@@ -189,7 +189,7 @@ def configure_texture(texture, name: str) -> None:
             "compression_settings",
             unreal.TextureCompressionSettings.TC_MASKS,
         )
-    max_size = 512 if name.endswith("_512") else 8192
+    max_size = 512 if name.endswith("_512") else 4096
     set_prop(texture, "lod_group", unreal.TextureGroup.TEXTUREGROUP_WORLD)
     set_prop(texture, "max_texture_size", max_size)
     set_prop(texture, "never_stream", False)
@@ -476,7 +476,7 @@ def main() -> None:
             "nanite": False,
             "allow_cpu_access": False,
             "light_map_resolution": 64,
-            "felt_texture_max_size": 8192,
+            "felt_texture_max_size": 4096,
             "controller_texture_max_size": 512,
         },
         "source_triangle_count": model_manifest["triangle_count"],

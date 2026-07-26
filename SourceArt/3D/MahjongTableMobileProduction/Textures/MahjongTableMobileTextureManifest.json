@@ -6,7 +6,7 @@
     "M_Table_Felt_Mobile": {
       "asset": "M_Table_Felt_DeepForest_Mobile",
       "texture_set": "TableFeltMobileDeepForest",
-      "resolution_suffix": "8K",
+      "resolution_suffix": "4K",
       "blend": "opaque"
     },
     "M_Table_Felt_Edge_Mobile": {
@@ -56,21 +56,21 @@
   "files": [
     {
       "channel": "BaseColor",
-      "name": "T_TableFeltMobileDeepForest_BaseColor_8K.png",
-      "bytes": 50340845,
-      "sha256": "ae04190ef311a50e60eb91b5ffcd054179f64f37d495041ff97509d53f318a52"
+      "name": "T_TableFeltMobileDeepForest_BaseColor_4K.png",
+      "bytes": 17584392,
+      "sha256": "9634ba56e4843ef2e8fbc2145c7d8b36fa83e4e8f81285283777149d23113c78"
     },
     {
       "channel": "Normal",
-      "name": "T_TableFeltMobileDeepForest_Normal_8K.png",
-      "bytes": 133048153,
-      "sha256": "387857682d32dcbae6364cbaaaceac7c6de21cd39f46f8a4cf5fb51ec4e9d1e9"
+      "name": "T_TableFeltMobileDeepForest_Normal_4K.png",
+      "bytes": 45532769,
+      "sha256": "e62bb58965a424df1ccd2a6aadada9584d5cddade72dda9ca46c031552a92377"
     },
     {
       "channel": "ORM",
-      "name": "T_TableFeltMobileDeepForest_ORM_8K.png",
-      "bytes": 29710606,
-      "sha256": "452547a8229f07209bbc1572c136d4c568b2e5cbc1acb1628bf1901281dfcf22"
+      "name": "T_TableFeltMobileDeepForest_ORM_4K.png",
+      "bytes": 9904165,
+      "sha256": "733591b86f071b26fd508a3e0f6efb283c6f5bc7d60405afe10c619c9afb2fb8"
     },
     {
       "channel": "BaseColor",

@@ -74,7 +74,7 @@ def main() -> None:
         texture = unreal.EditorAssetLibrary.load_asset(path)
         size_x = int(texture.blueprint_get_size_x())
         size_y = int(texture.blueprint_get_size_y())
-        expected = 512 if path.endswith("_512") else 8192
+        expected = 512 if path.endswith("_512") else 4096
         if size_x != expected or size_y != expected:
             raise RuntimeError(f"Unexpected texture size: {path}")
         texture_details.append(

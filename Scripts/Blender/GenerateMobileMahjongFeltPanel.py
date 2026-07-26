@@ -145,7 +145,7 @@ def create_materials(
         felt,
         texture_root,
         "TableFeltMobileDeepForest",
-        "8K",
+        "4K",
     )
     felt_edge = create_material(
         FELT_EDGE_MATERIAL,
@@ -401,7 +401,9 @@ def configure_review_viewport(objects: list[bpy.types.Object]) -> int:
             region = space.region_3d
             region.view_location = Vector((0.0, 0.0, 0.0))
             region.view_rotation = Quaternion((1.0, 0.0, 0.0, 0.0))
-            region.view_distance = 0.46
+            region.view_distance = 0.24
+            region.view_camera_offset = (0.0, 0.0)
+            region.view_camera_zoom = 0.0
             region.view_perspective = "ORTHO"
             configured += 1
     if configured == 0:
@@ -513,7 +515,7 @@ def main() -> None:
         "mobile_profile": {
             "nanite": False,
             "material_slots": len(materials),
-            "felt_texture_resolution": 8192,
+            "felt_texture_resolution": 4096,
             "controller_texture_resolution": 512,
             "baked_direction_labels": True,
         },

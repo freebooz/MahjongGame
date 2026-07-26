@@ -23,25 +23,25 @@
   "mobile_profile": {
     "nanite": false,
     "material_slots": 5,
-    "felt_texture_resolution": 8192,
+    "felt_texture_resolution": 4096,
     "controller_texture_resolution": 512,
     "baked_direction_labels": true
   },
   "files": [
     {
       "name": "SM_StandardMahjongTable.blend",
-      "bytes": 120853,
-      "sha256": "6c812f47b5af46543e9a972fe82f4eb280526c1560521d4a55633d368de4be57"
+      "bytes": 120835,
+      "sha256": "b8aeb64133e91832025f919a0582b0e63a0450c0c3f3ad9c9a976715f3177b5d"
     },
     {
       "name": "SM_StandardMahjongTable.fbx",
       "bytes": 64620,
-      "sha256": "1dae4d9974221d1662a3468fcd60cfb0088843b5af3478dfb6d24683b367344c"
+      "sha256": "75da62156ac7c0386f4cc445367df30da6795d9fce07329b5f0f01400ce0e137"
     },
     {
       "name": "SM_StandardMahjongTable.glb",
-      "bytes": 213199420,
-      "sha256": "ed605122c3d46232533c9288ece42369daa5426532aa6f2f9dce164412a5fbb6"
+      "bytes": 73121132,
+      "sha256": "c1b2d15d072264316c24ba4475e34ed469d763ae5eaaaa2cc3e58dae94f78c01"
     }
   ]
 }
