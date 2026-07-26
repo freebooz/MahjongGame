@@ -55,17 +55,17 @@ def set_prop(obj, name: str, value) -> bool:
 
 
 def ensure_sources() -> tuple[dict, dict]:
-    for path in (MODEL_FILE, TEXTURE_MANIFEST):
+    for path in (MODEL_FILE, MODEL_MANIFEST, TEXTURE_MANIFEST):
         if not path.is_file():
             raise RuntimeError(f"Missing generated source: {path}")
-    model_manifest = {
-        "asset_scope": "tabletop_only",
-        "frame_construction": "four_independent_rails_with_45_degree_miter_joints",
-        "nominal_dimensions_mm": [1150.0, 1150.0, 65.0],
-        "triangle_count": 2688,
-        "pivot": "playing_surface_center",
-        "joint_fill_geometry": False,
-    }
+    model_manifest = json.loads(MODEL_MANIFEST.read_text(encoding="utf-8-sig"))
+    surface_fit = model_manifest.get("playing_surface_fit", {})
+    if (
+        surface_fit.get("visible_perimeter_gap_mm") != 0.0
+        or surface_fit.get("filler_geometry") is not False
+        or float(surface_fit.get("hidden_overlap_each_side_mm", 0.0)) < 6.0
+    ):
+        raise RuntimeError(f"Invalid felt/frame fit metadata: {surface_fit}")
     texture_manifest = json.loads(TEXTURE_MANIFEST.read_text(encoding="utf-8-sig"))
 
     specs = texture_manifest.get("materials", [])
@@ -406,6 +406,7 @@ def write_report(
         "texture_count": 8,
         "pivot": model_manifest.get("pivot"),
         "playing_surface_z_cm": 0.0,
+        "playing_surface_fit": model_manifest.get("playing_surface_fit"),
         "deleted_obsolete_assets": deleted_assets,
         "runtime_actor": "/Script/GuiyangMahjongClient.Mahjong3DTableActor",
     }

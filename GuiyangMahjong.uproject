@@ -59,6 +59,11 @@
       "TargetAllowList": ["Editor"]
     },
     {
+      "Name": "EngineAssetDefinitions",
+      "Enabled": true,
+      "TargetAllowList": ["Editor"]
+    },
+    {
       "Name": "Agones",
       "Enabled": true,
       "TargetAllowList": ["Server", "Editor"]

@@ -1,7 +1,10 @@
 {
   "generator": "Blender 5.2 GenerateStandardMahjongTable.py",
-  "generator_version": "3.4.1-normal-repair",
-  "repair_script": "Scripts/Blender/RepairMahjongTableFrameNormals.py",
+  "generator_version": "3.4.2-felt-frame-fit",
+  "repair_scripts": [
+    "Scripts/Blender/RepairMahjongTableFrameNormals.py",
+    "Scripts/Blender/RepairMahjongTableFeltFrameFit.py"
+  ],
   "asset_root": "SM_StandardMahjongTable",
   "asset_scope": "tabletop_only",
   "frame_construction": "four_independent_rails_with_45_degree_miter_joints",
@@ -20,6 +23,16 @@
     65.0
   ],
   "playing_surface_z_mm": 0.0,
+  "playing_surface_fit": {
+    "finished_size_mm": [
+      984.0,
+      984.0,
+      6.0
+    ],
+    "hidden_overlap_each_side_mm": 7.0,
+    "visible_perimeter_gap_mm": 0.0,
+    "filler_geometry": false
+  },
   "pivot": "playing_surface_center",
   "mesh_object_count": 2,
   "triangle_count": 2688,
@@ -38,23 +51,28 @@
   "files": [
     {
       "name": "SM_StandardMahjongTable.blend",
-      "bytes": 166824,
-      "sha256": "578ac0ad5fd3981d8bbdbeeada2cfe2de3fbf3d456692063f6e49f324bc1d5eb"
+      "bytes": 166943,
+      "sha256": "fb4a30b22454ebb0f9a71ae3e08795b65b879e63f21104cffb6107aa50ef3613"
     },
     {
       "name": "SM_StandardMahjongTable.fbx",
-      "bytes": 301516,
-      "sha256": "9d23d70fa8262c2862215da44cea54c6be08cc1e1d75bfa0b3ccefac5e317be2"
+      "bytes": 301420,
+      "sha256": "a4877e66bc3e81af0a6be5758f914321900696187cf4872124938dee34e79328"
     },
     {
       "name": "SM_StandardMahjongTable.glb",
-      "bytes": 228872,
-      "sha256": "821ee9597a91d578f1f00d6e1c9f772318a171226bf8f15f45ee768a28106531"
+      "bytes": 228868,
+      "sha256": "87d3e1ef1b46ef6853ed2545bb59a8e7d80cddfe2a6d8b2bff3e93df3928b34d"
     },
     {
       "name": "StandardMahjongTable_Preview.png",
-      "bytes": 554357,
-      "sha256": "acfb9d7091fdf39b9158a83c54b38d898a0ef5d444472a03bb1818663c1dfa2b"
+      "bytes": 551913,
+      "sha256": "6c2511d7329e8cba1d3a1a6693bc05b175c4ffcf4b5f11e378bbce4a73af97d9"
+    },
+    {
+      "name": "StandardMahjongTable_FeltFrameFit_Closeup.png",
+      "bytes": 970312,
+      "sha256": "57dd4db9e6ec8548301651c6a0083fc30ae2965ff2deab4410734b178c61320d"
     }
   ]
 }
