@@ -52,7 +52,11 @@ components:
       required: [installationId]
       properties:
         installationId: {type: string, minLength: 16, maxLength: 128, pattern: '^[A-Za-z0-9._-]+$'}
-        displayName: {type: [string, 'null'], minLength: 2, maxLength: 24}
+        displayName:
+          type: [string, 'null']
+          minLength: 2
+          maxLength: 24
+          description: Optional requested name. When omitted, Auth generates and persists a Guiyang-themed guest name.
     RefreshRequest:
       type: object
       required: [refreshToken]

@@ -81,6 +81,42 @@ public sealed class RoomDomainTests
     }
 
     [Fact]
+    public async Task WaitingRoom_ReclaimsExpiredSeats_BeforeCapacityCheck()
+    {
+        var store = new InMemoryLobbyStore();
+        var room = NewRoom("200003", "owner");
+        Assert.Equal(CreateRoomStatus.Created,
+            (await store.TryCreateRoomAsync(room, CancellationToken.None)).Status);
+        Assert.Equal(AddPlayerStatus.Added,
+            (await store.TryAddPlayerAsync(room.RoomCode, "connected-player", CancellationToken.None)).Status);
+        Assert.Equal(AddPlayerStatus.Added,
+            (await store.TryAddPlayerAsync(room.RoomCode, "stale-player-1", CancellationToken.None)).Status);
+        Assert.Equal(AddPlayerStatus.Added,
+            (await store.TryAddPlayerAsync(room.RoomCode, "stale-player-2", CancellationToken.None)).Status);
+
+        var observedAtUtc = room.UpdatedAtUtc.AddMinutes(5);
+        await store.RefreshConnectedPlayersAsync(
+            room.RoomId,
+            ["owner", "connected-player"],
+            observedAtUtc,
+            CancellationToken.None);
+        var reconciled = await store.ReconcileWaitingRoomMembersAsync(
+            room.RoomCode,
+            "joining-player",
+            observedAtUtc.AddSeconds(-90),
+            observedAtUtc,
+            CancellationToken.None);
+        var joined = await store.TryAddPlayerAsync(
+            room.RoomCode, "joining-player", CancellationToken.None);
+
+        Assert.NotNull(reconciled);
+        Assert.Equal(["owner", "connected-player"], reconciled.PlayerIds);
+        Assert.Equal(AddPlayerStatus.Added, joined.Status);
+        Assert.NotNull(joined.Room);
+        Assert.Equal(["owner", "connected-player", "joining-player"], joined.Room.PlayerIds);
+    }
+
+    [Fact]
     public async Task ConcurrentRoomCreation_AlwaysProducesUniqueRoomCodes()
     {
         var store = new InMemoryLobbyStore();

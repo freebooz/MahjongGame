@@ -177,7 +177,8 @@ UStaticMeshComponent* AMahjong3DTableActor::AddBox(const FVector& Location, cons
 }
 
 void AMahjong3DTableActor::AddTile(const FMahjongTile* Tile, const bool bFaceUp, const bool bUpright,
-    const FVector& Location, const FRotator& Rotation, const bool bSelected)
+    const FVector& Location, const FRotator& Rotation, const bool bSelected,
+    const float ScaleMultiplier)
 {
     FVector TileLocation = Location;
     if (bSelected) TileLocation.Z += 16.0f;
@@ -187,17 +188,32 @@ void AMahjong3DTableActor::AddTile(const FMahjongTile* Tile, const bool bFaceUp,
         UStaticMeshComponent* Component = NewObject<UStaticMeshComponent>(this);
         Component->SetStaticMesh(Mesh);
         Component->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+        // Avoid shimmer from hundreds of overlapping dynamic tile shadows.
+        Component->SetCastShadow(false);
         // UViewport 中同时存在上百张动态牌时，逐牌动态投影会产生闪烁和过亮边缘。
         Component->SetCastShadow(false);
         const FRotator MeshRotation = ResolveTileMeshRotation(Rotation, bFaceUp, bUpright);
         if (bUpright)
         {
+            // FBX coordinate conversion maps the authored +Y face to Unreal local -Y.
+            // Zero yaw therefore faces the south player; seat rotation keeps every concealed
+            // opponent hand pointing outward while the local face remains readable.
+            // The imported Blender mesh origin is at the bottom centre, whereas these
+            // layout coordinates were authored around the legacy mesh centre.
+            TileLocation.Z -= TileHeight * 0.5f;
             // Blender 模型枢轴在底部中心；现有布局坐标以牌体中心为准。
             TileLocation.Z -= TileHeight * 0.5f;
         }
         Component->SetRelativeLocation(TileLocation);
         Component->SetRelativeRotation(MeshRotation);
-        Component->SetRelativeScale3D(FVector(TileWidth / Mahjong50ModelWidth));
+        Component->SetRelativeScale3D(FVector(
+            TileWidth / Mahjong50ModelWidth * FMath::Max(ScaleMultiplier, 0.1f)));
+        if (bFaceUp)
+        {
+            // The face is an 8K atlas; request its resident mip while the room is visible so
+            // mobile texture streaming does not leave the local hand on a blurred fallback mip.
+            Component->SetTextureForceResidentFlag(true);
+        }
         Component->SetupAttachment(SceneRoot);
         AddInstanceComponent(Component);
         Component->RegisterComponent();
@@ -207,9 +223,9 @@ void AMahjong3DTableActor::AddTile(const FMahjongTile* Tile, const bool bFaceUp,
     }
     else
     {
-        const FVector Size = bUpright
+        const FVector Size = (bUpright
             ? FVector(TileWidth, TileDepth, TileHeight)
-            : FVector(TileHeight, TileWidth, TileDepth);
+            : FVector(TileHeight, TileWidth, TileDepth)) * FMath::Max(ScaleMultiplier, 0.1f);
         AddBox(TileLocation, Size, Rotation,
             bSelected ? FLinearColor(0.95f, 0.68f, 0.16f) : FLinearColor(0.92f, 0.88f, 0.72f));
     }
@@ -255,13 +271,15 @@ void AMahjong3DTableActor::AddHands()
     if (bCachedPrivateState)
     {
         const TArray<FMahjongTile>& Tiles = CachedPrivateState.Hand.Tiles;
-        const float StartX = -0.5f * (Tiles.Num() - 1) * TileTightPitch;
+        const float LocalHandPitch = TileTightPitch * LocalHandScale;
+        const float StartX = -0.5f * (Tiles.Num() - 1) * LocalHandPitch;
         for (int32 Index = 0; Index < Tiles.Num(); ++Index)
         {
             AddTile(&Tiles[Index], true, true,
-                FVector(StartX + Index * TileTightPitch, -HandDistanceFromCenter,
-                    TileHeight * 0.5f + 9.0f),
-                FRotator::ZeroRotator, Tiles[Index].UniqueId == SelectedTileId);
+                FVector(StartX + Index * LocalHandPitch, -LocalHandDistanceFromCenter,
+                    TileHeight * 0.5f + LocalHandElevation),
+                FRotator::ZeroRotator, Tiles[Index].UniqueId == SelectedTileId,
+                LocalHandScale);
         }
     }
 

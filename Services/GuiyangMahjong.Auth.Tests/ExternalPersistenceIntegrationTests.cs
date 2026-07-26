@@ -116,5 +116,10 @@ public sealed class ExternalPersistenceIntegrationTests
     private static AuthService CreateService(
         IAuthStore store,
         IOptions<AuthOptions> options) =>
-        new(store, new PlayerAccessTokenIssuer(options), options, TimeProvider.System);
+        new(
+            store,
+            new PlayerAccessTokenIssuer(options),
+            new LocalPlayerNameGenerator(),
+            options,
+            TimeProvider.System);
 }

@@ -122,6 +122,61 @@ public sealed class GameServerInstanceManagerTests
     }
 
     [Fact]
+    public async Task Drain_CallerCancellationDuringShutdown_StillStopsAndReleasesPort()
+    {
+        var fixture = CreateFixture(19210, 19210);
+        var allocation = await AllocateAsync(fixture, "room-cancelled-drain");
+        var launch = fixture.Launcher.Specs[allocation.ServerInstanceId];
+        await fixture.Manager.ConfirmRegistrationAsync(
+            Guid.NewGuid().ToString(),
+            allocation.ServerInstanceId,
+            NewRegistration(launch, launch.RegistrationCredential),
+            CancellationToken.None);
+        using var callerCancellation = new CancellationTokenSource();
+        fixture.Launcher.Processes[allocation.ServerInstanceId].BeforeStop = token =>
+        {
+            callerCancellation.Cancel();
+            token.ThrowIfCancellationRequested();
+        };
+
+        var stopped = await fixture.Manager.DrainAsync(
+            allocation.ServerInstanceId, callerCancellation.Token);
+        var replacement = await AllocateAsync(fixture, "room-after-cancelled-drain");
+
+        Assert.True(callerCancellation.IsCancellationRequested);
+        Assert.Equal(GameServerInstanceState.Stopped, stopped.State);
+        Assert.Equal(allocation.Port, replacement.Port);
+    }
+
+    [Fact]
+    public async Task Drain_RetriesPersistedDrainingInstance()
+    {
+        var fixture = CreateFixture(19220, 19220);
+        var allocation = await AllocateAsync(fixture, "room-retry-drain");
+        var launch = fixture.Launcher.Specs[allocation.ServerInstanceId];
+        await fixture.Manager.ConfirmRegistrationAsync(
+            Guid.NewGuid().ToString(),
+            allocation.ServerInstanceId,
+            NewRegistration(launch, launch.RegistrationCredential),
+            CancellationToken.None);
+        var process = fixture.Launcher.Processes[allocation.ServerInstanceId];
+        process.BeforeStop = _ => throw new IOException("simulated one-time shutdown failure");
+
+        await Assert.ThrowsAsync<IOException>(() =>
+            fixture.Manager.DrainAsync(allocation.ServerInstanceId, CancellationToken.None));
+        Assert.Equal(
+            GameServerInstanceState.Draining,
+            fixture.Manager.Get(allocation.ServerInstanceId)?.State);
+
+        process.BeforeStop = null;
+        var stopped = await fixture.Manager.DrainAsync(
+            allocation.ServerInstanceId, CancellationToken.None);
+
+        Assert.Equal(GameServerInstanceState.Stopped, stopped.State);
+        Assert.Equal(1, fixture.Ports.AvailableCount);
+    }
+
+    [Fact]
     public async Task Restart_ReattachesLiveProcess_ReservesPort_AndKeepsHeartbeatCredential()
     {
         var fixture = CreateFixture(19300, 19300);
@@ -300,11 +355,13 @@ public sealed class GameServerInstanceManagerTests
         public int ProcessId { get; } = processId;
         public DateTimeOffset StartedAtUtc { get; } = DateTimeOffset.UtcNow;
         public bool HasExited { get; private set; }
+        public Action<CancellationToken>? BeforeStop { get; set; }
 
         public void Exit() => HasExited = true;
 
         public ValueTask StopAsync(TimeSpan gracePeriod, CancellationToken cancellationToken)
         {
+            BeforeStop?.Invoke(cancellationToken);
             HasExited = true;
             return ValueTask.CompletedTask;
         }

@@ -2,11 +2,12 @@
 param(
     [Parameter(Mandatory)]
     [int]$AutomationToolProcessId,
-    [string]$EngineRoot = 'F:\UnrealEngine-5.8.0-release',
+    [string]$EngineRoot = 'D:\UnrealEngine-5.8.0-release',
     [ValidateSet('Development', 'Shipping')]
     [string]$Configuration = 'Development',
-    [string]$Distribution = 'Ubuntu-22.04',
-    [string]$LinuxRepositoryPath = '/home/freebooz/src/MahjongGame',
+    [string]$Distribution = 'Ubuntu',
+    [string]$WslUser = 'root',
+    [string]$LinuxRepositoryPath = '/home/administrator/src/MahjongGame',
     [string]$Version = '',
     [int]$PollSeconds = 15
 )
@@ -31,7 +32,9 @@ try {
         EngineRoot = $EngineRoot
         Configuration = $Configuration
         Distribution = $Distribution
+        WslUser = $WslUser
         LinuxRepositoryPath = $LinuxRepositoryPath
+        ReuseExistingBuild = $true
     }
     if (![string]::IsNullOrWhiteSpace($Version)) { $parameters.Version = $Version }
     $output = & (Join-Path $PSScriptRoot 'Deploy-LinuxServerToWsl.ps1') @parameters 2>&1

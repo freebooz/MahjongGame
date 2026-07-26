@@ -70,6 +70,7 @@ public sealed record LobbyRoom
     public long StateSequence { get; init; }
     public DateTimeOffset CreatedAtUtc { get; init; }
     public DateTimeOffset UpdatedAtUtc { get; init; }
+    public DateTimeOffset? EmptySinceUtc { get; init; }
 }
 
 public sealed record CreateRoomRequest(
@@ -139,7 +140,8 @@ public sealed record GameServerHeartbeat(
     string RoomLifecycle,
     int RoundId,
     string BuildVersion,
-    DateTimeOffset SentAtUtc);
+    DateTimeOffset SentAtUtc,
+    string[]? ConnectedPlayerIds = null);
 
 public sealed record GameServerFailure(
     string ServerInstanceId,

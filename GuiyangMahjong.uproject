@@ -54,6 +54,11 @@
       "TargetAllowList": ["Editor"]
     },
     {
+      "Name": "UmgMcp",
+      "Enabled": true,
+      "TargetAllowList": ["Editor"]
+    },
+    {
       "Name": "ContentBrowserAssetDataSource",
       "Enabled": true,
       "TargetAllowList": ["Editor"]

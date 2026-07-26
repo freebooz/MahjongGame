@@ -12,6 +12,7 @@ namespace GuiyangMahjong.Auth.Services;
 public sealed partial class AuthService(
     IAuthStore store,
     PlayerAccessTokenIssuer accessTokenIssuer,
+    LocalPlayerNameGenerator playerNameGenerator,
     IOptions<AuthOptions> options,
     TimeProvider timeProvider)
 {
@@ -31,7 +32,7 @@ public sealed partial class AuthService(
             Encoding.UTF8.GetBytes(installationId));
         var installationHash = Convert.ToHexStringLower(installationHashBytes);
         var playerId = $"guest-{Base64UrlEncode(installationHashBytes.AsSpan(0, 18))}";
-        var displayName = NormalizeDisplayName(request.DisplayName, playerId);
+        var displayName = NormalizeDisplayName(request.DisplayName, playerNameGenerator);
         var identity = await store.GetOrCreateGuestAsync(
             installationHash,
             new AuthIdentity(playerId, displayName, "Guest", now, now),
@@ -122,10 +123,12 @@ public sealed partial class AuthService(
         catch (FormatException) { return false; }
     }
 
-    private static string NormalizeDisplayName(string? supplied, string playerId)
+    private static string NormalizeDisplayName(
+        string? supplied,
+        LocalPlayerNameGenerator playerNameGenerator)
     {
         var value = supplied?.Trim() ?? string.Empty;
-        if (value.Length == 0) return $"游客{playerId[^6..]}";
+        if (value.Length == 0) return playerNameGenerator.Generate();
         if (value.Length is < 2 or > 24 || value.Any(char.IsControl))
             throw new AuthOperationException("INVALID_REQUEST", "昵称长度必须为 2 到 24 个字符", 400);
         return value;

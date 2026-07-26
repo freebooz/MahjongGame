@@ -11,6 +11,7 @@ class UMobileActionButtonPanel;
 class UMobileHandTileWidget;
 class UMobileErrorToastWidget;
 class UMobileSettlementWidget;
+class UTexture2D;
 
 /** 游戏主 HUD。公共数据来自 GameState，私有手牌和操作列表来自所属 PlayerController Client RPC。 */
 UCLASS(Abstract, BlueprintType)
@@ -66,6 +67,9 @@ protected:
     /** 当前选中手牌和本地三维牌桌表现 Actor。 */
     UPROPERTY(Transient) TObjectPtr<UMobileHandTileWidget> SelectedHandTile;
     UPROPERTY(Transient) TObjectPtr<AMahjong3DTableActor> Table3DActor;
+    /** Temporary room portraits; authoritative player images can replace these brushes later. */
+    UPROPERTY(Transient) TObjectPtr<UTexture2D> PlaceholderAvatarA;
+    UPROPERTY(Transient) TObjectPtr<UTexture2D> PlaceholderAvatarB;
     /** 最近一次公共/私有快照；UI 重建只读取缓存，不修改权威状态。 */
     UPROPERTY() FMahjongPublicTableState CachedPublicState;
     UPROPERTY() FMahjongPrivatePlayerState CachedPrivateState;
@@ -103,6 +107,7 @@ private:
     void RefreshDiscards(int32 LocalSeat);
     void RefreshMelds(int32 LocalSeat);
     void RefreshJiDisplay();
+    void ApplyPlaceholderAvatars();
     /** 把同一份缓存快照同步给三维桌面表现。 */
     void Refresh3DTable();
 };

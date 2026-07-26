@@ -3,6 +3,7 @@
 #include "Auth/GuiyangLoginSubsystem.h"
 #include "Engine/AssetManager.h"
 #include "CineCameraComponent.h"
+#include "Engine/Scene.h"
 #include "EngineUtils.h"
 #include "Game/GuiyangMahjongGameState.h"
 #include "Game/GuiyangMahjongPlayerController.h"
@@ -29,6 +30,48 @@
 namespace
 {
     constexpr double MinimumCreatingRoomLoadingSeconds = 1.5;
+
+    void ApplyMissingRoomPostProcessDefaults(FPostProcessSettings& Settings)
+    {
+        // Blueprint-authored overrides remain authoritative. Missing overrides fall back to
+        // deterministic tabletop settings so copying an otherwise-default CineCamera component
+        // cannot silently re-enable eye adaptation, bloom and physical-camera exposure.
+        if (!Settings.bOverride_AutoExposureMethod)
+        {
+            Settings.bOverride_AutoExposureMethod = true;
+            Settings.AutoExposureMethod = AEM_Histogram;
+        }
+        if (!Settings.bOverride_AutoExposureApplyPhysicalCameraExposure)
+        {
+            Settings.bOverride_AutoExposureApplyPhysicalCameraExposure = true;
+            Settings.AutoExposureApplyPhysicalCameraExposure = false;
+        }
+        if (!Settings.bOverride_AutoExposureBias)
+        {
+            Settings.bOverride_AutoExposureBias = true;
+            Settings.AutoExposureBias = -1.0f;
+        }
+        if (!Settings.bOverride_BloomIntensity)
+        {
+            Settings.bOverride_BloomIntensity = true;
+            Settings.BloomIntensity = 0.0f;
+        }
+        if (!Settings.bOverride_LensFlareIntensity)
+        {
+            Settings.bOverride_LensFlareIntensity = true;
+            Settings.LensFlareIntensity = 0.0f;
+        }
+        if (!Settings.bOverride_MotionBlurAmount)
+        {
+            Settings.bOverride_MotionBlurAmount = true;
+            Settings.MotionBlurAmount = 0.0f;
+        }
+        if (!Settings.bOverride_Sharpen)
+        {
+            Settings.bOverride_Sharpen = true;
+            Settings.Sharpen = 0.75f;
+        }
+    }
 }
 
 void UGuiyangClientControllerBridgeImpl::BeginDestroy()
@@ -303,6 +346,7 @@ void UGuiyangClientControllerBridgeImpl::ApplyRoomPresentationViewTarget()
         RuntimeCamera->SetCurrentAperture(EditorCamera->CurrentAperture);
         RuntimeCamera->SetConstraintAspectRatio(EditorCamera->bConstrainAspectRatio);
         RuntimeCamera->PostProcessSettings = EditorCamera->PostProcessSettings;
+        ApplyMissingRoomPostProcessDefaults(RuntimeCamera->PostProcessSettings);
         RuntimeCamera->PostProcessBlendWeight = EditorCamera->PostProcessBlendWeight;
         UE_LOG(LogMahjongUI, Display,
             TEXT("Applied editor-authored room camera: location=%s rotation=%s focal=%.1fmm"),
@@ -316,10 +360,15 @@ void UGuiyangClientControllerBridgeImpl::ApplyRoomPresentationViewTarget()
         const FVector TableCenter = RoomTableActor
             ? RoomTableActor->GetActorLocation() + FVector(0.0f, 0.0f, 35.0f)
             : FVector(0.0f, 0.0f, 35.0f);
-        const FVector CameraLocation = TableCenter + FVector(0.0f, -1050.0f, 1350.0f);
-        const FRotator CameraRotation = (TableCenter - CameraLocation).Rotation();
+        // The requested 60-degree tabletop-normal angle is a -30 degree UE pitch.
+        // This keeps the near hand visible while retaining the reference image's table depth.
+        const FVector CameraLocation = TableCenter + FVector(0.0f, -2350.0f, 1357.0f);
+        const FRotator CameraRotation(-30.0f, 90.0f, 0.0f);
         RoomCameraActor->SetActorLocationAndRotation(CameraLocation, CameraRotation);
-        RuntimeCamera->SetFieldOfView(52.0f);
+        RuntimeCamera->SetCurrentFocalLength(30.0f);
+        FCameraFilmbackSettings Filmback = RuntimeCamera->Filmback;
+        Filmback.SensorVerticalOffset = -2.0f;
+        RuntimeCamera->SetFilmback(Filmback);
         RuntimeCamera->SetConstraintAspectRatio(false);
         UE_LOG(LogMahjongUI, Warning,
             TEXT("Applied native fallback room camera because editor camera is unavailable"));

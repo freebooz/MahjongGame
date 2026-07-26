@@ -156,6 +156,14 @@ public sealed class LobbyService
         var room = await store.GetRoomByCodeAsync(roomCode, cancellationToken)
             ?? throw new LobbyOperationException(
                 LobbyErrorCode.RoomNotFound, "房间不存在", StatusCodes.Status404NotFound);
+        var now = timeProvider.GetUtcNow();
+        room = await store.ReconcileWaitingRoomMembersAsync(
+                roomCode,
+                player.PlayerId,
+                now.AddSeconds(-options.PlayerReservationTimeoutSeconds),
+                now,
+                cancellationToken)
+            ?? room;
         var activeRoom = await store.GetActiveRoomByPlayerAsync(player.PlayerId, cancellationToken);
         if (activeRoom is not null && activeRoom.RoomId != room.RoomId)
         {
@@ -427,16 +435,108 @@ public sealed class LobbyService
         await allocator.RecordHeartbeatAsync(requestId, serverInstanceId, heartbeat, cancellationToken);
         var room = await store.GetRoomByIdAsync(heartbeat.RoomId, cancellationToken);
         if (room is null || room.Route?.ServerInstanceId != serverInstanceId) return;
+
+        var now = timeProvider.GetUtcNow();
+        if (heartbeat.ConnectedPlayerIds is { } connectedPlayerIds)
+        {
+            var distinctPlayerIds = connectedPlayerIds
+                .Where(playerId => !string.IsNullOrWhiteSpace(playerId))
+                .Distinct(StringComparer.Ordinal)
+                .ToArray();
+            if (distinctPlayerIds.Length != connectedPlayerIds.Length
+                || distinctPlayerIds.Length != heartbeat.ConnectedPlayers
+                || distinctPlayerIds.Length > room.MaximumPlayers
+                || distinctPlayerIds.Any(playerId => playerId.Length > 80))
+            {
+                throw Invalid("GameServer heartbeat player membership is invalid.");
+            }
+            await store.RefreshConnectedPlayersAsync(
+                room.RoomId, distinctPlayerIds, now, cancellationToken);
+        }
+
         var reported = heartbeat.RoomLifecycle switch
         {
             "Playing" => RoomLifecycle.Playing,
             "Settling" => RoomLifecycle.Settling,
             _ => room.Lifecycle
         };
-        if (reported == room.Lifecycle || !RoomStateMachine.CanTransition(room.Lifecycle, reported)) return;
-        room = RoomStateMachine.Transition(room, reported, timeProvider);
-        if (await store.UpdateRoomAsync(room, cancellationToken))
-            await events.PublishAsync(LobbyEventTypes.RoomUpdated, ToDirectoryItem(room), cancellationToken);
+        var updated = room;
+        var changed = false;
+        if (reported != room.Lifecycle && RoomStateMachine.CanTransition(room.Lifecycle, reported))
+        {
+            updated = RoomStateMachine.Transition(room, reported, timeProvider);
+            changed = true;
+        }
+
+        var shouldDrainEmptyRoom = false;
+        if (updated.Lifecycle is RoomLifecycle.Waiting or RoomLifecycle.Playing or RoomLifecycle.Settling)
+        {
+            if (heartbeat.ConnectedPlayers == 0)
+            {
+                var emptySinceUtc = updated.EmptySinceUtc ?? now;
+                if (!changed
+                    && now - emptySinceUtc >= TimeSpan.FromSeconds(options.EmptyRoomTimeoutSeconds))
+                {
+                    var terminalLifecycle = updated.Lifecycle == RoomLifecycle.Playing
+                        ? RoomLifecycle.Failed
+                        : RoomLifecycle.Closed;
+                    updated = RoomStateMachine.Transition(updated, terminalLifecycle, timeProvider) with
+                    {
+                        Route = null,
+                        PendingServerInstanceId = null,
+                        LastServerInstanceId = serverInstanceId,
+                        EmptySinceUtc = emptySinceUtc
+                    };
+                    changed = true;
+                    shouldDrainEmptyRoom = true;
+                }
+                else if (updated.EmptySinceUtc is null)
+                {
+                    updated = updated with
+                    {
+                        EmptySinceUtc = emptySinceUtc,
+                        StateSequence = changed ? updated.StateSequence : updated.StateSequence + 1,
+                        UpdatedAtUtc = now
+                    };
+                    changed = true;
+                }
+            }
+            else if (updated.EmptySinceUtc is not null)
+            {
+                updated = updated with
+                {
+                    EmptySinceUtc = null,
+                    StateSequence = changed ? updated.StateSequence : updated.StateSequence + 1,
+                    UpdatedAtUtc = now
+                };
+                changed = true;
+            }
+        }
+
+        if (!changed || !await store.UpdateRoomAsync(updated, cancellationToken)) return;
+        await events.PublishAsync(
+            shouldDrainEmptyRoom ? LobbyEventTypes.RoomClosed : LobbyEventTypes.RoomUpdated,
+            ToDirectoryItem(updated),
+            cancellationToken);
+        if (!shouldDrainEmptyRoom) return;
+
+        logger.LogInformation(
+            "Empty room timed out and is being reclaimed RequestId={RequestId} RoomId={RoomId} InstanceId={InstanceId}",
+            requestId,
+            updated.RoomId,
+            serverInstanceId);
+        try
+        {
+            await allocator.DrainAsync(requestId, serverInstanceId, cancellationToken);
+        }
+        catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException)
+        {
+            logger.LogWarning(
+                exception,
+                "Empty room closed but Dedicated Server drain failed RoomId={RoomId} InstanceId={InstanceId}",
+                updated.RoomId,
+                serverInstanceId);
+        }
     }
 
     public async Task<MatchResultAck> SubmitMatchResultAsync(

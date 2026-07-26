@@ -139,6 +139,97 @@ public sealed class AllocatorIntegrationDomainTests
     }
 
     [Fact]
+    public async Task EmptyWaitingRoom_ClosesAndDrainsDedicatedServerAfterTimeout()
+    {
+        var fixture = CreateFixture();
+        var created = await fixture.Service.CreateRoomAsync(
+            Guid.NewGuid().ToString(),
+            new PlayerIdentity("owner-empty-room", "Owner", "Guest"),
+            NewCreateRequest(),
+            CancellationToken.None);
+        var room = await fixture.Store.GetRoomByIdAsync(created.RoomId, CancellationToken.None);
+        Assert.NotNull(room);
+        await fixture.Service.RegisterGameServerAsync(
+            Guid.NewGuid().ToString(),
+            new GameServerRegistration(
+                fixture.Allocator.ServerInstanceId, room.RoomId, room.MatchId,
+                "127.0.0.1", 19000, "test", "credential"),
+            CancellationToken.None);
+        var emptyHeartbeat = NewHeartbeat(room.RoomId, "Waiting") with
+        {
+            ConnectedPlayers = 0,
+            ConnectedPlayerIds = []
+        };
+
+        await fixture.Service.RecordGameServerHeartbeatAsync(
+            Guid.NewGuid().ToString(),
+            fixture.Allocator.ServerInstanceId,
+            emptyHeartbeat,
+            CancellationToken.None);
+        fixture.Time.Advance(TimeSpan.FromSeconds(91));
+        await fixture.Service.RecordGameServerHeartbeatAsync(
+            Guid.NewGuid().ToString(),
+            fixture.Allocator.ServerInstanceId,
+            emptyHeartbeat,
+            CancellationToken.None);
+
+        var closed = await fixture.Store.GetRoomByIdAsync(room.RoomId, CancellationToken.None);
+        Assert.Equal(RoomLifecycle.Closed, closed?.Lifecycle);
+        Assert.Null(closed?.Route);
+        Assert.Equal(fixture.Allocator.ServerInstanceId, closed?.LastServerInstanceId);
+        Assert.Equal(1, fixture.Allocator.DrainCount);
+        Assert.Null(await fixture.Store.GetActiveRoomByPlayerAsync(
+            "owner-empty-room", CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task EmptyPlayingRoom_FailsAndDrainsDedicatedServerAfterReconnectWindow()
+    {
+        var fixture = CreateFixture();
+        var owner = new PlayerIdentity("owner-empty-match", "Owner", "Guest");
+        var created = await fixture.Service.CreateRoomAsync(
+            Guid.NewGuid().ToString(), owner, NewCreateRequest(), CancellationToken.None);
+        var room = await fixture.Store.GetRoomByIdAsync(created.RoomId, CancellationToken.None);
+        Assert.NotNull(room);
+        await fixture.Service.RegisterGameServerAsync(
+            Guid.NewGuid().ToString(),
+            new GameServerRegistration(
+                fixture.Allocator.ServerInstanceId, room.RoomId, room.MatchId,
+                "127.0.0.1", 19000, "test", "credential"),
+            CancellationToken.None);
+        await fixture.Service.RecordGameServerHeartbeatAsync(
+            Guid.NewGuid().ToString(),
+            fixture.Allocator.ServerInstanceId,
+            NewHeartbeat(room.RoomId, "Playing") with
+            {
+                ConnectedPlayerIds = [owner.PlayerId]
+            },
+            CancellationToken.None);
+        var emptyHeartbeat = NewHeartbeat(room.RoomId, "Playing") with
+        {
+            ConnectedPlayers = 0,
+            ConnectedPlayerIds = []
+        };
+        await fixture.Service.RecordGameServerHeartbeatAsync(
+            Guid.NewGuid().ToString(),
+            fixture.Allocator.ServerInstanceId,
+            emptyHeartbeat,
+            CancellationToken.None);
+        fixture.Time.Advance(TimeSpan.FromSeconds(91));
+        await fixture.Service.RecordGameServerHeartbeatAsync(
+            Guid.NewGuid().ToString(),
+            fixture.Allocator.ServerInstanceId,
+            emptyHeartbeat,
+            CancellationToken.None);
+
+        var failed = await fixture.Store.GetRoomByIdAsync(room.RoomId, CancellationToken.None);
+        Assert.Equal(RoomLifecycle.Failed, failed?.Lifecycle);
+        Assert.Equal(1, fixture.Allocator.DrainCount);
+        Assert.Null(await fixture.Store.GetActiveRoomByPlayerAsync(
+            owner.PlayerId, CancellationToken.None));
+    }
+
+    [Fact]
     public async Task ReconnectRoute_UsesAuthenticatedPlayerMappingInsteadOfClientHints()
     {
         var fixture = CreateFixture();

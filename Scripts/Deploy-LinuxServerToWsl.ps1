@@ -1,11 +1,11 @@
 [CmdletBinding()]
 param(
-    [string]$EngineRoot = 'F:\UnrealEngine-5.8.0-release',
+    [string]$EngineRoot = 'D:\UnrealEngine-5.8.0-release',
     [ValidateSet('Development', 'Shipping')]
     [string]$Configuration = 'Development',
-    [string]$Distribution = 'Ubuntu-22.04',
-    [string]$WslUser = '',
-    [string]$LinuxRepositoryPath = '/home/freebooz/src/MahjongGame',
+    [string]$Distribution = 'Ubuntu',
+    [string]$WslUser = 'root',
+    [string]$LinuxRepositoryPath = '/home/administrator/src/MahjongGame',
     [string]$Version = '',
     [switch]$ReuseExistingBuild
 )
@@ -85,9 +85,9 @@ rsync -a --delete --exclude '.env' --exclude '.deployed-version' --exclude '.pre
 rsync -a $(Quote-Bash "$rootLinux/.dockerignore") $(Quote-Bash "$LinuxRepositoryPath/.dockerignore")
 rsync -a --delete $(Quote-Bash "$artifactLinux/") $(Quote-Bash "$LinuxRepositoryPath/Artifacts/LinuxServer/")
 cd $(Quote-Bash $LinuxRepositoryPath)
-sudo sed -i '/^GAME_SERVER_MAP=/d' Deploy/linux/.env
-printf '%s\n' 'GAME_SERVER_MAP=/Game/Maps/MahjongRoomMap?game=/Script/GuiyangMahjongServer.GuiyangMahjongGameMode' | sudo tee -a Deploy/linux/.env >/dev/null
-  sudo ./Deploy/linux/deploy.sh upgrade --refresh-advertised-ip --version $(Quote-Bash $Version)
+sed -i '/^GAME_SERVER_MAP=/d' Deploy/linux/.env
+printf '%s\n' 'GAME_SERVER_MAP=/Game/Maps/MahjongRoomMap?game=/Script/GuiyangMahjongServer.GuiyangMahjongGameMode' >> Deploy/linux/.env
+./Deploy/linux/deploy.sh upgrade --refresh-advertised-ip --version $(Quote-Bash $Version)
 "@
 Invoke-WslBash $syncAndDeploy
 if ($LASTEXITCODE -ne 0) { throw "Real UE LinuxServer deployment failed with exit code $LASTEXITCODE" }

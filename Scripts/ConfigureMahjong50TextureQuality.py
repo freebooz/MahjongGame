@@ -19,10 +19,10 @@ for name in NAMES:
     if not texture:
         raise RuntimeError(f"Missing Mahjong50 atlas texture: {name}")
     texture.set_editor_property("lod_group", unreal.TextureGroup.TEXTUREGROUP_CHARACTER)
-    texture.set_editor_property("mip_gen_settings", unreal.TextureMipGenSettings.TMGS_SHARPEN4)
+    texture.set_editor_property("mip_gen_settings", unreal.TextureMipGenSettings.TMGS_SHARPEN8)
     # UE 5.8 selects anisotropy through the texture group and r.MaxAnisotropy.
     texture.set_editor_property("filter", unreal.TextureFilter.TF_DEFAULT)
-    texture.set_editor_property("lod_bias", 0)
+    texture.set_editor_property("lod_bias", -1)
     post_edit_change = getattr(texture, "post_edit_change", None)
     if post_edit_change:
         post_edit_change()

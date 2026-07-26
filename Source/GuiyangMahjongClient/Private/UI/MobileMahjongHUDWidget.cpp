@@ -10,6 +10,7 @@
 #include "Blueprint/WidgetTree.h"
 #include "Game/GuiyangMahjongPlayerState.h"
 #include "Components/Button.h"
+#include "Components/CanvasPanelSlot.h"
 #include "Components/HorizontalBox.h"
 #include "Components/HorizontalBoxSlot.h"
 #include "Components/Image.h"
@@ -42,6 +43,22 @@ namespace
 void UMobileMahjongHUDWidget::NativeConstruct()
 {
     Super::NativeConstruct();
+    const auto SetCanvasY = [](UWidget* Widget, const float Y)
+    {
+        if (Widget)
+        {
+            if (UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(Widget->Slot))
+            {
+                const FVector2D Position = CanvasSlot->GetPosition();
+                CanvasSlot->SetPosition(FVector2D(Position.X, Y));
+            }
+        }
+    };
+    // Keep controls above the enlarged south hand, matching the mobile reference layout.
+    SetCanvasY(ActionButtonPanel, 760.0f);
+    SetCanvasY(Btn_Ready, 760.0f);
+    SetCanvasY(Txt_ReadyStatus, 850.0f);
+    ApplyPlaceholderAvatars();
     for (const FName LayerName : {FName(TEXT("Scale_BackgroundFill")),
         FName(TEXT("Background_ComponentSlot"))})
     {
@@ -100,6 +117,41 @@ void UMobileMahjongHUDWidget::NativeConstruct()
     UE_LOG(LogMahjongUI, Log, TEXT("牌局 HUD 创建并绑定私有手牌与操作事件"));
 }
 
+void UMobileMahjongHUDWidget::ApplyPlaceholderAvatars()
+{
+    PlaceholderAvatarA = LoadObject<UTexture2D>(nullptr,
+        TEXT("/Game/UI/Textures/Avatars/T_PlayerAvatar_Placeholder_A."
+             "T_PlayerAvatar_Placeholder_A"));
+    PlaceholderAvatarB = LoadObject<UTexture2D>(nullptr,
+        TEXT("/Game/UI/Textures/Avatars/T_PlayerAvatar_Placeholder_B."
+             "T_PlayerAvatar_Placeholder_B"));
+    if (!WidgetTree || !PlaceholderAvatarA || !PlaceholderAvatarB)
+    {
+        UE_LOG(LogMahjongUI, Warning, TEXT("Player avatar placeholder textures are unavailable"));
+        return;
+    }
+
+    // The supplied PNGs are 3:2 canvases with a centred transparent portrait.
+    // This UV window crops only empty transparency and keeps the complete gold frame.
+    const FBox2D PortraitUV(FVector2D(0.25f, 0.125f), FVector2D(0.75f, 0.875f));
+    const auto SetAvatar = [this, &PortraitUV](const FName WidgetName, UTexture2D* Texture)
+    {
+        if (UImage* Image = Cast<UImage>(WidgetTree->FindWidget(WidgetName)))
+        {
+            FSlateBrush Brush = Image->GetBrush();
+            Brush.SetResourceObject(Texture);
+            Brush.SetUVRegion(PortraitUV);
+            Brush.ImageSize = FVector2D(145.0f, 145.0f);
+            Image->SetBrush(Brush);
+        }
+    };
+
+    SetAvatar(TEXT("Img_Seat_Self"), PlaceholderAvatarA);
+    SetAvatar(TEXT("Img_Seat_Top"), PlaceholderAvatarA);
+    SetAvatar(TEXT("Img_Seat_Left"), PlaceholderAvatarB);
+    SetAvatar(TEXT("Img_Seat_Right"), PlaceholderAvatarB);
+}
+
 void UMobileMahjongHUDWidget::NativeDestruct()
 {
     // The table belongs to the room world and survives HUD screen transitions.
@@ -153,7 +205,22 @@ void UMobileMahjongHUDWidget::HandleReturnLobby()
 
 void UMobileMahjongHUDWidget::RefreshRoomState(const FMahjongRoomState& State, const int32 LocalSeat)
 {
-    Txt_RoomId->SetText(FText::FromString(FString::Printf(TEXT("房间：%s"), *State.RoomInfo.RoomId)));
+    Txt_RoomId->SetText(FText::FromString(FString::Printf(
+        TEXT("|  房间号  %s"), *State.RoomInfo.RoomId)));
+    if (UTextBlock* RoundInfo = Cast<UTextBlock>(WidgetTree->FindWidget(TEXT("Txt_RoundInfo"))))
+    {
+        RoundInfo->SetText(FText::FromString(FString::Printf(TEXT("|  局数  %d/%d局"),
+            FMath::Max(1, State.RoomInfo.CurrentRound), State.RoomInfo.RoundCount)));
+    }
+    if (UTextBlock* BaseScore = Cast<UTextBlock>(WidgetTree->FindWidget(TEXT("Txt_BaseScore"))))
+    {
+        BaseScore->SetText(FText::FromString(FString::Printf(
+            TEXT("|  底分  %d"), State.RoomInfo.BaseScore)));
+    }
+    if (UTextBlock* GameTitle = Cast<UTextBlock>(WidgetTree->FindWidget(TEXT("Txt_GameTitle"))))
+    {
+        GameTitle->SetText(FText::FromString(TEXT("贵州捉鸡麻将")));
+    }
 
     const bool bReadyStage = State.Lifecycle == EMahjongRoomLifecycle::Creating
         || State.Lifecycle == EMahjongRoomLifecycle::WaitingForPlayers
@@ -194,7 +261,6 @@ void UMobileMahjongHUDWidget::RefreshRoomState(const FMahjongRoomState& State, c
     }
 
     UTextBlock* SeatWidgets[] = {Seat_Self, Seat_Right, Seat_Top, Seat_Left};
-    const TCHAR* SeatDirections[] = {TEXT("南"), TEXT("东"), TEXT("北"), TEXT("西")};
     for (int32 RelativeSeat = 0; RelativeSeat < 4; ++RelativeSeat)
     {
         const int32 AbsoluteSeat = LocalSeat >= 0 && LocalSeat < 4
@@ -204,10 +270,9 @@ void UMobileMahjongHUDWidget::RefreshRoomState(const FMahjongRoomState& State, c
             return Item.bOccupied && Item.SeatIndex == AbsoluteSeat;
         });
         SeatWidgets[RelativeSeat]->SetText(FText::FromString(Seat
-            ? FString::Printf(TEXT("%s%s · %s\n%s"), SeatDirections[RelativeSeat],
-                RelativeSeat == 0 ? TEXT("【我】") : TEXT(""), *Seat->PlayerName,
+            ? FString::Printf(TEXT("%s\n      %s"), *Seat->PlayerName,
                 Seat->bReady ? TEXT("已准备") : TEXT("未准备"))
-            : FString::Printf(TEXT("%s · 等待玩家"), SeatDirections[RelativeSeat])));
+            : TEXT("等待玩家")));
     }
 }
 
@@ -253,7 +318,19 @@ void UMobileMahjongHUDWidget::RefreshTableState(const FMahjongPublicTableState& 
     const int32 LocalSeat = ResolveLocalSeat();
     if (const AGuiyangMahjongGameState* GS = GetWorld() ? GetWorld()->GetGameState<AGuiyangMahjongGameState>() : nullptr)
     {
-        Txt_RoomId->SetText(FText::FromString(FString::Printf(TEXT("房间：%s"), *GS->RoomState.RoomInfo.RoomId)));
+        Txt_RoomId->SetText(FText::FromString(FString::Printf(
+            TEXT("|  房间号  %s"), *GS->RoomState.RoomInfo.RoomId)));
+        if (UTextBlock* RoundInfo = Cast<UTextBlock>(WidgetTree->FindWidget(TEXT("Txt_RoundInfo"))))
+        {
+            RoundInfo->SetText(FText::FromString(FString::Printf(TEXT("|  局数  %d/%d局"),
+                FMath::Max(1, GS->RoomState.RoomInfo.CurrentRound),
+                GS->RoomState.RoomInfo.RoundCount)));
+        }
+        if (UTextBlock* BaseScore = Cast<UTextBlock>(WidgetTree->FindWidget(TEXT("Txt_BaseScore"))))
+        {
+            BaseScore->SetText(FText::FromString(FString::Printf(
+                TEXT("|  底分  %d"), GS->RoomState.RoomInfo.BaseScore)));
+        }
     }
     Txt_RemainingTileCount->SetText(FText::FromString(FString::Printf(TEXT("剩余：%d"), State.RemainingTileCount)));
     Txt_CurrentPhase->SetText(FText::FromString(FString::Printf(TEXT("阶段：%s"), *GetPhaseDisplayText(State.Phase))));
@@ -267,22 +344,25 @@ void UMobileMahjongHUDWidget::RefreshTableState(const FMahjongPublicTableState& 
         : TEXT("当前：--")));
 
     UTextBlock* SeatWidgets[] = {Seat_Self, Seat_Right, Seat_Top, Seat_Left};
-    const TCHAR* SeatDirections[] = {TEXT("南"), TEXT("东"), TEXT("北"), TEXT("西")};
     for (int32 RelativeSeat = 0; RelativeSeat < 4; ++RelativeSeat)
     {
-        SeatWidgets[RelativeSeat]->SetText(FText::FromString(
-            FString::Printf(TEXT("%s · 等待玩家"), SeatDirections[RelativeSeat])));
+        SeatWidgets[RelativeSeat]->SetText(FText::FromString(TEXT("等待玩家")));
     }
     for (const FMahjongSeatInfo& Seat : State.Seats)
     {
         const int32 RelativeSeat = GetRelativeSeatIndex(Seat.SeatIndex, LocalSeat);
         if (RelativeSeat == INDEX_NONE) continue;
-        const FString OnlineText = Seat.bOnline ? TEXT("在线") : TEXT("离线");
         const FString TurnMark = Seat.SeatIndex == State.CurrentTurnSeat ? TEXT("▶ ") : TEXT("");
+        const FString ScoreText = FMath::Abs(Seat.Score) >= 10000
+            ? FString::Printf(TEXT("%.2f万"), static_cast<double>(Seat.Score) / 10000.0)
+            : FString::Printf(TEXT("%d"), Seat.Score);
         SeatWidgets[RelativeSeat]->SetText(FText::FromString(FString::Printf(
-            TEXT("%s%s · %s%s\n手牌 %d\n%d 分 · %s"), SeatDirections[RelativeSeat],
-            RelativeSeat == 0 ? TEXT("【我】") : TEXT(""), *TurnMark, *Seat.PlayerName,
-            Seat.HandTileCount, Seat.Score, *OnlineText)));
+            TEXT("%s%s\n      %s"), *TurnMark, *Seat.PlayerName, *ScoreText)));
+    }
+    if (UTextBlock* TableCenter = Cast<UTextBlock>(WidgetTree->FindWidget(TEXT("Txt_TableCenter"))))
+    {
+        TableCenter->SetText(FText::FromString(FString::Printf(
+            TEXT("北\n西   %02d   东\n南"), State.RemainingTileCount)));
     }
     RefreshOpponentHands(LocalSeat);
     RefreshDiscards(LocalSeat);

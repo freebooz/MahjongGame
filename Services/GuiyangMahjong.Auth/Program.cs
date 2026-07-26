@@ -31,6 +31,7 @@ builder.Services.AddOptions<AuthOptions>()
     .ValidateOnStart();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<PlayerAccessTokenIssuer>();
+builder.Services.AddSingleton<LocalPlayerNameGenerator>();
 builder.Services.AddSingleton<AuthService>();
 builder.Services.AddSingleton<IAuthStore>(provider =>
 {

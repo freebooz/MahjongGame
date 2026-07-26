@@ -19,7 +19,7 @@ AMahjongRoomCameraActor::AMahjongRoomCameraActor(const FObjectInitializer& Objec
         Filmback.SensorHeight = 20.25f;
         Filmback.RecalcSensorAspectRatio();
         Camera->SetFilmback(Filmback);
-        Camera->SetCurrentFocalLength(45.0f);
+        Camera->SetCurrentFocalLength(30.0f);
         Camera->SetConstraintAspectRatio(false);
     }
     ConfigureStablePostProcess();
@@ -33,11 +33,11 @@ void AMahjongRoomCameraActor::ConfigureStablePostProcess()
     // 固定曝光并关闭容易产生闪烁的镜头效果，场景亮度由蓝图灯光人工调整。
     FPostProcessSettings& Settings = Camera->PostProcessSettings;
     Settings.bOverride_AutoExposureMethod = true;
-    Settings.AutoExposureMethod = AEM_Manual;
+    Settings.AutoExposureMethod = AEM_Histogram;
     Settings.bOverride_AutoExposureApplyPhysicalCameraExposure = true;
     Settings.AutoExposureApplyPhysicalCameraExposure = false;
     Settings.bOverride_AutoExposureBias = true;
-    Settings.AutoExposureBias = 0.35f;
+    Settings.AutoExposureBias = -1.0f;
     Settings.bOverride_BloomIntensity = true;
     Settings.BloomIntensity = 0.0f;
     Settings.bOverride_LensFlareIntensity = true;
@@ -47,7 +47,11 @@ void AMahjongRoomCameraActor::ConfigureStablePostProcess()
     Settings.bOverride_DepthOfFieldEnabled = true;
     Settings.DepthOfFieldEnabled = false;
     Settings.bOverride_Sharpen = true;
+<<<<<<< HEAD
     Settings.Sharpen = 0.5f;
     Camera->FocusSettings.FocusMethod = ECameraFocusMethod::Disable;
+=======
+    Settings.Sharpen = 0.75f;
+>>>>>>> 786a414 (WIP: Save local changes before merging)
     Camera->PostProcessBlendWeight = 1.0f;
 }

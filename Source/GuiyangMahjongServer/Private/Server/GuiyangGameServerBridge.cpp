@@ -4,6 +4,7 @@
 #include "Engine/World.h"
 #include "Game/GuiyangMahjongGameMode.h"
 #include "Game/GuiyangMahjongGameState.h"
+#include "Game/GuiyangMahjongPlayerState.h"
 #include "GameFramework/PlayerController.h"
 #include "GuiyangMahjong.h"
 #include "HttpModule.h"
@@ -306,17 +307,25 @@ void UGuiyangGameServerBridge::SendHeartbeat()
     if (!bRegistered || bShuttingDown || !World.IsValid()) return;
     int32 RoundId = 0;
     const FString Lifecycle = BuildHeartbeatLifecycle(RoundId);
-    int32 ConnectedPlayers = 0;
+    TArray<TSharedPtr<FJsonValue>> ConnectedPlayerIds;
     // 以服务器当前 PlayerController 数量作为心跳在线人数，不信任客户端上报。
     for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
     {
-        ConnectedPlayers += It->IsValid() ? 1 : 0;
+        const APlayerController* Controller = It->Get();
+        const AGuiyangMahjongPlayerState* PlayerState = Controller
+            ? Controller->GetPlayerState<AGuiyangMahjongPlayerState>()
+            : nullptr;
+        if (PlayerState && !PlayerState->MahjongPlayerId.IsEmpty())
+        {
+            ConnectedPlayerIds.Add(MakeShared<FJsonValueString>(PlayerState->MahjongPlayerId));
+        }
     }
 
     const TSharedRef<FJsonObject> Body = MakeShared<FJsonObject>();
     Body->SetStringField(TEXT("roomId"), Config.RoomId);
     Body->SetStringField(TEXT("heartbeatCredential"), HeartbeatCredential);
-    Body->SetNumberField(TEXT("connectedPlayers"), ConnectedPlayers);
+    Body->SetNumberField(TEXT("connectedPlayers"), ConnectedPlayerIds.Num());
+    Body->SetArrayField(TEXT("connectedPlayerIds"), ConnectedPlayerIds);
     Body->SetStringField(TEXT("roomLifecycle"), Lifecycle);
     Body->SetNumberField(TEXT("roundId"), RoundId);
     Body->SetStringField(TEXT("buildVersion"), Config.BuildVersion);

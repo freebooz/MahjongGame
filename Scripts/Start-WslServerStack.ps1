@@ -1,7 +1,8 @@
 [CmdletBinding()]
 param(
-    [string]$Distribution = 'Ubuntu-22.04',
-    [string]$RepositoryPath = '/home/freebooz/src/MahjongGame',
+    [string]$Distribution = 'Ubuntu',
+    [string]$WslUser = 'root',
+    [string]$RepositoryPath = '/home/administrator/src/MahjongGame',
     [int]$DockerTimeoutSeconds = 240
 )
 
@@ -36,7 +37,7 @@ try {
 
     $deadline = [DateTimeOffset]::Now.AddSeconds($DockerTimeoutSeconds)
     do {
-        & $wsl -d $Distribution -- bash -lc 'sudo docker info >/dev/null 2>&1'
+        & $wsl -d $Distribution -u $WslUser -- bash -lc 'docker info >/dev/null 2>&1'
         if ($LASTEXITCODE -eq 0) { break }
         Start-Sleep -Seconds 2
     } while ([DateTimeOffset]::Now -lt $deadline)
@@ -44,11 +45,21 @@ try {
         throw "Docker did not become ready within $DockerTimeoutSeconds seconds."
     }
 
-    $statusCommand = "cd '$RepositoryPath' && sudo ./Deploy/linux/deploy.sh status"
-    $output = & $wsl -d $Distribution -- bash -lc $statusCommand 2>&1
-    $output | ForEach-Object { Write-StartupLog $_ }
-    if ($LASTEXITCODE -ne 0) {
-        throw "Linux stack status failed with exit code $LASTEXITCODE."
+    $statusCommand = "cd '$RepositoryPath' && ./Deploy/linux/deploy.sh status"
+    $previousErrorActionPreference = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    $output = & $wsl -d $Distribution -u $WslUser -- bash -lc $statusCommand 2>&1
+    $statusExitCode = $LASTEXITCODE
+    $ErrorActionPreference = $previousErrorActionPreference
+    $output | ForEach-Object {
+        $line = "$_"
+        if (!$line.Contains([char]0) -and $line -notmatch 'WSL.*NAT' -and
+            $line -notmatch 'localhost') {
+            Write-StartupLog $line
+        }
+    }
+    if ($statusExitCode -ne 0) {
+        throw "Linux stack status failed with exit code $statusExitCode."
     }
     Write-StartupLog 'WSL Linux server stack is ready.'
 } catch {

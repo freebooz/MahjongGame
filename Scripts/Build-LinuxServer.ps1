@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$EngineRoot = 'F:\UnrealEngine-5.8.0-release',
+    [string]$EngineRoot = 'D:\UnrealEngine-5.8.0-release',
     [string]$ProjectPath = '',
     [ValidateSet('Development', 'Shipping')]
     [string]$Configuration = 'Development',
@@ -170,6 +170,25 @@ $manifest = [ordered]@{
 $manifest | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $artifact 'build-manifest.json') -Encoding utf8
 
 $serverReceipt = Join-Path $root "Binaries\Linux\GuiyangMahjongServer-Linux-$Configuration.target"
+if (!(Test-Path -LiteralPath $serverReceipt)) {
+    $serverReceipt = Get-ChildItem -LiteralPath (Join-Path $root 'Binaries\Linux') `
+        -Filter 'GuiyangMahjongServer*.target' -File -ErrorAction SilentlyContinue |
+        Where-Object {
+            try {
+                $candidateReceipt = Get-Content -LiteralPath $_.FullName -Raw | ConvertFrom-Json
+                $candidateReceipt.Platform -eq 'Linux' -and
+                    $candidateReceipt.Configuration -eq $Configuration -and
+                    $candidateReceipt.TargetType -eq 'Server'
+            } catch {
+                $false
+            }
+        } |
+        Sort-Object LastWriteTime -Descending |
+        Select-Object -First 1 -ExpandProperty FullName
+}
+if ([string]::IsNullOrWhiteSpace($serverReceipt)) {
+    throw "No Linux $Configuration server receipt was produced below Binaries\Linux"
+}
 & (Join-Path $PSScriptRoot 'Test-PackageIsolation.ps1') -Root $root -Role Server `
     -ServerReceipt $serverReceipt
 

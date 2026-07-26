@@ -11,6 +11,7 @@ public sealed class InMemoryLobbyStore : ILobbyStore
     private readonly ConcurrentDictionary<string, string> codeById = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, string> matchResults = new(StringComparer.Ordinal);
     private readonly Dictionary<string, string> activeRoomByPlayer = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, DateTimeOffset> activePlayerObservedAtUtc = new(StringComparer.Ordinal);
     private readonly object mutationGate = new();
 
     public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
@@ -83,6 +84,82 @@ public sealed class InMemoryLobbyStore : ILobbyStore
         return Task.FromResult(rooms);
     }
 
+    public Task<LobbyRoom?> ReconcileWaitingRoomMembersAsync(
+        string roomCode,
+        string prospectivePlayerId,
+        DateTimeOffset staleBeforeUtc,
+        DateTimeOffset observedAtUtc,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        lock (mutationGate)
+        {
+            if (!roomsByCode.TryGetValue(roomCode, out var room)
+                || room.Lifecycle is not RoomLifecycle.Allocating and not RoomLifecycle.Waiting)
+            {
+                return Task.FromResult(room);
+            }
+
+            var retained = room.PlayerIds.Where(playerId =>
+                activeRoomByPlayer.TryGetValue(playerId, out var activeRoomId)
+                && activeRoomId == room.RoomId
+                && activePlayerObservedAtUtc.TryGetValue(playerId, out var lastObservedAtUtc)
+                && lastObservedAtUtc >= staleBeforeUtc).ToArray();
+            if (retained.Length == room.PlayerIds.Length) return Task.FromResult<LobbyRoom?>(room);
+
+            foreach (var stalePlayerId in room.PlayerIds.Except(retained, StringComparer.Ordinal))
+            {
+                activeRoomByPlayer.Remove(stalePlayerId);
+                activePlayerObservedAtUtc.Remove(stalePlayerId);
+            }
+
+            if (retained.Length == 0)
+            {
+                if (activeRoomByPlayer.TryGetValue(prospectivePlayerId, out var conflictingRoomId)
+                    && conflictingRoomId != room.RoomId)
+                {
+                    return Task.FromResult<LobbyRoom?>(room);
+                }
+                retained = [prospectivePlayerId];
+                activeRoomByPlayer[prospectivePlayerId] = room.RoomId;
+                activePlayerObservedAtUtc[prospectivePlayerId] = observedAtUtc;
+            }
+
+            var updated = room with
+            {
+                OwnerPlayerId = retained.Contains(room.OwnerPlayerId, StringComparer.Ordinal)
+                    ? room.OwnerPlayerId
+                    : retained[0],
+                PlayerIds = retained,
+                StateSequence = room.StateSequence + 1,
+                UpdatedAtUtc = observedAtUtc
+            };
+            roomsByCode[roomCode] = updated;
+            return Task.FromResult<LobbyRoom?>(updated);
+        }
+    }
+
+    public Task RefreshConnectedPlayersAsync(
+        string roomId,
+        IReadOnlyCollection<string> connectedPlayerIds,
+        DateTimeOffset observedAtUtc,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        lock (mutationGate)
+        {
+            foreach (var playerId in connectedPlayerIds)
+            {
+                if (activeRoomByPlayer.TryGetValue(playerId, out var activeRoomId)
+                    && activeRoomId == roomId)
+                {
+                    activePlayerObservedAtUtc[playerId] = observedAtUtc;
+                }
+            }
+        }
+        return Task.CompletedTask;
+    }
+
     public Task<AddPlayerResult> TryAddPlayerAsync(
         string roomCode, string playerId, CancellationToken cancellationToken)
     {
@@ -121,6 +198,7 @@ public sealed class InMemoryLobbyStore : ILobbyStore
             };
             roomsByCode[roomCode] = updated;
             activeRoomByPlayer[playerId] = updated.RoomId;
+            activePlayerObservedAtUtc[playerId] = updated.UpdatedAtUtc;
             return Task.FromResult(new AddPlayerResult(AddPlayerStatus.Added, updated));
         }
     }
@@ -189,6 +267,7 @@ public sealed class InMemoryLobbyStore : ILobbyStore
                      .ToArray())
         {
             activeRoomByPlayer.Remove(playerId);
+            activePlayerObservedAtUtc.Remove(playerId);
         }
 
         if (!IsActive(room.Lifecycle))
@@ -199,6 +278,7 @@ public sealed class InMemoryLobbyStore : ILobbyStore
                          .ToArray())
             {
                 activeRoomByPlayer.Remove(playerId);
+                activePlayerObservedAtUtc.Remove(playerId);
             }
             return;
         }
@@ -206,6 +286,7 @@ public sealed class InMemoryLobbyStore : ILobbyStore
         foreach (var playerId in room.PlayerIds)
         {
             activeRoomByPlayer[playerId] = room.RoomId;
+            activePlayerObservedAtUtc.TryAdd(playerId, room.UpdatedAtUtc);
         }
     }
 

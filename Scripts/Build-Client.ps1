@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$EngineRoot = 'F:\UnrealEngine-5.8.0-release',
+    [string]$EngineRoot = 'D:\UnrealEngine-5.8.0-release',
     [ValidateSet('Win64', 'Android')]
     [string]$Platform = 'Win64',
     [ValidateSet('Development', 'Shipping')]

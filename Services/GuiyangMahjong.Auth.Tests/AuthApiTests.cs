@@ -3,6 +3,7 @@ extern alias lobby;
 using System.Net;
 using System.Net.Http.Json;
 using GuiyangMahjong.Auth.Domain;
+using GuiyangMahjong.Auth.Services;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
@@ -67,6 +68,24 @@ public sealed class AuthApiTests(AuthWebApplicationFactory factory)
         var first = await LoginAsync(client, "test-installation-stable-01");
         var second = await LoginAsync(client, "test-installation-stable-01");
         Assert.Equal(first.PlayerId, second.PlayerId);
+    }
+
+    [Fact]
+    public async Task GuestLogin_WithoutName_ReturnsStableLocalPlayerName()
+    {
+        using var client = factory.CreateClient();
+        var first = await LoginAsync(client, "test-installation-local-name-01");
+        var second = await LoginAsync(client, "test-installation-local-name-01");
+
+        Assert.Equal(first.DisplayName, second.DisplayName);
+        Assert.Matches(
+            "^(甲秀楼|黔灵山|南明河|青岩|花溪|筑城|云岩|观山湖|苗岭|黔中)"
+            + "(热心|豪爽|机灵|沉稳|从容|欢喜|自在|灵巧|爽朗|好运)"
+            + "(雀友|牌友|小雀神|捉鸡客|听牌侠|杠上花|满堂彩|好牌手|守庄人|摸牌客)$",
+            first.DisplayName);
+        Assert.DoesNotMatch("[0-9]", first.DisplayName);
+        Assert.InRange(first.DisplayName.Length, 2, 24);
+        Assert.Equal(1_000, LocalPlayerNameGenerator.CandidateCount);
     }
 
     [Fact]

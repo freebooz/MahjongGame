@@ -39,6 +39,17 @@ public interface ILobbyStore
     Task<LobbyRoom?> GetRoomByIdAsync(string roomId, CancellationToken cancellationToken);
     Task<LobbyRoom?> GetActiveRoomByPlayerAsync(string playerId, CancellationToken cancellationToken);
     Task<IReadOnlyList<LobbyRoom>> ListPublicRoomsAsync(CancellationToken cancellationToken);
+    Task<LobbyRoom?> ReconcileWaitingRoomMembersAsync(
+        string roomCode,
+        string prospectivePlayerId,
+        DateTimeOffset staleBeforeUtc,
+        DateTimeOffset observedAtUtc,
+        CancellationToken cancellationToken);
+    Task RefreshConnectedPlayersAsync(
+        string roomId,
+        IReadOnlyCollection<string> connectedPlayerIds,
+        DateTimeOffset observedAtUtc,
+        CancellationToken cancellationToken);
     Task<AddPlayerResult> TryAddPlayerAsync(
         string roomCode, string playerId, CancellationToken cancellationToken);
     Task<bool> UpdateRoomAsync(LobbyRoom room, CancellationToken cancellationToken);

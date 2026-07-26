@@ -150,6 +150,126 @@ public sealed class RedisPostgresLobbyStore : ILobbyStore
         return result;
     }
 
+    public async Task<LobbyRoom?> ReconcileWaitingRoomMembersAsync(
+        string roomCode,
+        string prospectivePlayerId,
+        DateTimeOffset staleBeforeUtc,
+        DateTimeOffset observedAtUtc,
+        CancellationToken cancellationToken)
+    {
+        await using var connection = await postgres.OpenConnectionAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        await using var select = new NpgsqlCommand(
+            "SELECT payload::text FROM lobby_rooms WHERE room_code=$1 FOR UPDATE",
+            connection,
+            transaction);
+        select.Parameters.AddWithValue(roomCode);
+        var payload = await select.ExecuteScalarAsync(cancellationToken) as string;
+        if (payload is null)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return null;
+        }
+
+        var room = JsonSerializer.Deserialize<LobbyRoom>(payload, JsonOptions)
+            ?? throw new InvalidDataException("Stored lobby room payload could not be parsed.");
+        if (room.Lifecycle is not RoomLifecycle.Allocating and not RoomLifecycle.Waiting)
+        {
+            await transaction.CommitAsync(cancellationToken);
+            return room;
+        }
+
+        var retained = new List<string>();
+        await using (var active = new NpgsqlCommand(
+                         """
+                         SELECT player_id FROM active_player_rooms
+                         WHERE room_id=$1 AND updated_at_utc >= $2
+                         """,
+                         connection,
+                         transaction))
+        {
+            active.Parameters.AddWithValue(room.RoomId);
+            active.Parameters.AddWithValue(staleBeforeUtc);
+            await using var reader = await active.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                var playerId = reader.GetString(0);
+                if (room.PlayerIds.Contains(playerId, StringComparer.Ordinal)) retained.Add(playerId);
+            }
+        }
+
+        var retainedPlayerIds = room.PlayerIds
+            .Where(playerId => retained.Contains(playerId, StringComparer.Ordinal))
+            .ToArray();
+        if (retainedPlayerIds.Length == room.PlayerIds.Length)
+        {
+            await transaction.CommitAsync(cancellationToken);
+            return room;
+        }
+
+        await using (var deleteStale = new NpgsqlCommand(
+                         "DELETE FROM active_player_rooms WHERE room_id=$1 AND updated_at_utc < $2",
+                         connection,
+                         transaction))
+        {
+            deleteStale.Parameters.AddWithValue(room.RoomId);
+            deleteStale.Parameters.AddWithValue(staleBeforeUtc);
+            await deleteStale.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        if (retainedPlayerIds.Length == 0)
+        {
+            var activeRoomId = await GetActiveRoomIdAsync(
+                connection, transaction, prospectivePlayerId, cancellationToken);
+            if (activeRoomId is not null && activeRoomId != room.RoomId)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                return room;
+            }
+            retainedPlayerIds = [prospectivePlayerId];
+        }
+
+        var updated = room with
+        {
+            OwnerPlayerId = retainedPlayerIds.Contains(room.OwnerPlayerId, StringComparer.Ordinal)
+                ? room.OwnerPlayerId
+                : retainedPlayerIds[0],
+            PlayerIds = retainedPlayerIds,
+            StateSequence = room.StateSequence + 1,
+            UpdatedAtUtc = observedAtUtc
+        };
+        if (!await ReserveActivePlayerAsync(
+                connection, transaction, updated, retainedPlayerIds[0], cancellationToken)
+            || !await UpdateInTransactionAsync(
+                connection, transaction, updated, room.StateSequence, cancellationToken))
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return room;
+        }
+
+        await transaction.CommitAsync(cancellationToken);
+        await CacheRoomAsync(updated);
+        return updated;
+    }
+
+    public async Task RefreshConnectedPlayersAsync(
+        string roomId,
+        IReadOnlyCollection<string> connectedPlayerIds,
+        DateTimeOffset observedAtUtc,
+        CancellationToken cancellationToken)
+    {
+        if (connectedPlayerIds.Count == 0) return;
+        await using var command = postgres.CreateCommand(
+            """
+            UPDATE active_player_rooms SET updated_at_utc=$1
+            WHERE room_id=$2 AND player_id = ANY($3)
+            """);
+        command.Parameters.AddWithValue(observedAtUtc);
+        command.Parameters.AddWithValue(roomId);
+        command.Parameters.AddWithValue(connectedPlayerIds.ToArray());
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
     public async Task<AddPlayerResult> TryAddPlayerAsync(
         string roomCode, string playerId, CancellationToken cancellationToken)
     {

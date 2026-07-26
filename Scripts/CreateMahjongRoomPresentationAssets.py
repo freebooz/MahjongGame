@@ -12,7 +12,7 @@ MAP_PATH = "/Game/Maps/MahjongRoomVisualPreviewMap"
 NATIVE_CLASS_PATH = "/Script/GuiyangMahjongClient.MahjongRoomPresentationActor"
 TABLE_CLASS_PATH = "/Script/GuiyangMahjongClient.Mahjong3DTableActor"
 SCHEMA_METADATA_TAG = "MahjongPresentationSchemaVersion"
-SCHEMA_VERSION = "2"
+SCHEMA_VERSION = "5"
 TABLE_MESH_PATH = (
     "/Game/Art/Mahjong/Table/Meshes/"
     "SM_StandardMahjongTable.SM_StandardMahjongTable"
@@ -68,6 +68,32 @@ def configure_new_component(component, properties):
         component.set_editor_property(property_name, value)
 
 
+def configure_tabletop_post_process(camera):
+    settings = camera.get_editor_property("post_process_settings")
+    settings.set_editor_property("override_auto_exposure_method", True)
+    settings.set_editor_property(
+        "auto_exposure_method", unreal.AutoExposureMethod.AEM_HISTOGRAM
+    )
+    settings.set_editor_property(
+        "override_auto_exposure_apply_physical_camera_exposure", True
+    )
+    settings.set_editor_property(
+        "auto_exposure_apply_physical_camera_exposure", False
+    )
+    settings.set_editor_property("override_auto_exposure_bias", True)
+    settings.set_editor_property("auto_exposure_bias", -1.0)
+    settings.set_editor_property("override_bloom_intensity", True)
+    settings.set_editor_property("bloom_intensity", 0.0)
+    settings.set_editor_property("override_lens_flare_intensity", True)
+    settings.set_editor_property("lens_flare_intensity", 0.0)
+    settings.set_editor_property("override_motion_blur_amount", True)
+    settings.set_editor_property("motion_blur_amount", 0.0)
+    settings.set_editor_property("override_sharpen", True)
+    settings.set_editor_property("sharpen", 0.75)
+    camera.set_editor_property("post_process_settings", settings)
+    camera.set_editor_property("post_process_blend_weight", 1.0)
+
+
 asset_tools = unreal.AssetToolsHelpers.get_asset_tools()
 parent_class = unreal.load_class(None, NATIVE_CLASS_PATH)
 if not parent_class:
@@ -108,11 +134,17 @@ _, table_component, table_created = add_component(
     unreal.StaticMeshComponent,
     "MahjongTableMesh",
 )
+configure_new_component(
+    table_component,
+    {
+        # Repair required references on every run without replacing artist transforms.
+        "static_mesh": table_mesh,
+    },
+)
 if table_created:
     configure_new_component(
         table_component,
         {
-            "static_mesh": table_mesh,
             "relative_location": unreal.Vector(0.0, 0.0, 0.0),
             "relative_scale3d": unreal.Vector(10.0, 10.0, 10.0),
             "cast_shadow": True,
@@ -130,11 +162,16 @@ _, layout_component, layout_created = add_component(
     unreal.ChildActorComponent,
     "MahjongTileLayout",
 )
+configure_new_component(
+    layout_component,
+    {
+        "child_actor_class": table_class,
+    },
+)
 if layout_created:
     configure_new_component(
         layout_component,
         {
-            "child_actor_class": table_class,
             "relative_location": unreal.Vector(0.0, 0.0, 0.0),
             "relative_rotation": unreal.Rotator(0.0, 0.0, 0.0),
             "relative_scale3d": unreal.Vector(1.0, 1.0, 1.0),
@@ -152,12 +189,14 @@ if camera_created:
     configure_new_component(
         camera_component,
         {
-            "relative_location": unreal.Vector(0.0, -950.0, 1320.0),
-            "relative_rotation": unreal.Rotator(0.0, -54.25, 90.0),
-            "current_focal_length": 45.0,
+            "relative_location": unreal.Vector(0.0, -2350.0, 1392.0),
+            "relative_rotation": unreal.Rotator(0.0, -30.0, 90.0),
+            "current_focal_length": 30.0,
+            "current_aperture": 16.0,
             "constrain_aspect_ratio": False,
         },
     )
+    configure_tabletop_post_process(camera_component)
 
 _, directional, directional_created = add_component(
     subsystem,
@@ -171,9 +210,10 @@ if directional_created:
         directional,
         {
             "relative_rotation": unreal.Rotator(-105.0, -31.0, -14.0),
-            "intensity": 10.0,
-            "light_color": unreal.Color(r=255, g=246, b=230, a=255),
-            "cast_shadows": False,
+            "visible": False,
+            "intensity": 0.0,
+            "light_color": unreal.Color(r=255, g=250, b=242, a=255),
+            "cast_shadows": True,
             "mobility": unreal.ComponentMobility.MOVABLE,
         },
     )
@@ -189,7 +229,7 @@ if sky_created:
     configure_new_component(
         sky,
         {
-            "intensity": 0.25,
+            "intensity": 0.15,
             "light_color": unreal.Color(r=199, g=219, b=255, a=255),
             "cast_shadows": False,
             "mobility": unreal.ComponentMobility.MOVABLE,
@@ -210,12 +250,12 @@ if key_created:
             "relative_location": unreal.Vector(0.0, 0.0, 1200.0),
             "relative_rotation": unreal.Rotator(0.0, -90.0, 0.0),
             "intensity_units": unreal.LightUnits.LUMENS,
-            "intensity": 600.0,
+            "intensity": 400.0,
             "attenuation_radius": 3000.0,
             "inner_cone_angle": 40.0,
             "outer_cone_angle": 65.0,
-            "light_color": unreal.Color(r=255, g=245, b=224, a=255),
-            "cast_shadows": False,
+            "light_color": unreal.Color(r=255, g=248, b=238, a=255),
+            "cast_shadows": True,
             "mobility": unreal.ComponentMobility.MOVABLE,
         },
     )
@@ -231,14 +271,14 @@ if fill_created:
     configure_new_component(
         fill,
         {
-            "relative_location": unreal.Vector(0.0, -650.0, 720.0),
-            "relative_rotation": unreal.Rotator(0.0, -48.0, 90.0),
+            "relative_location": unreal.Vector(0.0, -1450.0, 520.0),
+            "relative_rotation": unreal.Rotator(0.0, -26.6, 90.0),
             "intensity_units": unreal.LightUnits.LUMENS,
-            "intensity": 200.0,
-            "attenuation_radius": 2200.0,
-            "inner_cone_angle": 45.0,
-            "outer_cone_angle": 75.0,
-            "light_color": unreal.Color(r=209, g=230, b=255, a=255),
+            "intensity": 300.0,
+            "attenuation_radius": 1800.0,
+            "inner_cone_angle": 50.0,
+            "outer_cone_angle": 70.0,
+            "light_color": unreal.Color(r=230, g=240, b=255, a=255),
             "cast_shadows": False,
             "mobility": unreal.ComponentMobility.MOVABLE,
         },
@@ -251,17 +291,29 @@ if (
     != SCHEMA_VERSION
 ):
     configure_new_component(
+        camera_component,
+        {
+            "relative_location": unreal.Vector(0.0, -2350.0, 1392.0),
+            "relative_rotation": unreal.Rotator(0.0, -30.0, 90.0),
+            "current_focal_length": 30.0,
+            "current_aperture": 16.0,
+            "constrain_aspect_ratio": False,
+        },
+    )
+    configure_tabletop_post_process(camera_component)
+    configure_new_component(
         directional,
         {
-            "intensity": 10.0,
-            "light_color": unreal.Color(r=255, g=246, b=230, a=255),
-            "cast_shadows": False,
+            "visible": False,
+            "intensity": 0.0,
+            "light_color": unreal.Color(r=255, g=250, b=242, a=255),
+            "cast_shadows": True,
         },
     )
     configure_new_component(
         sky,
         {
-            "intensity": 0.25,
+            "intensity": 0.15,
             "light_color": unreal.Color(r=199, g=219, b=255, a=255),
             "cast_shadows": False,
         },
@@ -269,22 +321,37 @@ if (
     configure_new_component(
         key,
         {
-            "intensity": 600.0,
-            "light_color": unreal.Color(r=255, g=245, b=224, a=255),
-            "cast_shadows": False,
+            "intensity": 400.0,
+            "light_color": unreal.Color(r=255, g=248, b=238, a=255),
+            "cast_shadows": True,
         },
     )
     configure_new_component(
         fill,
         {
-            "intensity": 200.0,
-            "light_color": unreal.Color(r=209, g=230, b=255, a=255),
+            "relative_location": unreal.Vector(0.0, -1450.0, 520.0),
+            "relative_rotation": unreal.Rotator(0.0, -26.6, 90.0),
+            "intensity": 300.0,
+            "attenuation_radius": 1800.0,
+            "inner_cone_angle": 50.0,
+            "outer_cone_angle": 70.0,
+            "light_color": unreal.Color(r=230, g=240, b=255, a=255),
             "cast_shadows": False,
         },
     )
     unreal.EditorAssetLibrary.set_metadata_tag(
         blueprint, SCHEMA_METADATA_TAG, SCHEMA_VERSION
     )
+
+# Mobile gameplay needs the whole tabletop and near hand sharp at once.
+focus_settings = camera_component.get_editor_property("focus_settings")
+focus_settings.set_editor_property(
+    "focus_method", unreal.CameraFocusMethod.DISABLE
+)
+camera_component.set_editor_property("focus_settings", focus_settings)
+filmback = camera_component.get_editor_property("filmback")
+filmback.set_editor_property("sensor_vertical_offset", -2.0)
+camera_component.set_editor_property("filmback", filmback)
 
 unreal.BlueprintEditorLibrary.compile_blueprint(blueprint)
 unreal.EditorAssetLibrary.save_loaded_asset(blueprint, only_if_is_dirty=False)

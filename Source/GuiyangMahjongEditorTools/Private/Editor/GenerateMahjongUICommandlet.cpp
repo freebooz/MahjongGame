@@ -784,16 +784,21 @@ int32 UGenerateMahjongUICommandlet::Main(const FString& Params)
         Place(C, Vertical(HUD, TEXT("Panel_LeftMelds")), {275,600}, {260,150});
         Place(C, Vertical(HUD, TEXT("Panel_RightMelds")), {1385,600}, {260,150});
         // 玩家头像贴近四边，信息放在头像相邻区域，形成清晰的四人座次关系。
-        auto AddSeatAvatar = [HUD, C](const FName Name, const FVector2D Position)
+        auto AddSeatAvatar = [HUD, C](const FName Name, const FVector2D Position,
+            const TCHAR* TexturePath)
         {
             UImage* Avatar = Image(HUD, Name, FLinearColor::White);
-            Avatar->SetBrush(TextureBrush(TEXT("/Game/UI/Textures/Avatars/T_Seat_Ready.T_Seat_Ready")));
+            Avatar->SetBrush(TextureBrush(TexturePath));
             Place(C, Avatar, Position, {88,88});
         };
-        AddSeatAvatar(TEXT("Img_Seat_Self"), {40,790});
-        AddSeatAvatar(TEXT("Img_Seat_Top"), {1495,105});
-        AddSeatAvatar(TEXT("Img_Seat_Left"), {30,190});
-        AddSeatAvatar(TEXT("Img_Seat_Right"), {1795,190});
+        AddSeatAvatar(TEXT("Img_Seat_Self"), {40,790},
+            TEXT("/Game/UI/Textures/Avatars/T_PlayerAvatar_Placeholder_A.T_PlayerAvatar_Placeholder_A"));
+        AddSeatAvatar(TEXT("Img_Seat_Top"), {1495,105},
+            TEXT("/Game/UI/Textures/Avatars/T_PlayerAvatar_Placeholder_A.T_PlayerAvatar_Placeholder_A"));
+        AddSeatAvatar(TEXT("Img_Seat_Left"), {30,190},
+            TEXT("/Game/UI/Textures/Avatars/T_PlayerAvatar_Placeholder_B.T_PlayerAvatar_Placeholder_B"));
+        AddSeatAvatar(TEXT("Img_Seat_Right"), {1795,190},
+            TEXT("/Game/UI/Textures/Avatars/T_PlayerAvatar_Placeholder_B.T_PlayerAvatar_Placeholder_B"));
         Place(C, Text(HUD, TEXT("Seat_Self"), TEXT("我\n13张\n0分"), 20), {138,795}, {190,96});
         Place(C, Text(HUD, TEXT("Seat_Top"), TEXT("玩家\n13张\n0分"), 20), {1595,110}, {260,96});
         Place(C, Text(HUD, TEXT("Seat_Left"), TEXT("玩家\n13张\n0分"), 20), {30,285}, {180,96});
