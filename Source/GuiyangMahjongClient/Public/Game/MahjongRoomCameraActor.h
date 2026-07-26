@@ -21,7 +21,6 @@ public:
     /** 供表现层查找摄像机组件的稳定标签。 */
     static const FName RoomCameraTag;
 
-protected:
     /** 锁定曝光和后处理，避免运行时自动曝光造成闪烁或过曝。 */
     void ConfigureStablePostProcess();
 };

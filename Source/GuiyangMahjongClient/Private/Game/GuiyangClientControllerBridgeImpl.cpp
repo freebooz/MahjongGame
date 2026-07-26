@@ -324,6 +324,12 @@ void UGuiyangClientControllerBridgeImpl::ApplyRoomPresentationViewTarget()
         UE_LOG(LogMahjongUI, Warning,
             TEXT("Applied native fallback room camera because editor camera is unavailable"));
     }
+    if (RuntimeCamera)
+    {
+        // The editor-authored camera controls composition, but gameplay readability must remain
+        // deterministic after its post-process and focus settings have been copied.
+        RoomCameraActor->ConfigureStablePostProcess();
+    }
 
     // Automatic camera management is disabled by the PlayerController constructor. ClientRestart,
     // spectator creation, and replicated Pawn changes therefore cannot replace this target later.

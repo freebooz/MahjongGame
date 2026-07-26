@@ -44,7 +44,10 @@ void AMahjongRoomCameraActor::ConfigureStablePostProcess()
     Settings.LensFlareIntensity = 0.0f;
     Settings.bOverride_MotionBlurAmount = true;
     Settings.MotionBlurAmount = 0.0f;
+    Settings.bOverride_DepthOfFieldEnabled = true;
+    Settings.DepthOfFieldEnabled = false;
     Settings.bOverride_Sharpen = true;
     Settings.Sharpen = 0.5f;
+    Camera->FocusSettings.FocusMethod = ECameraFocusMethod::Disable;
     Camera->PostProcessBlendWeight = 1.0f;
 }

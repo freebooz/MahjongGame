@@ -31,6 +31,8 @@ public:
     void SetSelectedTile(int32 UniqueId);
     /** 将服务端绝对牌墙方位转换为当前客户端以自己为南方的相对方位。 */
     static int32 GetRelativeWallSide(int32 AbsoluteWallSide, int32 LocalSeat);
+    /** Applies the Mahjong50 face-axis correction for upright and flat presentation. */
+    static FRotator ResolveTileMeshRotation(const FRotator& Rotation, bool bFaceUp, bool bUpright);
 
 private:
     /** 首次进入世界时加载桌面、牌体和牌面表现资源。 */

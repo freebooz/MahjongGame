@@ -1380,7 +1380,31 @@ bool FMahjongThreeDTableLayoutTest::RunTest(const FString& Parameters)
             CameraDefault->GetCineCameraComponent()->CurrentFocalLength, 45.0f);
         TestFalse(TEXT("移动横屏摄像机不得强制黑边宽高比"),
             CameraDefault->GetCineCameraComponent()->bConstrainAspectRatio);
+        const UCineCameraComponent* CameraComponent = CameraDefault->GetCineCameraComponent();
+        const FPostProcessSettings& PostProcess = CameraComponent->PostProcessSettings;
+        TestTrue(TEXT("Room camera must override motion blur"), PostProcess.bOverride_MotionBlurAmount);
+        TestEqual(TEXT("Room camera motion blur must be disabled"), PostProcess.MotionBlurAmount, 0.0f);
+        TestTrue(TEXT("Room camera must override depth of field"), PostProcess.bOverride_DepthOfFieldEnabled);
+        TestFalse(TEXT("Room camera depth of field must be disabled"), PostProcess.DepthOfFieldEnabled);
+        TestTrue(TEXT("Room camera must override sharpening"), PostProcess.bOverride_Sharpen);
+        TestEqual(TEXT("Room camera sharpening must remain readable"), PostProcess.Sharpen, 0.5f);
+        TestEqual(TEXT("Room camera focus must not blur Mahjong faces"),
+            CameraComponent->FocusSettings.FocusMethod, ECameraFocusMethod::Disable);
     }
+
+    const FRotator UprightRotation =
+        AMahjong3DTableActor::ResolveTileMeshRotation(FRotator::ZeroRotator, true, true);
+    const FVector UprightFaceNormal = UprightRotation.RotateVector(FVector::YAxisVector);
+    TestTrue(TEXT("Local upright Mahjong50 face must point toward the south-side camera"),
+        UprightFaceNormal.Y < -0.99f);
+    const FRotator FlatFaceUpRotation =
+        AMahjong3DTableActor::ResolveTileMeshRotation(FRotator::ZeroRotator, true, false);
+    TestTrue(TEXT("Flat face-up Mahjong50 tile must point upward"),
+        FlatFaceUpRotation.RotateVector(FVector::YAxisVector).Z > 0.99f);
+    const FRotator FlatFaceDownRotation =
+        AMahjong3DTableActor::ResolveTileMeshRotation(FRotator::ZeroRotator, false, false);
+    TestTrue(TEXT("Flat face-down Mahjong50 tile must point downward"),
+        FlatFaceDownRotation.RotateVector(FVector::YAxisVector).Z < -0.99f);
 
     UWorld* SharedRoomWorld = LoadObject<UWorld>(nullptr,
         TEXT("/Game/Maps/MahjongRoomMap.MahjongRoomMap"));

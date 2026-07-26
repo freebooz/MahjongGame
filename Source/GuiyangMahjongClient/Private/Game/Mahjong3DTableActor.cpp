@@ -113,6 +113,24 @@ void AMahjong3DTableActor::SetSelectedTile(const int32 UniqueId)
     RebuildLayout();
 }
 
+FRotator AMahjong3DTableActor::ResolveTileMeshRotation(
+    const FRotator& Rotation, const bool bFaceUp, const bool bUpright)
+{
+    FRotator MeshRotation = Rotation;
+    if (bUpright)
+    {
+        // Mahjong50's atlas face points along local +Y. Upright tiles are arranged from the
+        // table center outwards, so rotate the face towards the owning player (local -Y).
+        MeshRotation.Yaw += 180.0f;
+    }
+    else
+    {
+        // A positive roll turns the local +Y atlas face towards world +Z.
+        MeshRotation.Roll += bFaceUp ? 90.0f : -90.0f;
+    }
+    return MeshRotation;
+}
+
 void AMahjong3DTableActor::RebuildLayout()
 {
     ClearRuntimeComponents();
@@ -171,14 +189,8 @@ void AMahjong3DTableActor::AddTile(const FMahjongTile* Tile, const bool bFaceUp,
         Component->SetCollisionEnabled(ECollisionEnabled::NoCollision);
         // UViewport 中同时存在上百张动态牌时，逐牌动态投影会产生闪烁和过亮边缘。
         Component->SetCastShadow(false);
-        FRotator MeshRotation = Rotation;
-        if (!bUpright)
-        {
-            // Mahjong50's imported face normal points opposite to the legacy mesh: +90 exposes
-            // the atlas face, while -90 exposes the green back.
-            MeshRotation.Roll += bFaceUp ? 90.0f : -90.0f;
-        }
-        else
+        const FRotator MeshRotation = ResolveTileMeshRotation(Rotation, bFaceUp, bUpright);
+        if (bUpright)
         {
             // Blender 模型枢轴在底部中心；现有布局坐标以牌体中心为准。
             TileLocation.Z -= TileHeight * 0.5f;
