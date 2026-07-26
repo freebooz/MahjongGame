@@ -1515,6 +1515,16 @@ bool FMahjongThreeDTableLayoutTest::RunTest(const FString& Parameters)
                     EComponentCreationMethod::SimpleConstructionScript);
                 TestTrue(TEXT("麻将桌模型组件必须配置静态网格"),
                     TableMeshComponent->GetStaticMesh() != nullptr);
+                if (TableMeshComponent->GetStaticMesh())
+                {
+                    const FVector TableSize =
+                        TableMeshComponent->GetStaticMesh()->GetBounds().BoxExtent
+                        * 2.0f * TableMeshComponent->GetRelativeScale3D();
+                    TestTrue(TEXT("Mahjong tabletop width must be 300 cm"),
+                        FMath::IsNearlyEqual(TableSize.X, 300.0f, 0.5f));
+                    TestTrue(TEXT("Mahjong tabletop depth must be 300 cm"),
+                        FMath::IsNearlyEqual(TableSize.Y, 300.0f, 0.5f));
+                }
             }
             TArray<UChildActorComponent*> ChildActors;
             PresentationInstance->GetComponents<UChildActorComponent>(ChildActors);

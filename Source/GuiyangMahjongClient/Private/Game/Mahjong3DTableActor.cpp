@@ -8,13 +8,15 @@
 
 namespace
 {
-    constexpr float TileWidth = 44.0f;
-    constexpr float TileHeight = 62.0f;
-    constexpr float TileDepth = 30.0f;
+    // Unreal uses centimetres. These are real mahjong-tile dimensions for the
+    // 300 cm x 300 cm tabletop, rather than the legacy ten-times presentation scale.
+    constexpr float TileWidth = 4.4f;
+    constexpr float TileHeight = 6.2f;
+    constexpr float TileDepth = 3.0f;
     // The mesh has rounded/beveled side edges, so exact bounding-box contact still looks gapped.
     // A small overlap produces the tightly packed physical-table appearance requested.
-    constexpr float TileTightPitch = TileWidth - 2.0f;
-    constexpr float TileTightLongPitch = TileHeight - 2.0f;
+    constexpr float TileTightPitch = TileWidth - 0.2f;
+    constexpr float TileTightLongPitch = TileHeight - 0.2f;
     constexpr float Mahjong50ModelWidth = 3.6f;
 
     FVector RotateAroundTable(const FVector& Position, const int32 RelativeSeat)
@@ -84,6 +86,8 @@ void AMahjong3DTableActor::InitializePresentationAssets()
         TileMeshes[Index] = LoadObject<UStaticMesh>(nullptr, *AssetPath);
     }
     DefaultTileMesh = TileMeshes.IsValidIndex(0) ? TileMeshes[0] : nullptr;
+    BackTileMesh = LoadObject<UStaticMesh>(nullptr,
+        TEXT("/Game/Art/Mahjong/Mahjong50/Meshes/SM_Mahjong50.SM_Mahjong50"));
     BasicMaterial = LoadObject<UMaterialInterface>(nullptr,
         TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"));
 }
@@ -181,7 +185,7 @@ void AMahjong3DTableActor::AddTile(const FMahjongTile* Tile, const bool bFaceUp,
     const float ScaleMultiplier)
 {
     FVector TileLocation = Location;
-    if (bSelected) TileLocation.Z += 16.0f;
+    if (bSelected) TileLocation.Z += 1.6f;
     UStaticMesh* Mesh = ResolveTileMesh(Tile, bFaceUp);
     if (Mesh)
     {
@@ -189,7 +193,6 @@ void AMahjong3DTableActor::AddTile(const FMahjongTile* Tile, const bool bFaceUp,
         Component->SetStaticMesh(Mesh);
         Component->SetCollisionEnabled(ECollisionEnabled::NoCollision);
         // Avoid shimmer from hundreds of overlapping dynamic tile shadows.
-        Component->SetCastShadow(false);
         // UViewport 中同时存在上百张动态牌时，逐牌动态投影会产生闪烁和过亮边缘。
         Component->SetCastShadow(false);
         const FRotator MeshRotation = ResolveTileMeshRotation(Rotation, bFaceUp, bUpright);
@@ -200,7 +203,6 @@ void AMahjong3DTableActor::AddTile(const FMahjongTile* Tile, const bool bFaceUp,
             // opponent hand pointing outward while the local face remains readable.
             // The imported Blender mesh origin is at the bottom centre, whereas these
             // layout coordinates were authored around the legacy mesh centre.
-            TileLocation.Z -= TileHeight * 0.5f;
             // Blender 模型枢轴在底部中心；现有布局坐标以牌体中心为准。
             TileLocation.Z -= TileHeight * 0.5f;
         }
@@ -233,7 +235,8 @@ void AMahjong3DTableActor::AddTile(const FMahjongTile* Tile, const bool bFaceUp,
 
 UStaticMesh* AMahjong3DTableActor::ResolveTileMesh(const FMahjongTile* Tile, const bool bFaceUp) const
 {
-    if (!bFaceUp || !Tile || !Tile->IsValid()) return DefaultTileMesh;
+    if (!bFaceUp) return BackTileMesh ? BackTileMesh : DefaultTileMesh;
+    if (!Tile || !Tile->IsValid()) return DefaultTileMesh;
     const int32 RuleIndex = Tile->GetRuleIndex();
     return RuleIndex >= 0 && RuleIndex < 27 && TileMeshes.IsValidIndex(RuleIndex) && TileMeshes[RuleIndex]
         ? TileMeshes[RuleIndex]
@@ -249,7 +252,9 @@ void AMahjong3DTableActor::AddRemainingWall()
         // Remaining tiles are distributed in authoritative absolute wall order. Rotate only their
         // presentation so every client sees its own seat at the south edge of the same table.
         const int32 RelativeWallSide = GetRelativeWallSide(AbsoluteWallSide, CachedLocalSeat);
-        const int32 SideCount = FMath::Min(28, Remaining - Added);
+        // Keep all four double-layer walls visually balanced. With the 108-tile
+        // Guiyang set this produces 27 tiles per side instead of 28/28/28/24.
+        const int32 SideCount = Remaining / 4 + (AbsoluteWallSide < Remaining % 4 ? 1 : 0);
         const int32 ColumnCount = FMath::DivideAndRoundUp(SideCount, 2);
         const float StartX = -0.5f * (ColumnCount - 1) * TileTightPitch;
         for (int32 Index = 0; Index < SideCount; ++Index)
@@ -292,7 +297,7 @@ void AMahjong3DTableActor::AddHands()
         for (int32 Index = 0; Index < Count; ++Index)
         {
             const FVector Base(StartX + Index * TileTightPitch, -HandDistanceFromCenter,
-                TileHeight * 0.5f + 9.0f);
+                TileHeight * 0.5f + 0.9f);
             AddTile(nullptr, false, true, RotateAroundTable(Base, RelativeSeat),
                 RotateAroundTable(FRotator::ZeroRotator, RelativeSeat));
         }
@@ -318,7 +323,7 @@ void AMahjong3DTableActor::AddDiscards()
         const float DiscardStartX =
             -0.5f * static_cast<float>(SafeDiscardColumns - 1) * TileTightPitch;
         const FVector Base(DiscardStartX + Column * TileTightPitch,
-            -DiscardFirstRowDistanceFromCenter - Row * TileTightLongPitch, 14.0f);
+            -DiscardFirstRowDistanceFromCenter - Row * TileTightLongPitch, 1.4f);
         AddTile(&Record.Tile, true, false, RotateAroundTable(Base, RelativeSeat),
             RotateAroundTable(FRotator::ZeroRotator, RelativeSeat),
             Record.Sequence == CachedPublicState.Discards.Last().Sequence);
@@ -350,7 +355,7 @@ void AMahjong3DTableActor::AddMelds()
             // Keep them on a parallel inner row so they remain readable without overlapping the hand.
             const float StartX = -0.5f * (MeldTileCountBySeat[RelativeSeat] - 1) * TileTightPitch;
             const FVector Base(StartX + PackedIndex * TileTightPitch, -MeldDistanceFromCenter,
-                TileHeight * 0.5f + 9.0f);
+                TileHeight * 0.5f + 0.9f);
             AddTile(Tile.IsValid() ? &Tile : nullptr, Tile.IsValid(), true,
                 RotateAroundTable(Base, RelativeSeat), RotateAroundTable(FRotator::ZeroRotator, RelativeSeat));
         }

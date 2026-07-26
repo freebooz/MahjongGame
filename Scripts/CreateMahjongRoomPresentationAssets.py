@@ -146,7 +146,9 @@ if table_created:
         table_component,
         {
             "relative_location": unreal.Vector(0.0, 0.0, 0.0),
-            "relative_scale3d": unreal.Vector(10.0, 10.0, 10.0),
+            "relative_scale3d": unreal.Vector(
+                300.0 / 115.0, 300.0 / 115.0, 300.0 / 115.0
+            ),
             "cast_shadow": True,
             "mobility": unreal.ComponentMobility.MOVABLE,
         },
@@ -189,7 +191,7 @@ if camera_created:
     configure_new_component(
         camera_component,
         {
-            "relative_location": unreal.Vector(0.0, -2350.0, 1392.0),
+            "relative_location": unreal.Vector(0.0, -202.0, 120.0),
             "relative_rotation": unreal.Rotator(0.0, -30.0, 90.0),
             "current_focal_length": 30.0,
             "current_aperture": 16.0,
@@ -210,10 +212,10 @@ if directional_created:
         directional,
         {
             "relative_rotation": unreal.Rotator(-105.0, -31.0, -14.0),
-            "visible": False,
-            "intensity": 0.0,
+            "visible": True,
+            "intensity": 10.0,
             "light_color": unreal.Color(r=255, g=250, b=242, a=255),
-            "cast_shadows": True,
+            "cast_shadows": False,
             "mobility": unreal.ComponentMobility.MOVABLE,
         },
     )
@@ -247,15 +249,15 @@ if key_created:
     configure_new_component(
         key,
         {
-            "relative_location": unreal.Vector(0.0, 0.0, 1200.0),
+            "relative_location": unreal.Vector(0.0, 0.0, 120.0),
             "relative_rotation": unreal.Rotator(0.0, -90.0, 0.0),
             "intensity_units": unreal.LightUnits.LUMENS,
             "intensity": 400.0,
-            "attenuation_radius": 3000.0,
+            "attenuation_radius": 300.0,
             "inner_cone_angle": 40.0,
             "outer_cone_angle": 65.0,
             "light_color": unreal.Color(r=255, g=248, b=238, a=255),
-            "cast_shadows": True,
+            "cast_shadows": False,
             "mobility": unreal.ComponentMobility.MOVABLE,
         },
     )
@@ -271,11 +273,11 @@ if fill_created:
     configure_new_component(
         fill,
         {
-            "relative_location": unreal.Vector(0.0, -1450.0, 520.0),
+            "relative_location": unreal.Vector(0.0, -145.0, 52.0),
             "relative_rotation": unreal.Rotator(0.0, -26.6, 90.0),
             "intensity_units": unreal.LightUnits.LUMENS,
             "intensity": 300.0,
-            "attenuation_radius": 1800.0,
+            "attenuation_radius": 180.0,
             "inner_cone_angle": 50.0,
             "outer_cone_angle": 70.0,
             "light_color": unreal.Color(r=230, g=240, b=255, a=255),
@@ -293,7 +295,7 @@ if (
     configure_new_component(
         camera_component,
         {
-            "relative_location": unreal.Vector(0.0, -2350.0, 1392.0),
+            "relative_location": unreal.Vector(0.0, -202.0, 120.0),
             "relative_rotation": unreal.Rotator(0.0, -30.0, 90.0),
             "current_focal_length": 30.0,
             "current_aperture": 16.0,
@@ -304,10 +306,10 @@ if (
     configure_new_component(
         directional,
         {
-            "visible": False,
-            "intensity": 0.0,
+            "visible": True,
+            "intensity": 10.0,
             "light_color": unreal.Color(r=255, g=250, b=242, a=255),
-            "cast_shadows": True,
+            "cast_shadows": False,
         },
     )
     configure_new_component(
@@ -323,16 +325,16 @@ if (
         {
             "intensity": 400.0,
             "light_color": unreal.Color(r=255, g=248, b=238, a=255),
-            "cast_shadows": True,
+            "cast_shadows": False,
         },
     )
     configure_new_component(
         fill,
         {
-            "relative_location": unreal.Vector(0.0, -1450.0, 520.0),
+            "relative_location": unreal.Vector(0.0, -145.0, 52.0),
             "relative_rotation": unreal.Rotator(0.0, -26.6, 90.0),
             "intensity": 300.0,
-            "attenuation_radius": 1800.0,
+            "attenuation_radius": 180.0,
             "inner_cone_angle": 50.0,
             "outer_cone_angle": 70.0,
             "light_color": unreal.Color(r=230, g=240, b=255, a=255),

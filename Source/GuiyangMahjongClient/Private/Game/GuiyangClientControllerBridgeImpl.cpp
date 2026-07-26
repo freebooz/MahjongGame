@@ -358,11 +358,11 @@ void UGuiyangClientControllerBridgeImpl::ApplyRoomPresentationViewTarget()
     {
         // Native fallback is only used if the configured presentation asset is unavailable.
         const FVector TableCenter = RoomTableActor
-            ? RoomTableActor->GetActorLocation() + FVector(0.0f, 0.0f, 35.0f)
-            : FVector(0.0f, 0.0f, 35.0f);
+            ? RoomTableActor->GetActorLocation() + FVector(0.0f, 0.0f, 3.5f)
+            : FVector(0.0f, 0.0f, 3.5f);
         // The requested 60-degree tabletop-normal angle is a -30 degree UE pitch.
         // This keeps the near hand visible while retaining the reference image's table depth.
-        const FVector CameraLocation = TableCenter + FVector(0.0f, -2020.0f, 1165.0f);
+        const FVector CameraLocation = TableCenter + FVector(0.0f, -202.0f, 116.5f);
         const FRotator CameraRotation(-30.0f, 90.0f, 0.0f);
         RoomCameraActor->SetActorLocationAndRotation(CameraLocation, CameraRotation);
         RuntimeCamera->SetCurrentFocalLength(30.0f);

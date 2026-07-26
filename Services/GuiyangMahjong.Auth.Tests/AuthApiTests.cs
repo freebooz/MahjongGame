@@ -79,12 +79,12 @@ public sealed class AuthApiTests(AuthWebApplicationFactory factory)
 
         Assert.Equal(first.DisplayName, second.DisplayName);
         Assert.Matches(
-            "^(甲秀楼|黔灵山|南明河|青岩|花溪|筑城|云岩|观山湖|苗岭|黔中)"
-            + "(热心|豪爽|机灵|沉稳|从容|欢喜|自在|灵巧|爽朗|好运)"
-            + "(雀友|牌友|小雀神|捉鸡客|听牌侠|杠上花|满堂彩|好牌手|守庄人|摸牌客)$",
+            "^(甲秀|黔灵|南明|青岩|花溪|筑城|云岩|观山|苗岭|黔中)"
+            + "(乐|豪|灵|稳|闲|喜|巧|爽|福|旺)"
+            + "(雀友|牌友|雀神|鸡客|听侠|杠花|满堂|好手|庄家|摸客)$",
             first.DisplayName);
         Assert.DoesNotMatch("[0-9]", first.DisplayName);
-        Assert.InRange(first.DisplayName.Length, 2, 24);
+        Assert.InRange(first.DisplayName.Length, 2, 5);
         Assert.Equal(1_000, LocalPlayerNameGenerator.CandidateCount);
     }
 

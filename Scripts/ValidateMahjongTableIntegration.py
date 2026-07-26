@@ -27,6 +27,9 @@ EXPECTED_SLOTS = {
     "M_Table_Walnut_PBR",
     "M_Table_Felt_Green_PBR",
 }
+EXPECTED_ASSET_DIMENSIONS_CM = (115.0, 115.0, 6.5)
+EXPECTED_RUNTIME_SIZE_CM = 300.0
+EXPECTED_RUNTIME_SCALE = EXPECTED_RUNTIME_SIZE_CM / EXPECTED_ASSET_DIMENSIONS_CM[0]
 
 
 def material_slot_names(mesh) -> list[str]:
@@ -57,10 +60,11 @@ def main() -> None:
         raise RuntimeError(f"Missing tabletop mesh {MESH_PATH}")
     size = mesh.get_bounds().box_extent * 2.0
     dimensions = (float(size.x), float(size.y), float(size.z))
-    expected = (115.0, 115.0, 17.0)
     if any(
         abs(value - wanted) > 0.25
-        for value, wanted in zip(sorted(dimensions), sorted(expected))
+        for value, wanted in zip(
+            sorted(dimensions), sorted(EXPECTED_ASSET_DIMENSIONS_CM)
+        )
     ):
         raise RuntimeError(f"Unexpected tabletop dimensions: {dimensions}")
 
@@ -128,8 +132,21 @@ def main() -> None:
         raise RuntimeError(
             f"Runtime table component is not aligned to the Z=0 surface pivot: {table_location}"
         )
-    if any(abs(float(value) - 10.0) > 0.01 for value in (table_scale.x, table_scale.y, table_scale.z)):
+    if any(
+        abs(float(value) - EXPECTED_RUNTIME_SCALE) > 0.01
+        for value in (table_scale.x, table_scale.y, table_scale.z)
+    ):
         raise RuntimeError(f"Unexpected runtime table presentation scale: {table_scale}")
+    runtime_size = (
+        float(dimensions[0] * table_scale.x),
+        float(dimensions[1] * table_scale.y),
+        float(dimensions[2] * table_scale.z),
+    )
+    if any(
+        abs(value - EXPECTED_RUNTIME_SIZE_CM) > 0.5
+        for value in runtime_size[:2]
+    ):
+        raise RuntimeError(f"Runtime tabletop is not 300 cm square: {runtime_size}")
     if not runtime_mesh or runtime_mesh.get_path_name() != (
         f"{MESH_PATH}.SM_StandardMahjongTable"
     ):
@@ -154,6 +171,7 @@ def main() -> None:
             float(table_scale.y),
             float(table_scale.z),
         ],
+        "runtime_dimensions_cm": list(runtime_size),
         "runtime_mesh": runtime_mesh.get_path_name(),
     }
     REPORT_PATH.parent.mkdir(parents=True, exist_ok=True)

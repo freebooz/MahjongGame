@@ -7,23 +7,35 @@ public sealed class LocalPlayerNameGenerator
 {
     private static readonly string[] LocalFeatures =
     [
-        "甲秀楼", "黔灵山", "南明河", "青岩", "花溪",
-        "筑城", "云岩", "观山湖", "苗岭", "黔中"
+        "甲秀", "黔灵", "南明", "青岩", "花溪",
+        "筑城", "云岩", "观山", "苗岭", "黔中"
     ];
 
     private static readonly string[] Personalities =
     [
-        "热心", "豪爽", "机灵", "沉稳", "从容",
-        "欢喜", "自在", "灵巧", "爽朗", "好运"
+        "乐", "豪", "灵", "稳", "闲",
+        "喜", "巧", "爽", "福", "旺"
     ];
 
     private static readonly string[] MahjongTitles =
     [
-        "雀友", "牌友", "小雀神", "捉鸡客", "听牌侠",
-        "杠上花", "满堂彩", "好牌手", "守庄人", "摸牌客"
+        "雀友", "牌友", "雀神", "鸡客", "听侠",
+        "杠花", "满堂", "好手", "庄家", "摸客"
     ];
 
     public const int CandidateCount = 1_000;
+
+    static LocalPlayerNameGenerator()
+    {
+        if (LocalFeatures.Length * Personalities.Length * MahjongTitles.Length != CandidateCount
+            || LocalFeatures.Any(value => value.Length != 2)
+            || Personalities.Any(value => value.Length != 1)
+            || MahjongTitles.Any(value => value.Length != 2))
+        {
+            throw new InvalidOperationException(
+                "The local player-name dictionary must contain 1,000 five-character names.");
+        }
+    }
 
     public string Generate()
     {

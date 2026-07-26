@@ -44,24 +44,25 @@ private:
     /** 桌面辅助网格、默认牌体、34 种牌面网格及基础材质。 */
     UPROPERTY(Transient) TObjectPtr<UStaticMesh> CubeMesh;
     UPROPERTY(Transient) TObjectPtr<UStaticMesh> DefaultTileMesh;
+    UPROPERTY(Transient) TObjectPtr<UStaticMesh> BackTileMesh;
     UPROPERTY(Transient) TArray<TObjectPtr<UStaticMesh>> TileMeshes;
     UPROPERTY(Transient) TObjectPtr<UMaterialInterface> BasicMaterial;
     /** 可在房间展示蓝图的 Child Actor 模板中人工调整的桌面布局距离。 */
-    UPROPERTY(EditAnywhere, Category="Mahjong|Layout", meta=(ClampMin="250.0", ClampMax="480.0"))
-    float WallDistanceFromCenter = 375.0f;
-    UPROPERTY(EditAnywhere, Category="Mahjong|Layout", meta=(ClampMin="300.0", ClampMax="500.0"))
-    float HandDistanceFromCenter = 455.0f;
+    UPROPERTY(EditAnywhere, Category="Mahjong|Layout", meta=(ClampMin="45.0", ClampMax="100.0"))
+    float WallDistanceFromCenter = 62.0f;
+    UPROPERTY(EditAnywhere, Category="Mahjong|Layout", meta=(ClampMin="80.0", ClampMax="140.0"))
+    float HandDistanceFromCenter = 110.0f;
     /** Local hand is raised above the near rail and kept parallel to the bottom of the screen. */
-    UPROPERTY(EditAnywhere, Category="Mahjong|Layout", meta=(ClampMin="600.0", ClampMax="1100.0"))
-    float LocalHandDistanceFromCenter = 930.0f;
-    UPROPERTY(EditAnywhere, Category="Mahjong|Layout", meta=(ClampMin="20.0", ClampMax="400.0"))
-    float LocalHandElevation = 200.0f;
+    UPROPERTY(EditAnywhere, Category="Mahjong|Layout", meta=(ClampMin="110.0", ClampMax="148.0"))
+    float LocalHandDistanceFromCenter = 137.0f;
+    UPROPERTY(EditAnywhere, Category="Mahjong|Layout", meta=(ClampMin="0.0", ClampMax="20.0"))
+    float LocalHandElevation = 7.5f;
     UPROPERTY(EditAnywhere, Category="Mahjong|Layout", meta=(ClampMin="1.0", ClampMax="1.6"))
     float LocalHandScale = 1.35f;
-    UPROPERTY(EditAnywhere, Category="Mahjong|Layout", meta=(ClampMin="280.0", ClampMax="460.0"))
-    float MeldDistanceFromCenter = 410.0f;
-    UPROPERTY(EditAnywhere, Category="Mahjong|Layout", meta=(ClampMin="120.0", ClampMax="260.0"))
-    float DiscardFirstRowDistanceFromCenter = 190.0f;
+    UPROPERTY(EditAnywhere, Category="Mahjong|Layout", meta=(ClampMin="65.0", ClampMax="105.0"))
+    float MeldDistanceFromCenter = 82.0f;
+    UPROPERTY(EditAnywhere, Category="Mahjong|Layout", meta=(ClampMin="18.0", ClampMax="45.0"))
+    float DiscardFirstRowDistanceFromCenter = 25.0f;
     UPROPERTY(EditAnywhere, Category="Mahjong|Layout", meta=(ClampMin="5", ClampMax="9"))
     int32 DiscardColumns = 6;
     /** 只读缓存快照及布局版本状态。 */

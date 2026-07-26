@@ -59,12 +59,16 @@ if not all(
     raise RuntimeError("Presentation Blueprint is missing a required visual component")
 
 table_mesh_component.set_editor_property("static_mesh", table_mesh)
+table_mesh_component.set_editor_property(
+    "relative_scale3d",
+    unreal.Vector(300.0 / 115.0, 300.0 / 115.0, 300.0 / 115.0),
+)
 tile_layout.set_editor_property("child_actor_class", table_class)
 
 set_properties(
     camera,
     {
-        "relative_location": unreal.Vector(0.0, -2350.0, 1392.0),
+        "relative_location": unreal.Vector(0.0, -202.0, 120.0),
         "relative_rotation": unreal.Rotator(0.0, -30.0, 90.0),
         "current_focal_length": 30.0,
         "current_aperture": 16.0,
@@ -105,10 +109,10 @@ camera.set_editor_property("post_process_settings", post_process)
 set_properties(
     directional,
     {
-        "visible": False,
-        "intensity": 0.0,
+        "visible": True,
+        "intensity": 10.0,
         "light_color": unreal.Color(r=255, g=250, b=242, a=255),
-        "cast_shadows": True,
+        "cast_shadows": False,
     },
 )
 set_properties(
@@ -122,18 +126,20 @@ set_properties(
 set_properties(
     key,
     {
+        "relative_location": unreal.Vector(0.0, 0.0, 120.0),
         "intensity": 400.0,
+        "attenuation_radius": 300.0,
         "light_color": unreal.Color(r=255, g=248, b=238, a=255),
-        "cast_shadows": True,
+        "cast_shadows": False,
     },
 )
 set_properties(
     fill,
     {
-        "relative_location": unreal.Vector(0.0, -1450.0, 520.0),
+        "relative_location": unreal.Vector(0.0, -145.0, 52.0),
         "relative_rotation": unreal.Rotator(0.0, -26.6, 90.0),
         "intensity": 300.0,
-        "attenuation_radius": 1800.0,
+        "attenuation_radius": 180.0,
         "inner_cone_angle": 50.0,
         "outer_cone_angle": 70.0,
         "light_color": unreal.Color(r=230, g=240, b=255, a=255),
@@ -148,6 +154,6 @@ unreal.BlueprintEditorLibrary.compile_blueprint(blueprint)
 unreal.EditorAssetLibrary.save_loaded_asset(blueprint, only_if_is_dirty=False)
 unreal.log(
     "MAHJONG_ROOM_VISUAL_SETTINGS_REPAIRED "
-    "camera=(0,-2350,1392) tabletop-normal-angle=60 pitch=-30 focal=30 exposure=histogram-1.0 "
-    "lights=(disabled-map-duplicate,0.15,400,300) south_fill=(0,-1450,520)"
+    "camera=(0,-202,120) tabletop-normal-angle=60 pitch=-30 focal=30 exposure=histogram-1.0 "
+    "lights=(disabled-map-duplicate,0.15,400,300) south_fill=(0,-145,52)"
 )
