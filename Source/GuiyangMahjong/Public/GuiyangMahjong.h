@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 
+// 按领域拆分日志分类，便于人工审查时只过滤网络、规则、UI 或重连链路。
 GUIYANGMAHJONG_API DECLARE_LOG_CATEGORY_EXTERN(LogMahjongServer, Log, All);
 GUIYANGMAHJONG_API DECLARE_LOG_CATEGORY_EXTERN(LogMahjongNet, Log, All);
 GUIYANGMAHJONG_API DECLARE_LOG_CATEGORY_EXTERN(LogMahjongRule, Log, All);

@@ -1,5 +1,6 @@
 using UnrealBuildTool;
 
+/// <summary>定义仅包含客户端运行模块的打包目标。</summary>
 public class GuiyangMahjongClientTarget : TargetRules
 {
     public GuiyangMahjongClientTarget(TargetInfo Target) : base(Target)

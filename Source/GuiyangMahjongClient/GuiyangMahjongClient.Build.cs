@@ -1,5 +1,6 @@
 using UnrealBuildTool;
 
+/// <summary>配置客户端表现、UI、音频及在线访问模块依赖。</summary>
 public class GuiyangMahjongClient : ModuleRules
 {
     public GuiyangMahjongClient(ReadOnlyTargetRules Target) : base(Target)

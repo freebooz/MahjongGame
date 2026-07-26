@@ -4,6 +4,7 @@
 #include "MahjongTypes.generated.h"
 
 UENUM(BlueprintType)
+/** 麻将花色；Winds/Dragons 仅在 136 张牌配置中使用。 */
 enum class EMahjongSuit : uint8
 {
     Characters UMETA(DisplayName="万"),
@@ -14,6 +15,7 @@ enum class EMahjongSuit : uint8
 };
 
 UENUM(BlueprintType)
+/** 牌的语义类型；序数牌的具体点数存放在 Rank。 */
 enum class EMahjongTileType : uint8
 {
     Number,
@@ -23,12 +25,14 @@ enum class EMahjongTileType : uint8
 };
 
 UENUM(BlueprintType)
+/** 客户端可请求、规则引擎可解析的统一牌桌动作。 */
 enum class EMahjongActionType : uint8
 {
     Draw, Play, Peng, MingGang, AnGang, BuGang, Hu, Pass
 };
 
 UENUM(BlueprintType)
+/** 权威牌桌状态机阶段。 */
 enum class EMahjongTablePhase : uint8
 {
     WaitingForPlayers,
@@ -78,11 +82,14 @@ struct GUIYANGMAHJONGCORE_API FMahjongTile
 {
     GENERATED_BODY()
 
+    /** 花色、字牌类型和序数牌点数共同描述牌面。 */
     UPROPERTY(EditAnywhere, BlueprintReadWrite) EMahjongSuit Suit = EMahjongSuit::Characters;
     UPROPERTY(EditAnywhere, BlueprintReadWrite) EMahjongTileType Type = EMahjongTileType::Invalid;
     UPROPERTY(EditAnywhere, BlueprintReadWrite, meta=(ClampMin="0", ClampMax="9")) int32 Rank = 0;
+    /** 单局内唯一实例号，用于出牌请求准确定位同牌面的某一张实体牌。 */
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly) int32 UniqueId = INDEX_NONE;
 
+    /** 基础有效性、34 种牌规则索引和诊断文本工具。 */
     bool IsValid() const { return UniqueId >= 0 && Type != EMahjongTileType::Invalid; }
     int32 GetRuleIndex() const;
     FString ToDebugString() const;
@@ -90,9 +97,11 @@ struct GUIYANGMAHJONGCORE_API FMahjongTile
 };
 
 USTRUCT(BlueprintType)
+/** 已公开的吃、碰或杠副露。 */
 struct GUIYANGMAHJONGCORE_API FMahjongMeld
 {
     GENERATED_BODY()
+    /** 副露类型、包含牌、归属座位及来源座位。 */
     UPROPERTY(EditAnywhere, BlueprintReadWrite) EMahjongMeldType Type = EMahjongMeldType::Peng;
     UPROPERTY(EditAnywhere, BlueprintReadWrite) TArray<FMahjongTile> Tiles;
     UPROPERTY(EditAnywhere, BlueprintReadWrite) int32 OwnerSeat = INDEX_NONE;
@@ -100,16 +109,19 @@ struct GUIYANGMAHJONGCORE_API FMahjongMeld
 };
 
 USTRUCT(BlueprintType)
+/** 单个玩家的私有手牌与已公开副露集合。 */
 struct GUIYANGMAHJONGCORE_API FMahjongHand
 {
     GENERATED_BODY()
     UPROPERTY(EditAnywhere, BlueprintReadWrite) TArray<FMahjongTile> Tiles;
     UPROPERTY(EditAnywhere, BlueprintReadWrite) TArray<FMahjongMeld> Melds;
+    /** 输出诊断文本，并按规则索引稳定排序手牌。 */
     FString ToDebugString() const;
     void Sort();
 };
 
 USTRUCT(BlueprintType)
+/** 一次弃牌及其公共序号和是否已被其他动作认领。 */
 struct GUIYANGMAHJONGCORE_API FMahjongDiscardRecord
 {
     GENERATED_BODY()
@@ -120,9 +132,11 @@ struct GUIYANGMAHJONGCORE_API FMahjongDiscardRecord
 };
 
 USTRUCT(BlueprintType)
+/** 服务端验证后形成的规范化动作。 */
 struct GUIYANGMAHJONGCORE_API FMahjongAction
 {
     GENERATED_BODY()
+    /** 动作类型、来源/目标座位、目标牌和从手中消耗的牌。 */
     UPROPERTY(EditAnywhere, BlueprintReadWrite) EMahjongActionType Type = EMahjongActionType::Pass;
     UPROPERTY(EditAnywhere, BlueprintReadWrite) int32 SourceSeat = INDEX_NONE;
     UPROPERTY(EditAnywhere, BlueprintReadWrite) int32 TargetSeat = INDEX_NONE;
@@ -132,18 +146,22 @@ struct GUIYANGMAHJONGCORE_API FMahjongAction
 };
 
 USTRUCT(BlueprintType)
+/** 客户端发往权威牌桌的动作请求；包含状态版本和幂等序号。 */
 struct GUIYANGMAHJONGCORE_API FMahjongActionRequest
 {
     GENERATED_BODY()
     UPROPERTY(EditAnywhere, BlueprintReadWrite) EMahjongActionType Type = EMahjongActionType::Pass;
+    /** 客户端观察到的局号和回合号，服务端用其拒绝过期操作。 */
     UPROPERTY(EditAnywhere, BlueprintReadWrite) int32 RoundId = 0;
     UPROPERTY(EditAnywhere, BlueprintReadWrite) int32 TurnId = 0;
     UPROPERTY(EditAnywhere, BlueprintReadWrite) int32 TargetTileId = INDEX_NONE;
     UPROPERTY(EditAnywhere, BlueprintReadWrite) TArray<int32> ConsumedTileIds;
+    /** 当前连接内单调递增的客户端动作序号。 */
     UPROPERTY(EditAnywhere, BlueprintReadWrite) int32 ClientSequence = 0;
 };
 
 USTRUCT(BlueprintType)
+/** 一次动作的成功标志、错误信息及规范化结果。 */
 struct GUIYANGMAHJONGCORE_API FMahjongActionResult
 {
     GENERATED_BODY()
@@ -153,6 +171,7 @@ struct GUIYANGMAHJONGCORE_API FMahjongActionResult
 };
 
 USTRUCT(BlueprintType)
+/** 单个座位的本局分项增减及累计总分。 */
 struct GUIYANGMAHJONGCORE_API FMahjongPlayerScoreResult
 {
     GENERATED_BODY()
@@ -166,6 +185,7 @@ struct GUIYANGMAHJONGCORE_API FMahjongPlayerScoreResult
 };
 
 USTRUCT(BlueprintType)
+/** 冲锋鸡或责任鸡事件，保留触发牌、座位和弃牌序号用于复核。 */
 struct GUIYANGMAHJONGCORE_API FMahjongJiEvent
 {
     GENERATED_BODY()
@@ -178,9 +198,11 @@ struct GUIYANGMAHJONGCORE_API FMahjongJiEvent
 };
 
 USTRUCT(BlueprintType)
+/** 单局结算快照；同时包含胜负、鸡事件和各座位分项。 */
 struct GUIYANGMAHJONGCORE_API FMahjongSettlementResult
 {
     GENERATED_BODY()
+    /** 流局/自摸标志及赢家、放炮者和获胜牌。 */
     UPROPERTY(EditAnywhere, BlueprintReadWrite) bool bDrawGame = false;
     UPROPERTY(EditAnywhere, BlueprintReadWrite) bool bSelfDraw = false;
     UPROPERTY(EditAnywhere, BlueprintReadWrite) int32 WinnerSeat = INDEX_NONE;
@@ -188,6 +210,7 @@ struct GUIYANGMAHJONGCORE_API FMahjongSettlementResult
     UPROPERTY(EditAnywhere, BlueprintReadWrite) int32 LoserSeat = INDEX_NONE;
     UPROPERTY(EditAnywhere, BlueprintReadWrite) FMahjongTile WinningTile;
     UPROPERTY(EditAnywhere, BlueprintReadWrite) FMahjongTile FlippedJiTile;
+    /** 鸡牌统计、事件明细和最终逐座位分数。 */
     UPROPERTY(EditAnywhere, BlueprintReadWrite) TArray<int32> PlayerJiCounts;
     UPROPERTY(EditAnywhere, BlueprintReadWrite) TArray<FMahjongJiEvent> JiEvents;
     UPROPERTY(EditAnywhere, BlueprintReadWrite) TArray<FMahjongTile> JiTiles;
@@ -196,6 +219,7 @@ struct GUIYANGMAHJONGCORE_API FMahjongSettlementResult
 };
 
 USTRUCT(BlueprintType)
+/** 创建房间时冻结的完整规则配置。 */
 struct GUIYANGMAHJONGCORE_API FMahjongRuleConfig
 {
     GENERATED_BODY()
@@ -203,6 +227,7 @@ struct GUIYANGMAHJONGCORE_API FMahjongRuleConfig
     UPROPERTY(EditAnywhere, BlueprintReadWrite) FName RuleId = TEXT("GuiyangMainstreamV1");
     UPROPERTY(EditAnywhere, BlueprintReadWrite, meta=(ClampMin="1")) int32 RuleVersion = 1;
     UPROPERTY(EditAnywhere, BlueprintReadWrite) EMahjongTileSetMode TileSetMode = EMahjongTileSetMode::Suited108;
+    /** 贵阳特殊鸡、抢杠胡、一炮多响、七对及超时托管开关。 */
     UPROPERTY(EditAnywhere, BlueprintReadWrite) bool bEnableChongFengJi = true;
     UPROPERTY(EditAnywhere, BlueprintReadWrite) bool bEnableZeRenJi = true;
     UPROPERTY(EditAnywhere, BlueprintReadWrite) bool bEnableWuGuJi = true;
@@ -213,6 +238,7 @@ struct GUIYANGMAHJONGCORE_API FMahjongRuleConfig
     UPROPERTY(EditAnywhere, BlueprintReadWrite) bool bEnableQiDui = true;
     UPROPERTY(EditAnywhere, BlueprintReadWrite) bool bDrawGameDealerContinues = true;
     UPROPERTY(EditAnywhere, BlueprintReadWrite) bool bEnableTimeoutAutoPlay = true;
+    /** 基础分、各种鸡的单位值、杠分和胡牌倍率。 */
     UPROPERTY(EditAnywhere, BlueprintReadWrite) int32 BaseScore = 1;
     UPROPERTY(EditAnywhere, BlueprintReadWrite) int32 JiScore = 1;
     UPROPERTY(EditAnywhere, BlueprintReadWrite) int32 BasicJiValue = 1;
@@ -226,6 +252,7 @@ struct GUIYANGMAHJONGCORE_API FMahjongRuleConfig
     UPROPERTY(EditAnywhere, BlueprintReadWrite) int32 GangScore = 1;
     UPROPERTY(EditAnywhere, BlueprintReadWrite) int32 ZiMoMultiplier = 2;
     UPROPERTY(EditAnywhere, BlueprintReadWrite) int32 DianPaoMultiplier = 1;
+    /** 重连、出牌和响应窗口的服务端超时秒数。 */
     UPROPERTY(EditAnywhere, BlueprintReadWrite) int32 ReconnectTimeoutSeconds = 120;
     UPROPERTY(EditAnywhere, BlueprintReadWrite) int32 TurnTimeoutSeconds = 15;
     UPROPERTY(EditAnywhere, BlueprintReadWrite) int32 ReactionTimeoutSeconds = 8;

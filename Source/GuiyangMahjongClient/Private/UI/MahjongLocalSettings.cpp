@@ -4,12 +4,14 @@
 
 namespace
 {
+/** GameUserSettings.ini 中的独立配置段，避免与引擎图形设置混用。 */
 const TCHAR* SettingsSection = TEXT("/Script/GuiyangMahjong.MahjongLocalSettings");
 }
 
 FMahjongLocalSettings FMahjongLocalSettings::Load()
 {
     FMahjongLocalSettings Settings;
+    // 缺少字段时保留结构体默认值，兼容旧版本配置。
     if (GConfig)
     {
         GConfig->GetBool(SettingsSection, TEXT("MusicEnabled"), Settings.bMusicEnabled, GGameUserSettingsIni);
@@ -29,6 +31,7 @@ void FMahjongLocalSettings::Save() const
         return;
     }
 
+    // 写盘前复制并归一化，调用者内存中的值不被隐式修改。
     FMahjongLocalSettings Settings = *this;
     Settings.Sanitize();
     GConfig->SetBool(SettingsSection, TEXT("MusicEnabled"), Settings.bMusicEnabled, GGameUserSettingsIni);
@@ -41,6 +44,7 @@ void FMahjongLocalSettings::Save() const
 
 void FMahjongLocalSettings::Sanitize()
 {
+    // 所有音量统一限制在音频组件接受的标准区间。
     MusicVolume = FMath::Clamp(MusicVolume, 0.0f, 1.0f);
     SoundVolume = FMath::Clamp(SoundVolume, 0.0f, 1.0f);
 }

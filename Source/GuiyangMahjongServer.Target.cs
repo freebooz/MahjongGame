@@ -1,5 +1,6 @@
 using UnrealBuildTool;
 
+/// <summary>定义无渲染独立服务器目标，严格排除客户端表现模块。</summary>
 public class GuiyangMahjongServerTarget : TargetRules
 {
     public GuiyangMahjongServerTarget(TargetInfo Target) : base(Target)

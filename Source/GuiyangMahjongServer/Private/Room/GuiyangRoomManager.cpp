@@ -16,6 +16,7 @@ THIRD_PARTY_INCLUDES_END
 bool UGuiyangRoomManager::CreateManagedRoom(const FGuiyangManagedRoomDefinition& Definition,
     FMahjongRoomState& OutState, EMahjongRoomError& OutError)
 {
+    // 托管房间的 ID、规则和房主全部来自已校验 Bootstrap，不接受客户端覆盖。
     OutError = EMahjongRoomError::None;
     if (Rooms.Num() != 0 || Definition.RoomCode.Len() != 6 || !Definition.RoomCode.IsNumeric()
         || Definition.RoundCount < 1 || Definition.RoundCount > 16 || Definition.MaximumPlayers != 4
@@ -53,6 +54,7 @@ bool UGuiyangRoomManager::CreateManagedRoom(const FGuiyangManagedRoomDefinition&
 bool UGuiyangRoomManager::AdmitManagedPlayer(const FString& RoomCode, const FString& PlayerId,
     const FString& DisplayName, FMahjongRoomState& OutState, EMahjongRoomError& OutError)
 {
+    // 单活动房间反向索引阻止同一玩家同时占用多个房间座位。
     OutError = EMahjongRoomError::None;
     if (!ValidateIdentity(PlayerId, DisplayName))
     {
@@ -117,6 +119,7 @@ bool UGuiyangRoomManager::AdmitManagedPlayer(const FString& RoomCode, const FStr
 bool UGuiyangRoomManager::CreateRoom(const FString& PlayerId, const FString& DisplayName,
     const FMahjongCreateRoomRequest& Request, FMahjongRoomState& OutState, EMahjongRoomError& OutError)
 {
+    // 本地创建先完整校验身份、局数、规则和密码，再一次性插入两张索引表。
     OutError = EMahjongRoomError::None;
     if (!ValidateIdentity(PlayerId, DisplayName) || Request.RoundCount < 1 || Request.RoundCount > 16
         || (Request.bEnablePassword && !ValidatePassword(Request.Password)))
@@ -221,6 +224,7 @@ bool UGuiyangRoomManager::QuickStart(const FString& PlayerId, const FString& Dis
 bool UGuiyangRoomManager::JoinRoom(const FString& PlayerId, const FString& DisplayName,
     const FMahjongJoinRoomRequest& Request, FMahjongRoomState& OutState, EMahjongRoomError& OutError)
 {
+    // 密码验证失败会按玩家累计并短期锁定，成功后清除失败状态。
     OutError = EMahjongRoomError::None;
     const FString RoomCode = Request.RoomCode.TrimStartAndEnd();
     if (!ValidateIdentity(PlayerId, DisplayName) || RoomCode.Len() != 6 || !RoomCode.IsNumeric())
@@ -301,6 +305,7 @@ bool UGuiyangRoomManager::JoinRoom(const FString& PlayerId, const FString& Displ
 
 bool UGuiyangRoomManager::ToggleReady(const FString& PlayerId, FMahjongRoomState& OutState, EMahjongRoomError& OutError)
 {
+    // 只允许等待阶段切换准备；每次变更递增 StateSequence。
     OutError = EMahjongRoomError::None;
     const FString* RoomCode = PlayerRoomCodes.Find(PlayerId);
     FRoomRecord* Record = RoomCode ? Rooms.Find(*RoomCode) : nullptr;
@@ -330,6 +335,7 @@ bool UGuiyangRoomManager::ToggleReady(const FString& PlayerId, FMahjongRoomState
 
 bool UGuiyangRoomManager::LeaveRoom(const FString& PlayerId, FMahjongRoomState& OutState, EMahjongRoomError& OutError)
 {
+    // 移除座位与玩家反向索引；非托管房间房主离开时按策略转移或关闭房间。
     OutError = EMahjongRoomError::None;
     const FString* RoomCodePtr = PlayerRoomCodes.Find(PlayerId);
     if (!RoomCodePtr)
@@ -434,6 +440,7 @@ bool UGuiyangRoomManager::BeginPlaying(const FString& RoomCode, FMahjongRoomStat
 bool UGuiyangRoomManager::FinishRound(const FString& RoomCode, const FMahjongSettlementResult& Settlement,
     FMahjongRoomState& OutState, EMahjongRoomError& OutError)
 {
+    // 逐座位应用结算总分后推进局数，达到上限时进入 Closed 并生成最终排名。
     OutError = EMahjongRoomError::None;
     FRoomRecord* Record = Rooms.Find(RoomCode);
     if (!Record)
@@ -532,6 +539,7 @@ bool UGuiyangRoomManager::RequestNextRound(const FString& PlayerId, FMahjongRoom
 bool UGuiyangRoomManager::MarkDisconnected(const FString& PlayerId, FMahjongRoomState& OutState,
     EMahjongRoomError& OutError)
 {
+    // 保留座位和玩家反向索引，只记录 UTC 掉线时间供宽限期重连。
     OutError = EMahjongRoomError::None;
     const FString* RoomCode = PlayerRoomCodes.Find(PlayerId);
     FRoomRecord* Record = RoomCode ? Rooms.Find(*RoomCode) : nullptr;
@@ -559,6 +567,7 @@ bool UGuiyangRoomManager::MarkDisconnected(const FString& PlayerId, FMahjongRoom
 bool UGuiyangRoomManager::ReconnectPlayer(const FString& PlayerId, FMahjongRoomState& OutState,
     int32& OutRemainingSeconds, EMahjongRoomError& OutError)
 {
+    // 超过规则快照中的重连宽限期后拒绝恢复，避免无限占用座位。
     OutError = EMahjongRoomError::None;
     OutRemainingSeconds = 0;
     const FString* RoomCode = PlayerRoomCodes.Find(PlayerId);
@@ -610,6 +619,7 @@ bool UGuiyangRoomManager::GetPlayerRoomCode(const FString& PlayerId, FString& Ou
 
 FMahjongFinalSettlementResult UGuiyangRoomManager::BuildFinalSettlement(const FMahjongRoomState& State)
 {
+    // 按总分降序、座位升序稳定排名，保证同分结果在各端一致。
     FMahjongFinalSettlementResult Result;
     Result.MatchId = State.RoomInfo.MatchId;
     Result.RoomId = State.RoomInfo.RoomId;
@@ -673,6 +683,7 @@ FString UGuiyangRoomManager::MakePasswordSalt()
 
 FString UGuiyangRoomManager::HashPassword(const FString& Password, const FString& Salt)
 {
+    // 多轮 SHA-256 派生仅存储摘要；原始密码不会进入房间记录或日志。
     FTCHARToUTF8 PasswordUtf8(*Password);
     FTCHARToUTF8 SaltUtf8(*Salt);
     uint8 DerivedKey[32] = {};
@@ -742,6 +753,7 @@ const FMahjongSeatInfo* UGuiyangRoomManager::FindSeat(const FMahjongRoomState& S
 
 void UGuiyangRoomManager::RefreshLifecycle(FMahjongRoomState& State)
 {
+    // 生命周期完全由公开座位状态和房间配置推导，调用方不能任意指定。
     int32 Occupied = 0;
     int32 Ready = 0;
     for (const FMahjongSeatInfo& Seat : State.Seats)

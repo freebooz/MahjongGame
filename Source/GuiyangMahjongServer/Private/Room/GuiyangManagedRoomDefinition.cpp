@@ -4,6 +4,7 @@
 
 namespace GuiyangManagedRoomDefinitionPrivate
 {
+    /** 规则 ID 只允许有限 ASCII 字符，避免日志、指标和存储键注入。 */
     bool IsRuleIdValid(const FString& Value)
     {
         if (Value.IsEmpty() || Value.Len() > 64) return false;
@@ -18,6 +19,7 @@ namespace GuiyangManagedRoomDefinitionPrivate
         return true;
     }
 
+    /** 严格读取可选整数，拒绝小数及 int32 范围外数值。 */
     bool TryReadOptionalInteger(const TSharedPtr<FJsonObject>& Object, const TCHAR* Field, int32& OutValue)
     {
         if (!Object->HasField(Field)) return true;
@@ -34,6 +36,7 @@ namespace GuiyangManagedRoomDefinitionPrivate
         return !Object->HasField(Field) || Object->TryGetBoolField(Field, OutValue);
     }
 
+    /** 同时接受稳定字符串枚举和旧版数字枚举。 */
     bool TryReadTileSetMode(const TSharedPtr<FJsonObject>& Object, FMahjongRuleConfig& Config)
     {
         if (!Object->HasField(TEXT("tileSetMode"))) return true;
@@ -77,6 +80,7 @@ bool FGuiyangManagedRoomDefinition::TryParse(const TSharedPtr<FJsonObject>& Boot
     const FString& ExpectedRoomId, const FString& ExpectedMatchId,
     FGuiyangManagedRoomDefinition& OutDefinition, FString& OutError)
 {
+    // 每次解析先清空输出，失败时调用方不会误用上一次成功结果。
     OutDefinition = FGuiyangManagedRoomDefinition();
     OutError = TEXT("ROOM_BOOTSTRAP_INVALID");
     if (!Bootstrap.IsValid()
@@ -91,6 +95,7 @@ bool FGuiyangManagedRoomDefinition::TryParse(const TSharedPtr<FJsonObject>& Boot
         || !Bootstrap->TryGetBoolField(TEXT("passwordProtected"), OutDefinition.bPasswordProtected))
         return false;
 
+    // 校验控制面不可变字段及四人桌边界。
     FGuid ParsedGuid;
     if (!FGuid::Parse(OutDefinition.BackendRoomId, ParsedGuid)
         || !FGuid::Parse(OutDefinition.MatchId, ParsedGuid)
@@ -101,6 +106,7 @@ bool FGuiyangManagedRoomDefinition::TryParse(const TSharedPtr<FJsonObject>& Boot
         || OutDefinition.MaximumPlayers != 4)
         return false;
 
+    // Bootstrap 必须与启动参数作用域一致，防止错误分配或跨房间注入。
     if (!OutDefinition.BackendRoomId.Equals(ExpectedRoomId, ESearchCase::IgnoreCase)
         || !OutDefinition.MatchId.Equals(ExpectedMatchId, ESearchCase::IgnoreCase))
     {
@@ -119,6 +125,7 @@ bool FGuiyangManagedRoomDefinition::TryParse(const TSharedPtr<FJsonObject>& Boot
         return false;
     Config.RuleId = FName(*RuleId);
 
+    // 宏仅用于集中执行同一严格读取策略，随后仍由规则快照做语义范围校验。
 #define READ_RULE_INT(JsonName, Member) \
     if (!GuiyangManagedRoomDefinitionPrivate::TryReadOptionalInteger(Rules, TEXT(JsonName), Config.Member)) return false
 #define READ_RULE_BOOL(JsonName, Member) \
@@ -155,6 +162,7 @@ bool FGuiyangManagedRoomDefinition::TryParse(const TSharedPtr<FJsonObject>& Boot
         || !GuiyangManagedRoomDefinitionPrivate::TryReadJiCountingScope(Rules, Config))
         return false;
 
+    // 保存规范化后的房主标识和带哈希的不可变规则快照。
     OutDefinition.OwnerPlayerId = OutDefinition.OwnerPlayerId.TrimStartAndEnd();
     OutDefinition.RuleSnapshot = UGuiyangRuleSnapshotLibrary::CreateSnapshot(Config);
     return UGuiyangRuleSnapshotLibrary::VerifySnapshot(OutDefinition.RuleSnapshot);

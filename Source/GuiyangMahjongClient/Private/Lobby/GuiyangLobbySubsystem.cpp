@@ -78,6 +78,7 @@ namespace GuiyangLobbyPrivate
 
 void UGuiyangLobbySubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
+    // 根据配置选择本地或远程后端，并把后端回调汇入稳定的子系统事件。
     Super::Initialize(Collection);
 
     FString ConfiguredMode = TEXT("LocalLegacy");
@@ -176,6 +177,7 @@ FGuiyangLobbyOperationResult UGuiyangLobbySubsystem::RequestQuickStart(APlayerCo
 FGuiyangLobbyOperationResult UGuiyangLobbySubsystem::RequestCreateRoom(
     APlayerController* PlayerController, const FMahjongCreateRoomRequest& Request)
 {
+    // 先生成请求 ID 并做登录/并发检查，再交由后端执行；UI 可立即进入加载页。
     const FString RequestId = MakeRequestId();
     AGuiyangMahjongPlayerController* MahjongController = Cast<AGuiyangMahjongPlayerController>(PlayerController);
     if (!MahjongController)
@@ -211,6 +213,7 @@ FGuiyangLobbyOperationResult UGuiyangLobbySubsystem::RequestJoinRoom(
 
 FGuiyangLobbyOperationResult UGuiyangLobbySubsystem::RequestReconnect(APlayerController* PlayerController)
 {
+    // 重连请求使用已记住的 RoomId/MatchId 向 Lobby 重新换取短期路由和票据。
     const FString RequestId = MakeRequestId();
     AGuiyangMahjongPlayerController* MahjongController = Cast<AGuiyangMahjongPlayerController>(PlayerController);
     if (!MahjongController)
@@ -279,6 +282,7 @@ void UGuiyangLobbySubsystem::HandleRemoteBootstrap(const FGuiyangLobbyBootstrap&
 void UGuiyangLobbySubsystem::HandleRemoteRouteReady(
     AGuiyangMahjongPlayerController* PlayerController, const FGuiyangGameServerRoute& Route)
 {
+    // 只有匹配当前请求的路由才能触发 ClientTravel，防止旧 HTTP 回调覆盖新操作。
     if (!PlayerController)
     {
         HandleRemoteFailure(Route.RequestId, EGuiyangLobbyErrorCode::Cancelled, TEXT("玩家控制器已失效"));
@@ -313,6 +317,7 @@ FGuiyangLobbyOperationResult UGuiyangLobbySubsystem::FinalizeBackendResult(
 FGuiyangLobbyOperationResult UGuiyangLobbySubsystem::RejectRequest(
     const FString& RequestId, const EGuiyangLobbyErrorCode ErrorCode, const FString& ChineseMessage)
 {
+    // 所有同步拒绝也使用统一错误事件，保证 UI 不需要区分同步/异步失败。
     FGuiyangLobbyOperationResult Result;
     Result.RequestId = RequestId;
     Result.ErrorCode = ErrorCode;

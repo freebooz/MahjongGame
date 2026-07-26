@@ -36,6 +36,7 @@ AGuiyangMahjongGameMode::AGuiyangMahjongGameMode()
 
 void AGuiyangMahjongGameMode::InitGame(const FString& MapName, const FString& Options, FString& ErrorMessage)
 {
+    // 在玩家连接前确定本地、Allocator 或 Agones 模式，托管模式缺少安全配置时拒绝启动。
     Super::InitGame(MapName, Options, ErrorMessage);
     RoomManager = NewObject<UGuiyangRoomManager>(this);
     bAgonesGameServer = IsRunningDedicatedServer()
@@ -95,6 +96,7 @@ void AGuiyangMahjongGameMode::BeginPlay()
 void AGuiyangMahjongGameMode::InitializeManagedBridge(
     const FGuiyangGameServerLaunchConfig& Config)
 {
+    // 控制面桥接只能初始化一次，并且必须等待监听端口和 World 同时可用。
     if (GameServerBridge) return;
     FString ConfigError;
     UGuiyangGameServerBridge* Bridge = NewObject<UGuiyangGameServerBridge>(this);
@@ -153,6 +155,7 @@ void AGuiyangMahjongGameMode::HandleAgonesAllocationReady(
 void AGuiyangMahjongGameMode::PreLogin(const FString& Options, const FString& Address,
     const FUniqueNetIdRepl& UniqueId, FString& ErrorMessage)
 {
+    // 托管游戏服在生成 PlayerController 前验证并消费一次性入场票据。
     Super::PreLogin(Options, Address, UniqueId, ErrorMessage);
     if (!ErrorMessage.IsEmpty() || !bManagedGameServer) return;
     if (!GameServerBridge)
@@ -195,6 +198,7 @@ void AGuiyangMahjongGameMode::PreLogin(const FString& Options, const FString& Ad
 FString AGuiyangMahjongGameMode::InitNewPlayer(APlayerController* NewPlayerController,
     const FUniqueNetIdRepl& UniqueId, const FString& Options, const FString& Portal)
 {
+    // 将 PreLogin 暂存的玩家 ID 绑定到实际网络连接，避免信任后续客户端自报身份。
     const FString Result = Super::InitNewPlayer(NewPlayerController, UniqueId, Options, Portal);
     if (!Result.IsEmpty() || !bManagedGameServer) return Result;
     if (!GameServerBridge) return TEXT("GAMESERVER_CONFIGURATION_INVALID");
@@ -232,6 +236,7 @@ void AGuiyangMahjongGameMode::PostLogin(APlayerController* NewPlayer)
 
 void AGuiyangMahjongGameMode::Logout(AController* Exiting)
 {
+    // 先记录可重连离线状态，再移除连接级授权；托管房主不会因掉线立即销毁远程房间。
     if (const FString* PlayerId = AuthorizedPlayerIdsByController.Find(Cast<APlayerController>(Exiting)))
     {
         if (UGameInstance* GameInstance = GetGameInstance())
@@ -287,6 +292,7 @@ void AGuiyangMahjongGameMode::EndPlay(const EEndPlayReason::Type EndPlayReason)
 bool AGuiyangMahjongGameMode::InitializeManagedRoomAuthority(
     const FGuiyangManagedRoomDefinition& Definition, FString& OutError)
 {
+    // 一个独立服务器进程只承载一个托管房间，重复 Bootstrap 必须幂等拒绝。
     OutError.Reset();
     if (!bManagedGameServer || !RoomManager || !ManagedRoomCode.IsEmpty())
     {
@@ -312,6 +318,7 @@ void AGuiyangMahjongGameMode::HandleAuthenticateSession(AGuiyangMahjongPlayerCon
     const FString& PlayerId, const FString& DisplayName, const EGuiyangLoginProvider Provider,
     const FString& SessionToken)
 {
+    // 本地模式校验会话摘要；托管模式只接受已经由入场票据绑定的玩家身份。
     const FString CleanPlayerId = PlayerId.TrimStartAndEnd();
     const FString CleanDisplayName = DisplayName.TrimStartAndEnd();
     const bool bProviderAllowed = Provider == EGuiyangLoginProvider::Guest
@@ -445,6 +452,7 @@ void AGuiyangMahjongGameMode::HandleAuthenticateSession(AGuiyangMahjongPlayerCon
 
 void AGuiyangMahjongGameMode::HandleCreateRoom(AGuiyangMahjongPlayerController* Controller, const FMahjongCreateRoomRequest& Request)
 {
+    // 解析授权玩家后才调用房间领域服务，Controller 不直接修改 GameState。
     if (bManagedGameServer)
     {
         if (Controller) Controller->Client_ShowErrorMessage(TEXT("托管房间不能在牌桌服务器内创建"));
@@ -563,6 +571,7 @@ void AGuiyangMahjongGameMode::PublishRoomState(const FMahjongRoomState& State)
 
 void AGuiyangMahjongGameMode::TryStartTable(const FMahjongRoomState& StartingRoomState)
 {
+    // 房间生命周期进入 Starting 后，使用规则快照和服务器种子创建权威牌桌。
     if (!RoomManager || (TableEngine && TableEngine->GetPublicState().Phase != EMahjongTablePhase::Settlement)) return;
     UMahjongTableEngine* RoundEngine = TableEngine ? TableEngine.Get() : NewObject<UMahjongTableEngine>(this);
     FString Error;
@@ -621,6 +630,7 @@ void AGuiyangMahjongGameMode::HandleNextRound(AGuiyangMahjongPlayerController* C
 
 void AGuiyangMahjongGameMode::HandleTableAction(AGuiyangMahjongPlayerController* Controller, const FMahjongActionRequest& Request)
 {
+    // 根据当前阶段分派到出牌、回合动作或响应接口，所有合法性由 TableEngine 复核。
     AGuiyangMahjongPlayerState* Player = nullptr;
     if (!ResolvePlayer(Controller, Player) || !TableEngine || Player->SeatIndex == INDEX_NONE)
     {
@@ -657,6 +667,7 @@ void AGuiyangMahjongGameMode::HandleLegacyPlayTile(AGuiyangMahjongPlayerControll
 
 void AGuiyangMahjongGameMode::PublishTableSnapshots()
 {
+    // 公共快照复制给 GameState，私有手牌通过所属 Controller 的 Client RPC 定向下发。
     if (!TableEngine) return;
     RefreshActionTimeoutTimer();
     if (AGuiyangMahjongGameState* MahjongState = GetGameState<AGuiyangMahjongGameState>())
@@ -679,6 +690,7 @@ void AGuiyangMahjongGameMode::PublishTableSnapshots()
 
 void AGuiyangMahjongGameMode::RefreshActionTimeoutTimer()
 {
+    // 每次状态推进都取消旧计时器，并把局号/回合/阶段写入新的回调令牌。
     if (!TableEngine || !GetWorld()) return;
     const FMahjongPublicTableState& State = TableEngine->GetPublicState();
     const bool bActionPhase = State.Phase == EMahjongTablePhase::PlayerTurn
@@ -723,6 +735,7 @@ void AGuiyangMahjongGameMode::HandleActionTimeout(const int32 ExpectedRoundId, c
 
 void AGuiyangMahjongGameMode::FinalizeRoundIfNeeded()
 {
+    // 结算序号保证同一局只写入房间累计分一次。
     if (!TableEngine || !RoomManager || ActiveRoomCode.IsEmpty()) return;
     const int32 SettlementSequence = TableEngine->GetPublicState().StateSequence;
     if (TableEngine->GetPublicState().Phase != EMahjongTablePhase::Settlement
@@ -748,6 +761,7 @@ void AGuiyangMahjongGameMode::FinalizeRoundIfNeeded()
 void AGuiyangMahjongGameMode::PublishReconnectSnapshot(AGuiyangMahjongPlayerController* Controller,
     const FMahjongRoomState& RoomState, const int32 RemainingReconnectSeconds)
 {
+    // 重连快照一次性组合房间、公共牌桌、所属玩家私有手牌和剩余宽限时间。
     if (!Controller) return;
     const AGuiyangMahjongPlayerState* Player = Controller->GetPlayerState<AGuiyangMahjongPlayerState>();
     if (!Player || Player->SeatIndex == INDEX_NONE) return;
@@ -785,6 +799,7 @@ void AGuiyangMahjongGameMode::PublishReconnectSnapshot(AGuiyangMahjongPlayerCont
 
 void AGuiyangMahjongGameMode::PublishFinalSettlement(const FMahjongRoomState& RoomState)
 {
+    // 最终结果既发送四个客户端，也以可靠 Outbox 方式上报 Lobby 控制面。
     if (RoomState.StateSequence == LastPublishedFinalRoomSequence) return;
     const FMahjongFinalSettlementResult Result = UGuiyangRoomManager::BuildFinalSettlement(RoomState);
     if (bManagedGameServer && GameServerBridge)

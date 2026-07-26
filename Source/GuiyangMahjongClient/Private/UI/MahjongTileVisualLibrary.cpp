@@ -5,6 +5,7 @@
 
 namespace
 {
+    /** 牌面图集尺寸与 9 列单元格布局常量，必须与美术导出说明一致。 */
     constexpr TCHAR FaceAtlasPath[] =
         TEXT("/Game/Art/Mahjong/Mahjong50/Textures/T_Mahjong50_FaceAtlas_BaseColor.T_Mahjong50_FaceAtlas_BaseColor");
     constexpr float AtlasWidth = 8192.0f;
@@ -25,6 +26,7 @@ FString UMahjongTileVisualLibrary::GetFaceTexturePath(const FMahjongTile& Tile)
 bool UMahjongTileVisualLibrary::GetFaceAtlasCell(const FMahjongTile& Tile,
     int32& OutColumn, int32& OutRowFromBottom)
 {
+    // 27 张序数牌按万、条、筒映射到图集自上而下三行。
     const int32 RuleIndex = Tile.GetRuleIndex();
     if (RuleIndex >= 0 && RuleIndex < 27)
     {
@@ -40,7 +42,7 @@ bool UMahjongTileVisualLibrary::GetFaceAtlasCell(const FMahjongTile& Tile,
         return true;
     }
 
-    // The atlas honor row is North, White, South, Red, Green, East, West.
+    // 字牌行的实际顺序为北、白、南、中、发、东、西。
     switch (Tile.Type)
     {
     case EMahjongTileType::North: OutColumn = 0; break;
@@ -67,6 +69,7 @@ bool UMahjongTileVisualLibrary::ConfigureFaceBrush(const FMahjongTile& Tile,
         return false;
     }
 
+    // 仅裁剪当前牌面的 UV 区域，避免为每张牌复制整张 8K 纹理。
     const FVector2f UVMin(
         (FirstFaceX + Column * ColumnPitch) / AtlasWidth,
         RowFromBottom * FaceHeight / AtlasHeight);

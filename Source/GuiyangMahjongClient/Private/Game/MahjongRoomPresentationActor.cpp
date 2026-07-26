@@ -16,6 +16,7 @@ AMahjongRoomPresentationActor::AMahjongRoomPresentationActor()
 
 AMahjong3DTableActor* AMahjongRoomPresentationActor::GetTableActor() const
 {
+    // 桌子由蓝图 ChildActorComponent 持有，遍历而不依赖设计人员命名。
     TInlineComponentArray<UChildActorComponent*> ChildActorComponents(this);
     for (const UChildActorComponent* Component : ChildActorComponents)
     {
@@ -29,5 +30,6 @@ AMahjong3DTableActor* AMahjongRoomPresentationActor::GetTableActor() const
 
 AActor* AMahjongRoomPresentationActor::GetRoomCameraActor() const
 {
+    // 摄像机组件直接挂在表现 Actor 上时，Actor 自身即可作为 ViewTarget。
     return FindComponentByClass<UCameraComponent>() ? const_cast<AMahjongRoomPresentationActor*>(this) : nullptr;
 }

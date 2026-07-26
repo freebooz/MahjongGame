@@ -48,6 +48,7 @@ UWorld* UGuiyangClientControllerBridgeImpl::GetWorld() const
 
 void UGuiyangClientControllerBridgeImpl::InitializeClient(AGuiyangMahjongPlayerController& InController)
 {
+    // 根 HUD 先创建并显示登录页；房间表现仅在进入 MahjongRoomMap 后按需加载。
     Controller = &InController;
     const bool bUIReviewScreenshot = FParse::Param(FCommandLine::Get(), TEXT("UIReviewScreenshot"));
     if (!bUIReviewScreenshot)
@@ -126,6 +127,7 @@ void UGuiyangClientControllerBridgeImpl::InitializeClient(AGuiyangMahjongPlayerC
 
 AActor* UGuiyangClientControllerBridgeImpl::EnsureRoomPresentation()
 {
+    // 优先复用带稳定标签的关卡实例，避免重连或热重载产生两套灯光/摄像机。
     if (!Controller || !Controller->IsLocalController() || !GetWorld()) return nullptr;
     if (!IsValid(RoomPresentationActor))
     {
@@ -165,6 +167,7 @@ AActor* UGuiyangClientControllerBridgeImpl::EnsureRoomPresentation()
 
 void UGuiyangClientControllerBridgeImpl::RequestRoomPresentationClassLoad()
 {
+    // 软类异步加载把桌面、灯光和相机资源隔离在客户端房间阶段。
     const UMahjongRoomPresentationSettings* Settings =
         GetDefault<UMahjongRoomPresentationSettings>();
     if (!Settings || Settings->PresentationClass.IsNull())
@@ -243,6 +246,7 @@ AMahjongRoomPresentationActor* UGuiyangClientControllerBridgeImpl::SpawnRoomPres
 
 void UGuiyangClientControllerBridgeImpl::ApplyRoomPresentationViewTarget()
 {
+    // 使用表现 Actor 内预定摄像机作为 ViewTarget，禁止默认 Pawn 摄像机覆盖构图。
     if (RoomCameraActor && Controller && Controller->GetViewTarget() != RoomCameraActor)
     {
         Controller->SetViewTarget(RoomCameraActor);
@@ -271,6 +275,7 @@ void UGuiyangClientControllerBridgeImpl::ConnectToServer(
 
 void UGuiyangClientControllerBridgeImpl::ConnectToAllocatedServer(const FGuiyangGameServerRoute& Route)
 {
+    // 加载层立即显示，并保证最短可见时间后再携带票据执行 ClientTravel。
     if (!Controller) return;
     const FString PlayerId = Route.PlayerId.TrimStartAndEnd();
     if (!Route.HasValidEndpoint() || PlayerId.IsEmpty() || PlayerId.Len() > 80
@@ -309,6 +314,7 @@ void UGuiyangClientControllerBridgeImpl::CompleteDelayedAllocatedServerConnectio
 
 void UGuiyangClientControllerBridgeImpl::TravelToAllocatedServer(FGuiyangGameServerRoute Route)
 {
+    // 票据只放在一次旅行 URL 中，并在生成 URL 后清除待处理路由中的副本。
     if (!Controller) return;
     FString ConnectServerIP = Route.ServerIP;
     FString Override;
@@ -332,6 +338,7 @@ void UGuiyangClientControllerBridgeImpl::TravelToAllocatedServer(FGuiyangGameSer
 
 void UGuiyangClientControllerBridgeImpl::RetryLastConnection()
 {
+    // 远程房间优先向 Lobby 换取新票据，只有本地模式才复用旧 IP/端口。
     if (!Controller) return;
     UGuiyangReconnectSubsystem* Reconnect = Controller->GetGameInstance()
         ? Controller->GetGameInstance()->GetSubsystem<UGuiyangReconnectSubsystem>() : nullptr;
@@ -380,6 +387,7 @@ void UGuiyangClientControllerBridgeImpl::ReturnToConnectScreen()
 
 void UGuiyangClientControllerBridgeImpl::ReturnToLobby()
 {
+    // 房主先请求关闭远程房间；非房主只离开游戏服并保留房间供二次进入。
     if (!Controller) return;
     UGuiyangLobbySubsystem* Lobby = Controller->GetGameInstance()
         ? Controller->GetGameInstance()->GetSubsystem<UGuiyangLobbySubsystem>() : nullptr;

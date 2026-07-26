@@ -17,7 +17,9 @@ class GUIYANGMAHJONGSERVER_API AGuiyangMahjongGameMode : public AGameModeBase, p
     GENERATED_BODY()
 
 public:
+    /** 配置服务端专用 Controller、PlayerState 和 GameState。 */
     AGuiyangMahjongGameMode();
+    /** 解析托管启动参数并管理登录前后、离线和关卡结束生命周期。 */
     virtual void InitGame(const FString& MapName, const FString& Options, FString& ErrorMessage) override;
     virtual void BeginPlay() override;
     virtual void PreLogin(const FString& Options, const FString& Address,
@@ -28,8 +30,10 @@ public:
     virtual void Logout(AController* Exiting) override;
     virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
+    /** 使用控制面 Bootstrap 创建本进程唯一的权威房间。 */
     bool InitializeManagedRoomAuthority(const FGuiyangManagedRoomDefinition& Definition, FString& OutError);
 
+    /** 实现共享 Controller 转发的鉴权、大厅和牌桌请求。 */
     virtual void HandleCreateRoom(class AGuiyangMahjongPlayerController* Controller, const FMahjongCreateRoomRequest& Request) override;
     virtual void HandleQuickStart(class AGuiyangMahjongPlayerController* Controller) override;
     void HandleAuthenticateSession(class AGuiyangMahjongPlayerController* Controller, const FString& PlayerId,
@@ -42,28 +46,37 @@ public:
     virtual void HandleLegacyPlayTile(class AGuiyangMahjongPlayerController* Controller, const FMahjongTile& Tile, int32 ClientSequence) override;
 
 private:
+    /** 服务端领域对象：房间、牌桌和控制面桥接。 */
     UPROPERTY(Transient) TObjectPtr<class UGuiyangRoomManager> RoomManager;
     UPROPERTY(Transient) TObjectPtr<class UMahjongTableEngine> TableEngine;
     UPROPERTY(Transient) TObjectPtr<class UGuiyangGameServerBridge> GameServerBridge;
+    /** 最近已发布的单局/最终结算序号，防止 Tick 或重连重复广播。 */
     int32 LastPublishedSettlementSequence = INDEX_NONE;
     int32 LastFinalizedSettlementSequence = INDEX_NONE;
     int32 LastPublishedFinalRoomSequence = INDEX_NONE;
+    /** 当前活动房间码及托管模式固定房间码。 */
     FString ActiveRoomCode;
     FString ManagedRoomCode;
+    /** 玩家会话摘要及登录前已由票据授权的短期缓存。 */
     TMap<FString, FString> SessionTokenDigestsByPlayer;
     TMap<FString, FString> PendingAuthorizedPlayersByTicketDigest;
     TMap<FString, int64> PendingTicketExpiryByDigest;
+    /** 已完成身份绑定的网络连接到玩家 ID 映射。 */
     TMap<TObjectPtr<APlayerController>, FString> AuthorizedPlayerIdsByController;
+    /** 当前编排模式及托管世界初始化状态。 */
     bool bManagedGameServer = false;
     bool bAgonesGameServer = false;
     bool bManagedWorldReady = false;
     bool bHasPendingManagedConfig = false;
     FGuiyangGameServerLaunchConfig PendingManagedConfig;
+    /** 带局/回合/阶段版本的动作超时定时器。 */
     FTimerHandle ActionTimeoutHandle;
     int32 ArmedTimeoutRoundId = INDEX_NONE;
     int32 ArmedTimeoutTurnId = INDEX_NONE;
     EMahjongTablePhase ArmedTimeoutPhase = EMahjongTablePhase::WaitingForPlayers;
+    /** 从已授权 Controller 解析权威 PlayerState。 */
     bool ResolvePlayer(class AGuiyangMahjongPlayerController* Controller, class AGuiyangMahjongPlayerState*& OutPlayerState) const;
+    /** 发布房间与牌桌公共/私有快照并推进结算。 */
     void PublishRoomState(const FMahjongRoomState& State);
     void TryStartTable(const FMahjongRoomState& StartingRoomState);
     void PublishTableSnapshots();
@@ -73,10 +86,12 @@ private:
     void PublishReconnectSnapshot(class AGuiyangMahjongPlayerController* Controller,
         const FMahjongRoomState& RoomState, int32 RemainingReconnectSeconds);
     void PublishFinalSettlement(const FMahjongRoomState& RoomState);
+    /** 对敏感会话和票据做不可逆摘要，内存中不长期保留原文。 */
     static FString HashSessionToken(const FString& SessionToken);
     static FString HashJoinTicket(const FString& JoinTicket);
     static bool ConstantTimeDigestEquals(const FString& Left, const FString& Right);
     static FString ErrorToMessage(EMahjongRoomError Error);
+    /** 在监听端口就绪后注册控制面桥接，Agones 分配也汇入同一路径。 */
     void InitializeManagedBridge(const FGuiyangGameServerLaunchConfig& Config);
     void TryInitializeManagedBridgeAfterListen();
     void HandleAgonesAllocationReady(const FGuiyangGameServerLaunchConfig& Config);

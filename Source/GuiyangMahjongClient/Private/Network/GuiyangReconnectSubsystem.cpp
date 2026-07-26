@@ -31,6 +31,7 @@ void UGuiyangReconnectSubsystem::Deinitialize()
 void UGuiyangReconnectSubsystem::RememberConnection(const FString& ServerIP, const int32 ServerPort,
     const FString& PlayerName)
 {
+    // 只在成功发起连接时保存最近端点，供短线重试使用。
     LastServerIP = ServerIP.TrimStartAndEnd();
     LastServerPort = FMath::Clamp(ServerPort, 1, 65535);
     LastPlayerName = PlayerName.TrimStartAndEnd();
@@ -45,6 +46,7 @@ void UGuiyangReconnectSubsystem::RememberRemoteRoute(const FString& RoomId, cons
 
 void UGuiyangReconnectSubsystem::BeginReconnectWindow(const FString& Status, const int32 TimeoutSeconds)
 {
+    // 使用单调时间记录截止点，避免系统时钟调整影响剩余秒数。
     ReconnectStatus = Status.IsEmpty() ? TEXT("网络连接已断开") : Status;
     if (!bReconnectPending)
     {
@@ -67,6 +69,7 @@ void UGuiyangReconnectSubsystem::MarkRetrying()
 
 void UGuiyangReconnectSubsystem::MarkRestored()
 {
+    // 恢复成功后清空重试状态，但保留最近连接供下一次网络故障使用。
     bReconnectPending = false;
     bRetrying = false;
     ReconnectDeadlineSeconds = 0.0;
@@ -128,6 +131,7 @@ int32 UGuiyangReconnectSubsystem::ClampReconnectTimeoutSeconds(const int32 Timeo
 void UGuiyangReconnectSubsystem::HandleNetworkFailure(UWorld* World, UNetDriver* NetDriver,
     const ENetworkFailure::Type FailureType, const FString& ErrorString)
 {
+    // 只处理游戏网络驱动故障；主动返回大厅或编辑器预览不弹出重连遮罩。
     if (World && World->GetGameInstance() != GetGameInstance()) return;
     if (ErrorString.StartsWith(TEXT("JOIN_TICKET_"), ESearchCase::IgnoreCase))
     {
@@ -158,5 +162,6 @@ void UGuiyangReconnectSubsystem::HandleTravelFailure(UWorld* World, const ETrave
 
 void UGuiyangReconnectSubsystem::BroadcastState()
 {
+    // UI 只消费状态文本、剩余秒数和可重试标志，不直接读取网络驱动。
     OnReconnectStateChanged.Broadcast(ReconnectStatus, GetRemainingSeconds(), CanRetry());
 }

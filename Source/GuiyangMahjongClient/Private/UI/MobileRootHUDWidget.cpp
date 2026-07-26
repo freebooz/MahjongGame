@@ -181,6 +181,7 @@ namespace
 
 void UMobileRootHUDWidget::NativeConstruct()
 {
+    // 根路由集中订阅所有跨页面事件，子页面不彼此引用。
     Super::NativeConstruct();
     if (UMahjongBackgroundMusicSubsystem* Music =
         GetGameInstance()->GetSubsystem<UMahjongBackgroundMusicSubsystem>())
@@ -266,6 +267,7 @@ void UMobileRootHUDWidget::NativeDestruct()
 
 void UMobileRootHUDWidget::HandleLoginStateChanged(const EGuiyangLoginState State, const FGuiyangLoginProfile& Profile)
 {
+    // 登录成功先请求 Lobby Bootstrap；未认证状态始终回到登录页。
     if (State == EGuiyangLoginState::LoggedIn)
     {
         if (UGuiyangLoginSubsystem* Login = GetGameInstance()->GetSubsystem<UGuiyangLoginSubsystem>())
@@ -365,6 +367,7 @@ void UMobileRootHUDWidget::ShowGameHUD()
 
 UUserWidget* UMobileRootHUDWidget::ShowScreenByClassPath(const TCHAR* ClassPath)
 {
+    // 同类页面直接复用；切换时只移除 ScreenLayer，不影响 PopupLayer 上的全局弹层。
     const bool bShowRoomWorld = FCString::Strifind(ClassPath, TEXT("WBP_GameHUD")) != nullptr;
     if (UWidget* RootBackingLayer = WidgetTree
         ? WidgetTree->FindWidget(TEXT("Scale_BackgroundFill")) : nullptr)
@@ -431,6 +434,7 @@ int32 UMobileRootHUDWidget::FindLocalSeat(const FMahjongRoomState& State) const
 
 void UMobileRootHUDWidget::RouteFromRoomState(const FMahjongRoomState& State)
 {
+    // 根据权威房间生命周期选择大厅、等待房间或直接覆盖在三维关卡上的游戏 HUD。
     const UGuiyangLoginSubsystem* Login = GetGameInstance()->GetSubsystem<UGuiyangLoginSubsystem>();
     if (!Login || !Login->IsSessionValid())
     {
@@ -493,6 +497,7 @@ void UMobileRootHUDWidget::HandleReconnectRestored(const FMahjongReconnectSnapsh
 void UMobileRootHUDWidget::HandleReconnectStateChanged(const FString& Status, const int32 RemainingSeconds,
     const bool bCanRetry)
 {
+    // 重连成功立即隐藏遮罩，其余状态只更新同一个覆盖层实例。
     if (Status.IsEmpty())
     {
         HideReconnectOverlay();

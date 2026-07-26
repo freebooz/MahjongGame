@@ -21,23 +21,30 @@ class GUIYANGMAHJONGCLIENT_API AMahjong3DTableActor final : public AActor
     GENERATED_BODY()
 
 public:
+    /** 创建仅客户端存在的场景根节点。 */
     AMahjong3DTableActor();
 
+    /** 缓存最新公共/私有快照并重建本地相对视角布局。 */
     void UpdateLayout(const FMahjongPublicTableState& PublicState,
         const FMahjongPrivatePlayerState& PrivateState, bool bHasPrivateState, int32 LocalSeat);
+    /** 高亮指定唯一牌 ID，不改变权威手牌。 */
     void SetSelectedTile(int32 UniqueId);
     /** 将服务端绝对牌墙方位转换为当前客户端以自己为南方的相对方位。 */
     static int32 GetRelativeWallSide(int32 AbsoluteWallSide, int32 LocalSeat);
 
 private:
+    /** 首次进入世界时加载桌面、牌体和牌面表现资源。 */
     virtual void BeginPlay() override;
 
+    /** 场景根与每次重建动态创建的组件集合。 */
     UPROPERTY(VisibleAnywhere, Category="Mahjong|Presentation") TObjectPtr<USceneComponent> SceneRoot;
     UPROPERTY(Transient) TArray<TObjectPtr<UActorComponent>> RuntimeComponents;
+    /** 桌面辅助网格、默认牌体、34 种牌面网格及基础材质。 */
     UPROPERTY(Transient) TObjectPtr<UStaticMesh> CubeMesh;
     UPROPERTY(Transient) TObjectPtr<UStaticMesh> DefaultTileMesh;
     UPROPERTY(Transient) TArray<TObjectPtr<UStaticMesh>> TileMeshes;
     UPROPERTY(Transient) TObjectPtr<UMaterialInterface> BasicMaterial;
+    /** 只读缓存快照及布局版本状态。 */
     UPROPERTY() FMahjongPublicTableState CachedPublicState;
     UPROPERTY() FMahjongPrivatePlayerState CachedPrivateState;
     bool bCachedPrivateState = false;
@@ -45,14 +52,17 @@ private:
     int32 CachedLocalSeat = 0;
     int32 SelectedTileId = INDEX_NONE;
 
+    /** 加载客户端美术资源并按快照重建所有运行时组件。 */
     void InitializePresentationAssets();
     void RebuildLayout();
     void ClearRuntimeComponents();
+    /** 创建桌体辅助方盒或一张有正反面的麻将牌。 */
     class UStaticMeshComponent* AddBox(const FVector& Location, const FVector& Size,
         const FRotator& Rotation, const FLinearColor& Color);
     UStaticMesh* ResolveTileMesh(const FMahjongTile* Tile, bool bFaceUp) const;
     void AddTile(const FMahjongTile* Tile, bool bFaceUp, bool bUpright,
         const FVector& Location, const FRotator& Rotation, bool bSelected = false);
+    /** 分别生成剩余牌墙、四家手牌、弃牌与副露。 */
     void AddRemainingWall();
     void AddHands();
     void AddDiscards();

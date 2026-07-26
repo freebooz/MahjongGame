@@ -1,5 +1,6 @@
 using UnrealBuildTool;
 
+/// <summary>定义虚幻编辑器目标，并加载项目专用编辑器工具模块。</summary>
 public class GuiyangMahjongEditorTarget : TargetRules
 {
     public GuiyangMahjongEditorTarget(TargetInfo Target) : base(Target)

@@ -11,6 +11,7 @@
 bool UMahjongTableEngine::StartRound(const FGuiyangRuleSnapshot& RuleSnapshot, const TArray<FMahjongSeatInfo>& Seats,
     const int32 DealerSeat, const int32 ShuffleSeed, FString& OutError)
 {
+    // 开局前先验证冻结规则和四个有效座位，拒绝部分初始化。
     if (!UGuiyangRuleSnapshotLibrary::VerifySnapshot(RuleSnapshot) || Seats.Num() != 4 || DealerSeat < 0 || DealerSeat >= 4)
     {
         OutError = TEXT("规则快照、座位或庄家无效");
@@ -25,6 +26,7 @@ bool UMahjongTableEngine::StartRound(const FGuiyangRuleSnapshot& RuleSnapshot, c
         }
     }
 
+    // 服务端独占洗牌、发牌和唯一牌 ID 生成，客户端永远看不到牌墙顺序。
     const int32 NextRoundId = FMath::Max(1, PublicState.RoundId + 1);
     LockedRules = RuleSnapshot;
     DeckManager = NewObject<UMahjongDeckManager>(this);
@@ -36,6 +38,7 @@ bool UMahjongTableEngine::StartRound(const FGuiyangRuleSnapshot& RuleSnapshot, c
         return false;
     }
 
+    // 重建公共快照和所有本局私有累计器，保留座位带入的历史总分。
     PublicState = FMahjongPublicTableState();
     PublicState.RoundId = NextRoundId;
     PublicState.TurnId = 1;
@@ -71,6 +74,7 @@ bool UMahjongTableEngine::StartRound(const FGuiyangRuleSnapshot& RuleSnapshot, c
 
 FMahjongActionResult UMahjongTableEngine::SubmitTurnAction(const int32 SeatIndex, const FMahjongActionRequest& Request)
 {
+    // 只接受服务器刚刚计算出的候选动作，客户端不能自行声明胡或杠。
     FString Error;
     if (!ValidateRequestCommon(SeatIndex, Request, Error)) return Fail(Error);
     if (PublicState.Phase != EMahjongTablePhase::PlayerTurn || PublicState.CurrentTurnSeat != SeatIndex)
@@ -89,6 +93,7 @@ FMahjongActionResult UMahjongTableEngine::SubmitTurnAction(const int32 SeatIndex
     Result.bSuccess = true;
     Result.Action = *Candidate;
 
+    // 自摸、补杠和暗杠分别进入结算、抢杠窗口或补牌流程。
     if (Request.Type == EMahjongActionType::Hu)
     {
         Result.Message = TEXT("Self draw accepted");
@@ -118,7 +123,8 @@ FMahjongActionResult UMahjongTableEngine::SubmitTurnAction(const int32 SeatIndex
     PublicMeld.Type = EMahjongMeldType::AnGang;
     PublicMeld.OwnerSeat = SeatIndex;
     PublicMeld.FromSeat = SeatIndex;
-    PublicMeld.Tiles.SetNum(4); // Invalid tiles are intentional public back-face placeholders.
+    // 暗杠公共副露只复制四张无效占位牌，客户端据此显示牌背而不泄露牌面。
+    PublicMeld.Tiles.SetNum(4);
     PublicState.PublicMelds.Add(PublicMeld);
     ApplyGangScore(SeatIndex);
     ++PublicState.TurnId;
@@ -145,6 +151,7 @@ FMahjongActionResult UMahjongTableEngine::SubmitTurnAction(const int32 SeatIndex
 
 FMahjongActionResult UMahjongTableEngine::SubmitPlayTile(const int32 SeatIndex, const FMahjongActionRequest& Request)
 {
+    // UniqueId 精确选择实体牌，避免同牌面多张牌造成歧义。
     FString Error;
     if (!ValidateRequestCommon(SeatIndex, Request, Error)) return Fail(Error);
     if (Request.Type != EMahjongActionType::Play || PublicState.Phase != EMahjongTablePhase::PlayerTurn
@@ -164,6 +171,7 @@ FMahjongActionResult UMahjongTableEngine::SubmitPlayTile(const int32 SeatIndex, 
     Record.Tile = PlayedTile;
     Record.Sequence = ++PublicState.ServerActionSequence;
     PublicState.Discards.Add(Record);
+    // 先记录可能的冲锋鸡，再打开其他玩家的响应窗口。
     RecordSpecialJiDiscard(SeatIndex, Record);
     PublicState.LastDiscard = PlayedTile;
     LastDiscardSeat = SeatIndex;
@@ -182,6 +190,7 @@ FMahjongActionResult UMahjongTableEngine::SubmitPlayTile(const int32 SeatIndex, 
 
 FMahjongActionResult UMahjongTableEngine::SubmitReaction(const int32 SeatIndex, const FMahjongActionRequest& Request)
 {
+    // 每个有响应资格的座位在当前窗口只能提交一次。
     FString Error;
     if (!ValidateRequestCommon(SeatIndex, Request, Error)) return Fail(Error);
     if (PublicState.Phase != EMahjongTablePhase::WaitingForAction || !AvailableActionsBySeat.Contains(SeatIndex))
@@ -197,6 +206,7 @@ FMahjongActionResult UMahjongTableEngine::SubmitReaction(const int32 SeatIndex, 
     LastClientSequences[SeatIndex] = Request.ClientSequence;
     SubmittedReactions.Add(SeatIndex, Request);
     ++PublicState.ServerActionSequence;
+    // 全部相关玩家响应后立即解析；未响应玩家由服务端超时路径自动过。
     if (SubmittedReactions.Num() == AvailableActionsBySeat.Num()) ResolveSubmittedReactions();
 
     FMahjongActionResult Result;
@@ -211,6 +221,7 @@ FMahjongActionResult UMahjongTableEngine::SubmitReaction(const int32 SeatIndex, 
 FMahjongActionResult UMahjongTableEngine::ResolveActionTimeout(const int32 ExpectedRoundId,
     const int32 ExpectedTurnId, const EMahjongTablePhase ExpectedPhase)
 {
+    // 定时器携带版本令牌，旧回调不能影响已经推进的新阶段。
     if (PublicState.RoundId != ExpectedRoundId || PublicState.TurnId != ExpectedTurnId
         || PublicState.Phase != ExpectedPhase)
         return Fail(TEXT("Timeout token is stale"));
@@ -226,6 +237,7 @@ FMahjongActionResult UMahjongTableEngine::ResolveActionTimeout(const int32 Expec
         {
             return LastDrawnTile.IsValid() && Tile.UniqueId == LastDrawnTile.UniqueId;
         });
+        // 默认优先打出刚摸的牌，找不到时稳定回退到排序后的最后一张。
         if (!AutoTile) AutoTile = &Hands[SeatIndex].Tiles.Last();
 
         FMahjongActionRequest Request;
@@ -336,6 +348,7 @@ bool UMahjongTableEngine::SetHandForServerTest(const int32 SeatIndex, const FMah
 
 bool UMahjongTableEngine::ValidateRequestCommon(const int32 SeatIndex, const FMahjongActionRequest& Request, FString& OutError)
 {
+    // 三项检查共同阻断非法座位、过期状态和重复/倒退序号。
     if (!Hands.IsValidIndex(SeatIndex)) { OutError = TEXT("座位无效"); return false; }
     if (Request.RoundId != PublicState.RoundId || Request.TurnId != PublicState.TurnId)
     { OutError = TEXT("请求所属牌局或回合已过期"); return false; }
@@ -346,6 +359,7 @@ bool UMahjongTableEngine::ValidateRequestCommon(const int32 SeatIndex, const FMa
 
 void UMahjongTableEngine::OpenReactionWindow(const FMahjongTile& Discard, const int32 DiscardSeat)
 {
+    // 权威服务器逐家重新计算胡、明杠和碰资格。
     bQiangGangWindow = false;
     AvailableActionsBySeat.Reset();
     SubmittedReactions.Reset();
@@ -363,12 +377,14 @@ void UMahjongTableEngine::OpenReactionWindow(const FMahjongTile& Discard, const 
             Actions.Add(BuildReactionAction(Seat, EMahjongActionType::Peng, Discard));
         if (!Actions.IsEmpty()) AvailableActionsBySeat.Add(Seat, MoveTemp(Actions));
     }
+    // 无人可响应时不创建空等待窗口，直接轮转摸牌。
     if (AvailableActionsBySeat.IsEmpty()) AdvanceTurnAndDraw();
     else PublicState.Phase = EMahjongTablePhase::WaitingForAction;
 }
 
 void UMahjongTableEngine::BeginBuGang(const int32 SeatIndex, const FMahjongTile& Tile)
 {
+    // 补杠先保留原状态并开启抢杠胡窗口，确认无人胡后才真正修改副露。
     bQiangGangWindow = true;
     PendingBuGangSeat = SeatIndex;
     PendingBuGangTileId = Tile.UniqueId;
@@ -404,6 +420,7 @@ void UMahjongTableEngine::BeginBuGang(const int32 SeatIndex, const FMahjongTile&
 
 void UMahjongTableEngine::CompleteBuGang()
 {
+    // 再次检查手牌与碰副露仍存在，防止等待窗口期间状态漂移。
     if (!Hands.IsValidIndex(PendingBuGangSeat)) return;
     FMahjongHand& Hand = Hands[PendingBuGangSeat];
     const int32 TileIndex = Hand.Tiles.IndexOfByPredicate([this](const FMahjongTile& Tile)
@@ -464,6 +481,7 @@ void UMahjongTableEngine::CompleteBuGang()
 
 void UMahjongTableEngine::ResolveQiangGangReactions(const TArray<int32>& HuSeats)
 {
+    // 无人抢杠则提交补杠；有人胡则按距杠家顺序决定一炮多响或最近赢家。
     if (HuSeats.IsEmpty())
     {
         CompleteBuGang();
@@ -491,6 +509,7 @@ void UMahjongTableEngine::ResolveQiangGangReactions(const TArray<int32>& HuSeats
 
 void UMahjongTableEngine::ResolveSubmittedReactions()
 {
+    // 胡优先于杠/碰；其余动作再按稳定优先级和座位距离选出唯一执行者。
     TArray<int32> HuSeats;
     for (const TPair<int32, FMahjongActionRequest>& Pair : SubmittedReactions)
     {
@@ -517,6 +536,7 @@ void UMahjongTableEngine::ResolveSubmittedReactions()
 
 void UMahjongTableEngine::ResolveHuReactions(const TArray<int32>& HuSeats)
 {
+    // 一炮多响关闭时，仅保留出牌者下家方向最近的胡牌者。
     PublicState.WinningSeats.Reset();
     if (LockedRules.Config.bEnableYiPaoDuoXiang)
     {
@@ -540,6 +560,7 @@ void UMahjongTableEngine::ResolveHuReactions(const TArray<int32>& HuSeats)
 
 void UMahjongTableEngine::ApplyClaim(const int32 SeatIndex, const EMahjongActionType Type)
 {
+    // 从手牌移除真实牌，再把完整副露发布到公共状态并标记弃牌已被认领。
     if (Type == EMahjongActionType::Hu)
     {
         PublicState.WinningSeats = { SeatIndex };
@@ -593,6 +614,7 @@ void UMahjongTableEngine::ApplyClaim(const int32 SeatIndex, const EMahjongAction
 
 void UMahjongTableEngine::AdvanceTurnAndDraw()
 {
+    // 响应窗口结束后按顺时针推进；牌墙耗尽立即进入流局结算。
     AvailableActionsBySeat.Reset();
     SubmittedReactions.Reset();
     PublicState.CurrentTurnSeat = (LastDiscardSeat + 1) % 4;
@@ -617,6 +639,7 @@ void UMahjongTableEngine::AdvanceTurnAndDraw()
 
 void UMahjongTableEngine::RebuildTurnActions()
 {
+    // 当前回合候选列表仅包含自摸、暗杠和补杠；普通出牌由手牌 UniqueId 验证。
     AvailableActionsBySeat.Reset();
     if (PublicState.Phase != EMahjongTablePhase::PlayerTurn || !Hands.IsValidIndex(PublicState.CurrentTurnSeat)) return;
 
@@ -658,6 +681,7 @@ void UMahjongTableEngine::RebuildTurnActions()
 void UMahjongTableEngine::SettleWin(const TArray<int32>& WinningSeats, const int32 LoserSeat,
     const bool bSelfDraw, const FMahjongTile& WinningTile)
 {
+    // 结算时由服务端从剩余牌墙翻鸡，并把所有分项一次性冻结进结果。
     FMahjongTile FlippedJiTile;
     if (DeckManager && DeckManager->DrawTile(FlippedJiTile))
     {
@@ -682,6 +706,7 @@ void UMahjongTableEngine::SettleWin(const TArray<int32>& WinningSeats, const int
 
 void UMahjongTableEngine::SettleDrawGame()
 {
+    // 流局仍保留已发生的鸡事件和杠/特殊鸡分，便于完整复核。
     SettlementResult = FMahjongSettlementResult();
     SettlementResult.bDrawGame = true;
     SettlementResult.JiEvents = PublicState.JiEvents;

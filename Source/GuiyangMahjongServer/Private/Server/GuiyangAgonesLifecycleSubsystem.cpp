@@ -7,6 +7,7 @@
 
 namespace
 {
+    /** 从 Agones Annotation 读取并规范化必填分配字段。 */
     bool ReadAnnotation(const FGameServerResponse& Response, const TCHAR* Key, FString& OutValue)
     {
         const FString* Value = Response.ObjectMeta.Annotations.Find(Key);
@@ -18,6 +19,7 @@ namespace
 
 bool UGuiyangAgonesLifecycleSubsystem::ShouldCreateSubsystem(UObject* Outer) const
 {
+    // 客户端和 Listen Server 完全不创建该子系统，避免引入无意义的 Sidecar 通信。
     return IsRunningDedicatedServer() && Super::ShouldCreateSubsystem(Outer);
 }
 
@@ -29,6 +31,7 @@ bool UGuiyangAgonesLifecycleSubsystem::IsAgonesRequested(
     {
         FParse::Value(CommandLine, TEXT("MahjongOrchestrator="), Orchestrator);
     }
+    // 命令行优先于环境变量，便于单个进程覆盖节点级默认配置。
     if (Orchestrator.IsEmpty())
     {
         Orchestrator = EnvironmentValue;
@@ -46,6 +49,7 @@ bool UGuiyangAgonesLifecycleSubsystem::TryBuildLaunchConfig(
 {
     OutConfig = {};
     OutError.Reset();
+    // 只有 Allocated 状态包含可供玩家使用的稳定房间分配信息。
     if (!Response.Status.State.Equals(TEXT("Allocated"), ESearchCase::IgnoreCase))
     {
         OutError = TEXT("AGONES_GAMESERVER_NOT_ALLOCATED");
@@ -62,6 +66,7 @@ bool UGuiyangAgonesLifecycleSubsystem::TryBuildLaunchConfig(
         return false;
     }
     OutConfig.AdvertisedIp = Response.Status.Address.TrimStartAndEnd();
+    // 优先使用名为 game 的端口，兼容旧 Fleet 时回退到第一个端口。
     const FPort* GamePort = Response.Status.Ports.FindByPredicate(
         [](const FPort& Port) { return Port.Name.Equals(TEXT("game"), ESearchCase::IgnoreCase); });
     if (!GamePort && !Response.Status.Ports.IsEmpty()) GamePort = &Response.Status.Ports[0];
@@ -89,6 +94,7 @@ void UGuiyangAgonesLifecycleSubsystem::Initialize(FSubsystemCollectionBase& Coll
         return;
     }
 
+    // 显式初始化 SDK 依赖后再注册回调，避免连接事件早于本对象准备完成。
     Collection.InitializeDependency<UAgonesSubsystem>();
     Agones = GetGameInstance() ? GetGameInstance()->GetSubsystem<UAgonesSubsystem>() : nullptr;
     if (!Agones)
@@ -102,9 +108,8 @@ void UGuiyangAgonesLifecycleSubsystem::Initialize(FSubsystemCollectionBase& Coll
     FGameServerDelegate WatchDelegate;
     WatchDelegate.BindDynamic(this, &ThisClass::HandleGameServerUpdated);
     Agones->WatchGameServer(WatchDelegate);
-    // The SDK subsystem exists in every dedicated-server process. Start its health timer only
-    // after this project has explicitly selected Agones, otherwise local Allocator servers would
-    // continuously call a sidecar that is intentionally absent.
+    // SDK 子系统存在于所有独立服务器进程中，但只在明确选择 Agones 后启动健康上报；
+    // 否则本地 Allocator 服务器会不断访问本来就不存在的 Sidecar。
     Agones->HealthPing(Agones->HealthRateSeconds);
     Agones->Connect();
     UE_LOG(LogMahjongServer, Display, TEXT("Agones lifecycle connection started"));
@@ -116,6 +121,7 @@ void UGuiyangAgonesLifecycleSubsystem::Deinitialize()
     {
         Agones->ConnectedDelegate.RemoveDynamic(this, &ThisClass::HandleConnected);
     }
+    // Deinitialize 可被多次触发，RequestShutdown 内部状态位保证只发送一次。
     RequestShutdown();
     Agones = nullptr;
     bActive = false;
@@ -130,6 +136,7 @@ void UGuiyangAgonesLifecycleSubsystem::HandleConnected(const FGameServerResponse
     bReady = true;
     UE_LOG(LogMahjongServer, Display, TEXT("Agones GameServer ready Name=%s State=%s Address=%s"),
         *Response.ObjectMeta.Name, *Response.Status.State, *Response.Status.Address);
+    // 首次连接响应也可能已经是 Allocated，复用统一更新处理。
     HandleGameServerUpdated(Response);
 
     FSetPlayerCapacityDelegate Success;
@@ -141,6 +148,7 @@ void UGuiyangAgonesLifecycleSubsystem::HandleConnected(const FGameServerResponse
 
 void UGuiyangAgonesLifecycleSubsystem::HandleGameServerUpdated(const FGameServerResponse& Response)
 {
+    // 分配配置一旦接受即不可变，忽略后续 Watch 重复事件。
     if (AllocationConfig.IsSet()
         || !Response.Status.State.Equals(TEXT("Allocated"), ESearchCase::IgnoreCase)) return;
     FGuiyangGameServerLaunchConfig Config;
@@ -159,6 +167,7 @@ void UGuiyangAgonesLifecycleSubsystem::HandleGameServerUpdated(const FGameServer
     UE_LOG(LogMahjongServer, Display,
         TEXT("Agones allocation accepted InstanceId=%s RoomId=%s Address=%s:%d"),
         *Config.ServerInstanceId, *Config.RoomId, *Config.AdvertisedIp, Config.Port);
+    // 只有完整校验后才通知 GameMode 创建权威房间。
     AllocationReady.Broadcast(AllocationConfig.GetValue());
 }
 
@@ -192,6 +201,7 @@ void UGuiyangAgonesLifecycleSubsystem::NotifyPlayerDisconnected(const FString& P
 
 void UGuiyangAgonesLifecycleSubsystem::RequestShutdown()
 {
+    // 关闭请求必须幂等，避免 Sidecar 收到重复 Shutdown。
     if (!bActive || bShutdownRequested || !Agones) return;
     bShutdownRequested = true;
     FShutdownDelegate Success;

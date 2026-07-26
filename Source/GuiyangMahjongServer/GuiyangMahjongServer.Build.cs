@@ -1,5 +1,6 @@
 using UnrealBuildTool;
 
+/// <summary>配置独立服务器房间、调度和控制面通信模块。</summary>
 public class GuiyangMahjongServer : ModuleRules
 {
     public GuiyangMahjongServer(ReadOnlyTargetRules Target) : base(Target)

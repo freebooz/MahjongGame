@@ -5,11 +5,9 @@
 #include "GuiyangMahjongClientGameMode.generated.h"
 
 /**
- * Lightweight standalone bootstrap GameMode used only by client targets.
- *
- * The engine Entry map has no project-specific WorldSettings override, so it
- * needs this class to create the shared Mahjong PlayerController and start the
- * client UI bridge. Dedicated servers use their own server-only GameMode.
+ * 仅供客户端目标使用的轻量启动 GameMode。
+ * 引擎 Entry 关卡没有项目专用 WorldSettings，因此由本类创建共享 PlayerController
+ * 并启动客户端 UI 桥接；独立服务器使用自己的服务端 GameMode。
  */
 UCLASS(Config=Game)
 class GUIYANGMAHJONGCLIENT_API AGuiyangMahjongClientGameMode final : public AGameModeBase
@@ -17,5 +15,6 @@ class GUIYANGMAHJONGCLIENT_API AGuiyangMahjongClientGameMode final : public AGam
     GENERATED_BODY()
 
 public:
+    /** 配置默认控制器和客户端启动参数。 */
     AGuiyangMahjongClientGameMode();
 };

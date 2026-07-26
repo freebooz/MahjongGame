@@ -64,6 +64,7 @@ FString FGuiyangLoginProfile::GetProviderDisplayName() const
 
 void UGuiyangLoginSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
+    // 从本地存档恢复匿名身份与自动登录偏好，但不把过期远程会话视为有效登录。
     Super::Initialize(Collection);
     if (UGameplayStatics::DoesSaveGameExist(SaveSlotName, 0))
     {
@@ -121,6 +122,7 @@ void UGuiyangLoginSubsystem::Deinitialize()
 
 void UGuiyangLoginSubsystem::TryAutoLogin()
 {
+    // 自动登录只复用安全存档中的身份提示，远程模式仍需向 Auth 换取新会话。
     if (LoginState != EGuiyangLoginState::LoggedOut || !LoginSettings || !LoginSettings->bAutoLogin)
     {
         return;
@@ -157,6 +159,7 @@ void UGuiyangLoginSubsystem::LoginWithWechat()
 
 void UGuiyangLoginSubsystem::BeginLogin(const EGuiyangLoginProvider Provider, const FString& ExistingPlayerId, const FString& ExistingName)
 {
+    // 状态先切到 LoggingIn 并广播，防止 UI 重复点击产生并发登录。
     if (LoginState == EGuiyangLoginState::LoggingIn)
     {
         FailLogin(TEXT("登录请求正在处理中，请勿重复点击"));
@@ -201,6 +204,7 @@ void UGuiyangLoginSubsystem::BeginLogin(const EGuiyangLoginProvider Provider, co
 
 void UGuiyangLoginSubsystem::CompleteLogin(const EGuiyangLoginProvider Provider, FString PlayerId, FString DisplayName)
 {
+    // 本地开发登录生成稳定访客身份，并只持久化允许自动恢复的非敏感资料。
     if (LoginState != EGuiyangLoginState::LoggingIn)
     {
         return;
@@ -277,6 +281,7 @@ void UGuiyangLoginSubsystem::CompleteRemoteRefresh(
 bool UGuiyangLoginSubsystem::ApplyRemoteSessionResponse(
     const FHttpResponsePtr& Response, const bool bInitialLogin)
 {
+    // 远程响应必须同时包含玩家资料、会话令牌和合理过期时间。
     TSharedPtr<FJsonObject> Json;
     const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(Response->GetContentAsString());
     if (!FJsonSerializer::Deserialize(Reader, Json) || !Json.IsValid()) return false;
@@ -323,6 +328,7 @@ bool UGuiyangLoginSubsystem::ApplyRemoteSessionResponse(
 
 void UGuiyangLoginSubsystem::ScheduleRemoteRefresh()
 {
+    // 在过期前预留刷新窗口；旧定时器在每次新会话到达时被替换。
     if (UWorld* World = GetWorld())
     {
         const double SecondsUntilRefresh = FMath::Max(
@@ -345,6 +351,7 @@ void UGuiyangLoginSubsystem::FailLogin(const FString& ChineseReason)
 
 void UGuiyangLoginSubsystem::Logout()
 {
+    // 先清除内存令牌和刷新计时器，再更新存档与 UI 状态。
     if (UWorld* World = GetWorld())
     {
         World->GetTimerManager().ClearTimer(PendingLoginTimer);
@@ -381,6 +388,7 @@ void UGuiyangLoginSubsystem::Logout()
 
 void UGuiyangLoginSubsystem::ExpireSession(const FString& ChineseReason)
 {
+    // 网络层发现 401/会话过期时统一进入 Expired，要求用户重新登录。
     SessionToken.Reset();
     RefreshToken.Reset();
     SessionExpireAtUtc = FDateTime();

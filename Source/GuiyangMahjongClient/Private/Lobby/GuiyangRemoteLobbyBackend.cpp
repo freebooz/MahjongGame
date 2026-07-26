@@ -476,6 +476,7 @@ namespace GuiyangRemoteLobbyPrivate
 
 bool FGuiyangRemoteLobbyCodec::NormalizeBaseUrl(const FString& Value, FString& OutBaseUrl)
 {
+    // 仅允许 HTTP(S) 根地址并移除尾斜杠，禁止把用户输入直接拼成任意协议 URL。
     OutBaseUrl = Value.TrimStartAndEnd();
     while (OutBaseUrl.EndsWith(TEXT("/"))) OutBaseUrl.LeftChopInline(1);
     const bool bHttps = OutBaseUrl.StartsWith(TEXT("https://"), ESearchCase::IgnoreCase);
@@ -498,6 +499,7 @@ bool FGuiyangRemoteLobbyCodec::NormalizeBaseUrl(const FString& Value, FString& O
 
 FString FGuiyangRemoteLobbyCodec::SerializeCreateRoom(const FMahjongCreateRoomRequest& Request)
 {
+    // 密码只写入本次 TLS 请求体，不进入日志、Bootstrap 或本地缓存。
     const FMahjongRuleConfig& Config = Request.Rules;
     const TSharedRef<FJsonObject> Rules = MakeShared<FJsonObject>();
     Rules->SetStringField(TEXT("ruleId"), Config.RuleId.ToString());
@@ -556,6 +558,7 @@ FString FGuiyangRemoteLobbyCodec::SerializeReconnectRouteRequest(
 
 bool FGuiyangRemoteLobbyCodec::TryParseBootstrap(const FString& Json, FGuiyangLobbyBootstrap& OutBootstrap)
 {
+    // 严格解析登录后大厅 Bootstrap，缺少稳定字段时整体拒绝。
     OutBootstrap = FGuiyangLobbyBootstrap();
     TSharedPtr<FJsonObject> Object;
     const TArray<TSharedPtr<FJsonValue>>* Announcements = nullptr;
@@ -582,6 +585,7 @@ bool FGuiyangRemoteLobbyCodec::TryParseBootstrap(const FString& Json, FGuiyangLo
 bool FGuiyangRemoteLobbyCodec::TryParseRoute(const FString& Json, const FString& ExpectedPlayerId,
     FGuiyangGameServerRoute& OutRoute)
 {
+    // 路由必须绑定当前玩家，并包含有效地址、端口、房间/比赛 ID 和一次性票据。
     OutRoute = FGuiyangGameServerRoute();
     TSharedPtr<FJsonObject> Object;
     FString ExpireAt;

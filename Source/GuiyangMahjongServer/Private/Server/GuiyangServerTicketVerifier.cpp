@@ -15,6 +15,7 @@ THIRD_PARTY_INCLUDES_END
 
 namespace
 {
+    /** 将 JWT 风格的 Base64URL 字段还原为标准 Base64 后解码。 */
     bool Base64UrlDecode(const FString& Value, TArray<uint8>& OutBytes)
     {
         FString Normalized = Value;
@@ -24,6 +25,7 @@ namespace
         return FBase64::Decode(Normalized, OutBytes);
     }
 
+    /** 使用 OpenSSL 计算 32 字节 HMAC-SHA256，不在日志中暴露密钥或原始票据。 */
     bool ComputeHmacSha256(const FString& Key, const FString& Data, TArray<uint8>& OutDigest)
     {
         FTCHARToUTF8 KeyUtf8(*Key);
@@ -42,6 +44,7 @@ namespace
         return true;
     }
 
+    /** 常量时间比较签名，避免普通早退比较泄露正确前缀长度。 */
     bool ConstantTimeEquals(const TArray<uint8>& Left, const TArray<uint8>& Right)
     {
         uint32 Difference = static_cast<uint32>(Left.Num() ^ Right.Num());
@@ -67,6 +70,7 @@ FGuiyangJoinTicketValidator::FGuiyangJoinTicketValidator(const FGuiyangGameServe
 bool FGuiyangJoinTicketValidator::ValidateAndConsume(const FString& Ticket, const FString& SuppliedPlayerId,
     const int64 NowUnixSeconds, FGuiyangJoinTicketClaims& OutClaims, FString& OutError)
 {
+    // 先限制输入尺寸，避免异常大票据消耗解析与加密资源。
     if (Ticket.IsEmpty() || Ticket.Len() > 4096 || SuppliedPlayerId.IsEmpty())
     {
         OutError = TEXT("JOIN_TICKET_INVALID");
@@ -84,6 +88,7 @@ bool FGuiyangJoinTicketValidator::ValidateAndConsume(const FString& Ticket, cons
 
     TArray<uint8> SuppliedSignature;
     TArray<uint8> ExpectedSignature;
+    // 必须先验证签名，再信任并解析负载中的任何声明。
     if (!Base64UrlDecode(EncodedSignature, SuppliedSignature)
         || !ComputeHmacSha256(SigningKey, EncodedPayload, ExpectedSignature)
         || !ConstantTimeEquals(SuppliedSignature, ExpectedSignature))
@@ -114,6 +119,7 @@ bool FGuiyangJoinTicketValidator::ValidateAndConsume(const FString& Ticket, cons
         return false;
     }
 
+    // 票据必须同时绑定玩家、房间、比赛和本次服务器实例，不能跨服复用。
     if (OutClaims.PlayerId != SuppliedPlayerId
         || OutClaims.RoomId != ExpectedRoomId
         || OutClaims.MatchId != ExpectedMatchId
@@ -122,6 +128,7 @@ bool FGuiyangJoinTicketValidator::ValidateAndConsume(const FString& Ticket, cons
         OutError = TEXT("JOIN_TICKET_SCOPE_MISMATCH");
         return false;
     }
+    // 除了过期检查，也拒绝有效期异常长的票据，限制密钥泄露后的攻击窗口。
     if (OutClaims.ExpiresAtUnixSeconds <= NowUnixSeconds
         || OutClaims.ExpiresAtUnixSeconds > NowUnixSeconds + 120)
     {
@@ -134,6 +141,7 @@ bool FGuiyangJoinTicketValidator::ValidateAndConsume(const FString& Ticket, cons
         return false;
     }
 
+    // 消费前清理已过期 Nonce，使缓存大小随活跃票据数量而非进程时长增长。
     for (auto It = UsedNonces.CreateIterator(); It; ++It)
     {
         if (It.Value() <= NowUnixSeconds) It.RemoveCurrent();
@@ -141,4 +149,3 @@ bool FGuiyangJoinTicketValidator::ValidateAndConsume(const FString& Ticket, cons
     UsedNonces.Add(OutClaims.Nonce, OutClaims.ExpiresAtUnixSeconds);
     return true;
 }
-

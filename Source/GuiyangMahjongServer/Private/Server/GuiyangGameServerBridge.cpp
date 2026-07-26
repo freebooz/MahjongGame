@@ -21,11 +21,13 @@
 
 namespace GuiyangGameServerPrivate
 {
+    /** 读取并拒绝空白命令行值，避免“存在但不可用”的启动配置。 */
     bool ReadRequiredValue(const TCHAR* CommandLine, const TCHAR* Match, FString& OutValue)
     {
         return FParse::Value(CommandLine, Match, OutValue) && !OutValue.TrimStartAndEnd().IsEmpty();
     }
 
+    /** 统一使用紧凑 JSON 作为控制面 HTTP 请求体。 */
     FString SerializeJson(const TSharedRef<FJsonObject>& Object)
     {
         FString Body;
@@ -39,6 +41,7 @@ bool FGuiyangGameServerLaunchConfig::TryParse(const TCHAR* CommandLine, const FS
     const FString& RegistrationCredential, const FString& MatchResultOutboxPath,
     FGuiyangGameServerLaunchConfig& OutConfig, FString& OutError)
 {
+    // 解析前重置输出；只有全部验证通过后调用方才可使用该配置。
     OutConfig = FGuiyangGameServerLaunchConfig();
     if (!FParse::Param(CommandLine, TEXT("MahjongManagedGameServer")))
     {
@@ -61,6 +64,7 @@ bool FGuiyangGameServerLaunchConfig::TryParse(const TCHAR* CommandLine, const FS
         return false;
     }
 
+    // 规范化来自编排器的文本，URL 去除尾斜杠以便安全拼接固定端点。
     OutConfig.RoomId.TrimStartAndEndInline();
     OutConfig.MatchId.TrimStartAndEndInline();
     OutConfig.ServerInstanceId.TrimStartAndEndInline();
@@ -73,6 +77,7 @@ bool FGuiyangGameServerLaunchConfig::TryParse(const TCHAR* CommandLine, const FS
     OutConfig.JoinTicketSigningKey = SigningKey;
     OutConfig.MatchResultOutboxPath = MatchResultOutboxPath.TrimStartAndEnd();
     FPaths::NormalizeFilename(OutConfig.MatchResultOutboxPath);
+    // 严格校验 GUID、网络端点、凭证强度及每实例唯一 Outbox 路径。
     FGuid ParsedGuid;
     if (!FGuid::Parse(OutConfig.RoomId, ParsedGuid)
         || !FGuid::Parse(OutConfig.MatchId, ParsedGuid)
@@ -105,6 +110,7 @@ bool UGuiyangGameServerBridge::Initialize(
         OutError = TEXT("Managed bridge requires a Dedicated Server world");
         return false;
     }
+    // 在第一次网络请求前建立全部不可变依赖。
     World = InWorld;
     Config = InConfig;
     TicketValidator = MakeUnique<FGuiyangJoinTicketValidator>(Config);
@@ -114,6 +120,7 @@ bool UGuiyangGameServerBridge::Initialize(
 
 void UGuiyangGameServerBridge::Shutdown()
 {
+    // 先置关闭标志，使已在途 HTTP 回调只做安全早退。
     bShuttingDown = true;
     bRegistered = false;
     HeartbeatCredential.Reset();
@@ -135,6 +142,7 @@ void UGuiyangGameServerBridge::BeginDestroy()
 bool UGuiyangGameServerBridge::ValidateAndConsumeJoinTicket(const FString& Ticket, const FString& PlayerId,
     FGuiyangJoinTicketClaims& OutClaims, FString& OutError)
 {
+    // 未向控制面注册完成前不接受任何玩家票据。
     if (!bRegistered || !TicketValidator)
     {
         OutError = TEXT("GAMESERVER_NOT_REGISTERED");
@@ -157,6 +165,7 @@ void UGuiyangGameServerBridge::QueueFinalSettlement(
             *Config.ServerInstanceId, *Result.MatchId, ResultSequence);
         return;
     }
+    // 进程内同一时刻只允许一个待确认结算；相同序号视为幂等重试。
     if (!PendingMatchResultBody.IsEmpty())
     {
         if (PendingMatchId == Result.MatchId && PendingResultSequence == ResultSequence) return;
@@ -171,6 +180,7 @@ void UGuiyangGameServerBridge::QueueFinalSettlement(
     Body->SetStringField(TEXT("serverInstanceId"), Config.ServerInstanceId);
     Body->SetNumberField(TEXT("resultSequence"), static_cast<double>(ResultSequence));
     Body->SetNumberField(TEXT("completedRounds"), Result.CompletedRounds);
+    // 在落盘前验证每名玩家及座位唯一性，防止无效结果进入可靠 Outbox。
     TArray<TSharedPtr<FJsonValue>> Players;
     TSet<FString> PlayerIds;
     for (const FMahjongFinalPlayerResult& Player : Result.Players)
@@ -193,6 +203,7 @@ void UGuiyangGameServerBridge::QueueFinalSettlement(
         Players.Add(MakeShared<FJsonValueObject>(PlayerObject));
     }
     Body->SetArrayField(TEXT("players"), Players);
+    // 必须先持久化再发送，确保进程在 HTTP 请求期间崩溃也不会丢失结算。
     if (!PersistPendingMatchResult(Body))
     {
         UE_LOG(LogMahjongServer, Error,
@@ -218,6 +229,7 @@ void UGuiyangGameServerBridge::SendRegistration()
     Body->SetStringField(TEXT("buildVersion"), Config.BuildVersion);
     Body->SetStringField(TEXT("registrationCredential"), Config.RegistrationCredential);
 
+    // 注册凭证放在请求体中，仅发送到受信任的 Lobby 内网端点。
     const TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = FHttpModule::Get().CreateRequest();
     Request->SetURL(Config.LobbyInternalUrl + TEXT("/internal/gameservers/register"));
     Request->SetVerb(TEXT("POST"));
@@ -237,6 +249,7 @@ void UGuiyangGameServerBridge::HandleRegistrationResponse(
     const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(
         Response.IsValid() ? Response->GetContentAsString() : FString());
     bool bAccepted = false;
+    // 同时校验 HTTP、JSON、接受标志及两类短期凭证，任一步失败都不开放玩家连接。
     if (!bSucceeded || !Response.IsValid() || Response->GetResponseCode() < 200
         || Response->GetResponseCode() >= 300 || !FJsonSerializer::Deserialize(Reader, Body)
         || !Body.IsValid() || !Body->TryGetBoolField(TEXT("accepted"), bAccepted) || !bAccepted
@@ -256,6 +269,7 @@ void UGuiyangGameServerBridge::HandleRegistrationResponse(
     FString BootstrapError;
     AGuiyangMahjongGameMode* GameMode = World.IsValid()
         ? World->GetAuthGameMode<AGuiyangMahjongGameMode>() : nullptr;
+    // 控制面 Bootstrap 必须与启动作用域一致，并成功初始化权威 GameMode。
     if (!Body->TryGetObjectField(TEXT("roomBootstrap"), BootstrapPointer)
         || !BootstrapPointer
         || !FGuiyangManagedRoomDefinition::TryParse(*BootstrapPointer,
@@ -271,6 +285,7 @@ void UGuiyangGameServerBridge::HandleRegistrationResponse(
         return;
     }
 
+    // 一次性注册凭证使用后立即从内存清除。
     Config.RegistrationCredential.Reset();
     HeartbeatIntervalSeconds = FMath::Clamp(HeartbeatIntervalSeconds, 1, 60);
     bRegistered = true;
@@ -292,6 +307,7 @@ void UGuiyangGameServerBridge::SendHeartbeat()
     int32 RoundId = 0;
     const FString Lifecycle = BuildHeartbeatLifecycle(RoundId);
     int32 ConnectedPlayers = 0;
+    // 以服务器当前 PlayerController 数量作为心跳在线人数，不信任客户端上报。
     for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
     {
         ConnectedPlayers += It->IsValid() ? 1 : 0;
@@ -332,6 +348,7 @@ void UGuiyangGameServerBridge::HandleHeartbeatResponse(
 
 void UGuiyangGameServerBridge::SendPendingMatchResult()
 {
+    // 飞行标志避免定时器与回调并发发送同一结算。
     if (bShuttingDown || !bRegistered || bMatchResultRequestInFlight
         || PendingMatchResultBody.IsEmpty() || ResultCredential.Len() < 32)
         return;
@@ -343,6 +360,7 @@ void UGuiyangGameServerBridge::SendPendingMatchResult()
     Request->SetHeader(TEXT("Content-Type"), TEXT("application/json"));
     Request->SetHeader(TEXT("Authorization"), TEXT("Bearer ") + ResultCredential);
     Request->SetHeader(TEXT("X-Request-Id"), FGuid::NewGuid().ToString(EGuidFormats::DigitsWithHyphensLower));
+    // MatchId 与单调序号共同组成跨进程幂等键。
     Request->SetHeader(TEXT("Idempotency-Key"),
         FString::Printf(TEXT("%s:%lld"), *PendingMatchId, PendingResultSequence));
     Request->SetTimeout(10.0f);
@@ -368,6 +386,7 @@ void UGuiyangGameServerBridge::HandleMatchResultResponse(
     bool bAccepted = false;
     int64 AckSequence = 0;
     FString AckMatchId;
+    // 仅当控制面回执的比赛和序号与当前待发送项完全一致时删除 Outbox。
     if (bSucceeded && Response.IsValid() && Response->GetResponseCode() >= 200
         && Response->GetResponseCode() < 300 && FJsonSerializer::Deserialize(Reader, Body)
         && Body.IsValid() && Body->TryGetBoolField(TEXT("accepted"), bAccepted) && bAccepted
@@ -396,6 +415,7 @@ void UGuiyangGameServerBridge::ScheduleMatchResultRetry()
 {
     if (bShuttingDown || !World.IsValid() || PendingMatchResultBody.IsEmpty()) return;
     ++MatchResultAttempt;
+    // 指数退避上限 30 秒，既避免故障时压垮 Lobby，也保证最终可恢复。
     const float DelaySeconds = FMath::Min(30.0f,
         static_cast<float>(1 << FMath::Min(MatchResultAttempt - 1, 5)));
     World->GetTimerManager().SetTimer(
@@ -405,12 +425,14 @@ void UGuiyangGameServerBridge::ScheduleMatchResultRetry()
 bool UGuiyangGameServerBridge::PersistPendingMatchResult(const TSharedRef<FJsonObject>& Report) const
 {
     IPlatformFile& PlatformFile = FPlatformFileManager::Get().GetPlatformFile();
+    // 已存在文件代表前一份结算尚未确认，禁止静默覆盖。
     if (PlatformFile.FileExists(*Config.MatchResultOutboxPath)) return false;
 
     const TSharedRef<FJsonObject> Envelope = MakeShared<FJsonObject>();
     Envelope->SetNumberField(TEXT("version"), 1);
     Envelope->SetStringField(TEXT("matchId"), Config.MatchId);
     Envelope->SetObjectField(TEXT("report"), Report);
+    // 先写临时文件再原子移动，避免宕机留下半截 JSON。
     const FString TemporaryPath = Config.MatchResultOutboxPath + TEXT(".tmp");
     PlatformFile.DeleteFile(*TemporaryPath);
     if (!FFileHelper::SaveStringToFile(
@@ -446,6 +468,7 @@ FString UGuiyangGameServerBridge::BuildHeartbeatLifecycle(int32& OutRoundId) con
         ? World->GetGameState<AGuiyangMahjongGameState>() : nullptr;
     if (!State) return TEXT("Waiting");
     OutRoundId = State->PublicTableState.RoundId;
+    // 只向控制面暴露稳定的跨版本生命周期字符串。
     switch (State->RoomState.Lifecycle)
     {
     case EMahjongRoomLifecycle::Playing: return TEXT("Playing");

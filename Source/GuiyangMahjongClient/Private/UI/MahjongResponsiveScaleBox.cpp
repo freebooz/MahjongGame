@@ -5,9 +5,8 @@
 
 EStretch::Type UMahjongResponsiveScaleBox::ResolveStretchForViewport(const FIntPoint ViewportSize)
 {
-    // Foreground controls must keep the authored 16:9 geometry on phones, tablets and desktop.
-    // Full-screen coverage is handled by the independent background layer; stretching the
-    // foreground changes hit targets and pushes edge controls outside the visible viewport.
+    // 前景控件在手机、平板和桌面端都保持设计稿 16:9 几何。
+    // 全屏覆盖交给独立背景层；拉伸前景会改变点击区域并把边缘按钮挤出屏幕。
     return EStretch::ScaleToFit;
 }
 
@@ -19,6 +18,7 @@ void UMahjongResponsiveScaleBox::SynchronizeProperties()
     {
         GEngine->GameViewport->GetViewportSize(ViewportSize);
     }
+    // Android 运行时以真实物理视口重新同步，兼容刘海屏和横竖屏切换。
     if (ViewportSize.X > 0.0f && ViewportSize.Y > 0.0f)
     {
         SetStretch(ResolveStretchForViewport(FIntPoint(
