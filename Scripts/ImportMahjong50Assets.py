@@ -21,12 +21,7 @@ INSTANCE_DEST = f"{DEST_ROOT}/MaterialInstances"
 TILE_DEST = f"{DEST_ROOT}/Tiles"
 
 BASE_MESH_PATH = f"{MESH_DEST}/SM_Mahjong50"
-<<<<<<< HEAD
 UNIFIED_MATERIAL_PATH = f"{MATERIAL_DEST}/M_Mahjong50_TileUnified"
-=======
-BODY_MATERIAL_PATH = f"{MATERIAL_DEST}/M_Mahjong50_BodyBlend"
-FACE_MATERIAL_PATH = f"{MATERIAL_DEST}/M_Mahjong50_FaceAtlas_EngravedV3"
->>>>>>> 786a414 (WIP: Save local changes before merging)
 
 
 def log(message: str) -> None:
@@ -170,7 +165,6 @@ def configure_texture(texture, name: str) -> None:
     )
     if is_face_atlas:
         # Atlas cells occupy only part of the 8K texture. Preserve thin strokes at oblique angles.
-<<<<<<< HEAD
         sharpen = getattr(
             unreal.TextureMipGenSettings,
             "TMGS_SHARPEN6",
@@ -186,12 +180,6 @@ def configure_texture(texture, name: str) -> None:
             if clamp is not None:
                 set_prop(texture, "address_x", clamp)
                 set_prop(texture, "address_y", clamp)
-=======
-        set_prop(texture, "mip_gen_settings", unreal.TextureMipGenSettings.TMGS_SHARPEN8)
-        # UE 5.8 selects anisotropy through the texture group and r.MaxAnisotropy.
-        set_prop(texture, "filter", unreal.TextureFilter.TF_DEFAULT)
-        set_prop(texture, "lod_bias", -1)
->>>>>>> 786a414 (WIP: Save local changes before merging)
     post_edit_change = getattr(texture, "post_edit_change", None)
     if post_edit_change:
         post_edit_change()
@@ -207,28 +195,11 @@ def load_texture(name: str):
 
 def create_material(name: str):
     path = f"{MATERIAL_DEST}/{name}"
-<<<<<<< HEAD
     material = unreal.AssetToolsHelpers.get_asset_tools().create_asset(
         name, MATERIAL_DEST, unreal.Material, unreal.MaterialFactoryNew()
     )
     if not material:
         raise RuntimeError(f"Could not create material {path}")
-=======
-    material = (
-        unreal.EditorAssetLibrary.load_asset(path)
-        if unreal.EditorAssetLibrary.does_asset_exist(path)
-        else None
-    )
-    created = material is None
-    if not material:
-        material = unreal.AssetToolsHelpers.get_asset_tools().create_asset(
-            name, MATERIAL_DEST, unreal.Material, unreal.MaterialFactoryNew()
-        )
-    if not material:
-        raise RuntimeError(f"Could not create material {path}")
-    if not created:
-        unreal.MaterialEditingLibrary.delete_all_material_expressions(material)
->>>>>>> 786a414 (WIP: Save local changes before merging)
     set_prop(material, "two_sided", False)
     return material
 
@@ -322,7 +293,6 @@ def constant2(material, x_value: float, y_value: float, x: int, y: int):
 
 
 def build_face_material():
-<<<<<<< HEAD
     material = create_material("M_Mahjong50_TileUnified")
     vertex_color = expr(material, unreal.MaterialExpressionVertexColor, -1450, -520)
 
@@ -331,9 +301,6 @@ def build_face_material():
     unreal.MaterialEditingLibrary.connect_material_property(
         specular, "", unreal.MaterialProperty.MP_SPECULAR
     )
-=======
-    material = get_or_create_material("M_Mahjong50_FaceAtlas_EngravedV3")
->>>>>>> 786a414 (WIP: Save local changes before merging)
 
     texcoord = expr(material, unreal.MaterialExpressionTextureCoordinate, -1450, -200)
     uv_scale = constant2(material, 704.0 / 8192.0, 1024.0 / 4096.0, -1450, -80)
@@ -364,7 +331,6 @@ def build_face_material():
     base_color = texture_sample(
         material, load_texture("T_Mahjong50_FaceAtlas_BaseColor"), "FaceBaseColor", -100, -330
     )
-<<<<<<< HEAD
     glyph_mask = texture_sample(
         material, load_texture("T_Mahjong50_FaceAtlas_GlyphMask"), "FaceGlyphMask", -100, -230,
         unreal.MaterialSamplerType.SAMPLERTYPE_MASKS,
@@ -483,50 +449,6 @@ def build_face_material():
     unreal.MaterialEditingLibrary.connect_material_property(
         metallic, "", unreal.MaterialProperty.MP_METALLIC
     )
-=======
-    normal = texture_sample(
-        material, load_texture("T_Mahjong50_FaceAtlas_Normal"), "FaceNormal", -100, -100,
-        unreal.MaterialSamplerType.SAMPLERTYPE_NORMAL,
-    )
-    height = texture_sample(
-        material, load_texture("T_Mahjong50_FaceAtlas_Height"), "FaceHeight", -100, 20,
-        unreal.MaterialSamplerType.SAMPLERTYPE_MASKS,
-    )
-    orm = texture_sample(
-        material, load_texture("T_Mahjong50_FaceAtlas_ORM"), "FaceORM", -100, 180,
-        unreal.MaterialSamplerType.SAMPLERTYPE_MASKS,
-    )
-
-    # Dark height values are carved glyphs. The small view-dependent UV offset makes
-    # the engraving read as recessed rather than as flat printed color.
-    connect(atlas_uv, "", height, "UVs")
-    bump = expr(material, unreal.MaterialExpressionBumpOffset, 150, -170)
-    # BumpOffset works in full-atlas UV space. Keep the offset well within an
-    # individual 704x1024 cell so oblique upright tiles never sample the black gutter.
-    set_prop(bump, "height_ratio", 0.0035)
-    set_prop(bump, "reference_plane", 0.58)
-    connect(atlas_uv, "", bump, "Coordinate")
-    connect(height, "R", bump, "Height")
-    for sample in (base_color, normal, orm):
-        connect(bump, "", sample, "UVs")
-
-    # Boost the engraved edge normals while preserving their Z component.
-    normal_strength = expr(material, unreal.MaterialExpressionConstant3Vector, 160, -40)
-    set_prop(normal_strength, "constant", unreal.LinearColor(2.15, 2.15, 1.0, 1.0))
-    normal_scaled = expr(material, unreal.MaterialExpressionMultiply, 390, -90)
-    connect(normal, "", normal_scaled, "A")
-    connect(normal_strength, "", normal_scaled, "B")
-    normal_normalized = expr(material, unreal.MaterialExpressionNormalize, 620, -90)
-    connect(normal_scaled, "", normal_normalized, "")
-
-    unreal.MaterialEditingLibrary.connect_material_property(base_color, "", unreal.MaterialProperty.MP_BASE_COLOR)
-    unreal.MaterialEditingLibrary.connect_material_property(
-        normal_normalized, "", unreal.MaterialProperty.MP_NORMAL
-    )
-    unreal.MaterialEditingLibrary.connect_material_property(orm, "R", unreal.MaterialProperty.MP_AMBIENT_OCCLUSION)
-    unreal.MaterialEditingLibrary.connect_material_property(orm, "G", unreal.MaterialProperty.MP_ROUGHNESS)
-    unreal.MaterialEditingLibrary.connect_material_property(orm, "B", unreal.MaterialProperty.MP_METALLIC)
->>>>>>> 786a414 (WIP: Save local changes before merging)
 
     unreal.MaterialEditingLibrary.recompile_material(material)
     unreal.EditorAssetLibrary.save_loaded_asset(material, only_if_is_dirty=False)

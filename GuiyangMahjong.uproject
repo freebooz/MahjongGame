@@ -1,95 +1,117 @@
 {
-  "FileVersion": 3,
-  "EngineAssociation": "{BD6CAD1D-4F80-0F31-80D7-C9BB4901F400}",
-  "Category": "Games",
-  "Description": "UE 5.8 multiplayer Guiyang Mahjong with clean client/server targets.",
-  "DisableEnginePluginsByDefault": true,
-  "Modules": [
-    {
-      "Name": "GuiyangMahjongCore",
-      "Type": "Runtime",
-      "LoadingPhase": "Default"
-    },
-    {
-      "Name": "GuiyangMahjong",
-      "Type": "Runtime",
-      "LoadingPhase": "Default"
-    },
-    {
-      "Name": "GuiyangMahjongOnline",
-      "Type": "ClientOnly",
-      "LoadingPhase": "Default"
-    },
-    {
-      "Name": "GuiyangMahjongClient",
-      "Type": "ClientOnly",
-      "LoadingPhase": "PostDefault"
-    },
-    {
-      "Name": "GuiyangMahjongServer",
-      "Type": "ServerOnly",
-      "LoadingPhase": "Default",
-      "TargetAllowList": ["Server", "Editor"]
-    },
-    {
-      "Name": "GuiyangMahjongEditorTools",
-      "Type": "Editor",
-      "LoadingPhase": "Default"
-    }
-  ],
-  "Plugins": [
-    {
-      "Name": "EnhancedInput",
-      "Enabled": true,
-      "TargetAllowList": ["Game", "Client", "Editor"]
-    },
-    {
-      "Name": "PythonScriptPlugin",
-      "Enabled": true,
-      "TargetAllowList": ["Editor"]
-    },
-    {
-      "Name": "EditorScriptingUtilities",
-      "Enabled": true,
-      "TargetAllowList": ["Editor"]
-    },
-    {
-      "Name": "UmgMcp",
-      "Enabled": true,
-      "TargetAllowList": ["Editor"]
-    },
-    {
-      "Name": "ContentBrowserAssetDataSource",
-      "Enabled": true,
-      "TargetAllowList": ["Editor"]
-    },
-    {
-      "Name": "EngineAssetDefinitions",
-      "Enabled": true,
-      "TargetAllowList": ["Editor"]
-    },
-    {
-      "Name": "Agones",
-      "Enabled": true,
-      "TargetAllowList": ["Server", "Editor"]
-    },
-    {
-      "Name": "OnlineSubsystemUtils",
-      "Enabled": true,
-      "TargetAllowList": ["Game", "Client", "Server", "Editor"]
-    },
-    {
-      "Name": "Landmass",
-      "Enabled": false
-    },
-    {
-      "Name": "Water",
-      "Enabled": false
-    },
-    {
-      "Name": "Volumetrics",
-      "Enabled": false
-    }
-  ],
-  "TargetPlatforms": ["Windows", "Android", "Linux"]
+	"FileVersion": 3,
+	"EngineAssociation": "{BD6CAD1D-4F80-0F31-80D7-C9BB4901F400}",
+	"Category": "Games",
+	"Description": "UE 5.8 multiplayer Guiyang Mahjong with clean client/server targets.",
+	"DisableEnginePluginsByDefault": true,
+	"Modules": [
+		{
+			"Name": "GuiyangMahjongCore",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		},
+		{
+			"Name": "GuiyangMahjong",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		},
+		{
+			"Name": "GuiyangMahjongOnline",
+			"Type": "ClientOnly",
+			"LoadingPhase": "Default"
+		},
+		{
+			"Name": "GuiyangMahjongClient",
+			"Type": "ClientOnly",
+			"LoadingPhase": "PostDefault"
+		},
+		{
+			"Name": "GuiyangMahjongServer",
+			"Type": "ServerOnly",
+			"LoadingPhase": "Default",
+			"TargetAllowList": [
+				"Server",
+				"Editor"
+			]
+		},
+		{
+			"Name": "GuiyangMahjongEditorTools",
+			"Type": "Editor",
+			"LoadingPhase": "Default"
+		}
+	],
+	"Plugins": [
+		{
+			"Name": "EnhancedInput",
+			"Enabled": true,
+			"TargetAllowList": [
+				"Game",
+				"Client",
+				"Editor"
+			]
+		},
+		{
+			"Name": "PythonScriptPlugin",
+			"Enabled": true,
+			"TargetAllowList": [
+				"Editor"
+			]
+		},
+		{
+			"Name": "EditorScriptingUtilities",
+			"Enabled": true,
+			"TargetAllowList": [
+				"Editor"
+			]
+		},
+		{
+			"Name": "ContentBrowserAssetDataSource",
+			"Enabled": true,
+			"TargetAllowList": [
+				"Editor"
+			]
+		},
+		{
+			"Name": "EngineAssetDefinitions",
+			"Enabled": true,
+			"TargetAllowList": [
+				"Editor"
+			]
+		},
+		{
+			"Name": "Agones",
+			"Enabled": true,
+			"TargetAllowList": [
+				"Server",
+				"Editor"
+			]
+		},
+		{
+			"Name": "OnlineSubsystemUtils",
+			"Enabled": true,
+			"TargetAllowList": [
+				"Game",
+				"Client",
+				"Server",
+				"Editor"
+			]
+		},
+		{
+			"Name": "Landmass",
+			"Enabled": false
+		},
+		{
+			"Name": "Water",
+			"Enabled": false
+		},
+		{
+			"Name": "Volumetrics",
+			"Enabled": false
+		}
+	],
+	"TargetPlatforms": [
+		"Windows",
+		"Android",
+		"Linux"
+	]
 }
