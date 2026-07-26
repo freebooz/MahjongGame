@@ -5,8 +5,8 @@ param(
     [int]$ClientCount = 4,
     [string]$AuthBaseUrl = 'http://127.0.0.1:18082',
     [string]$LobbyBaseUrl = 'http://127.0.0.1:18080',
-    [int]$WindowWidth = 960,
-    [int]$WindowHeight = 540,
+    [int]$WindowWidth = 1920,
+    [int]$WindowHeight = 1080,
     [string]$SessionRoot = ''
 )
 

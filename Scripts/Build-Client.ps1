@@ -55,6 +55,11 @@ if ($containerListing -match 'MahjongRoomVisualPreviewMap') {
 Write-Host 'CLIENT_CONTENT_ISOLATION_OK'
 
 $clientReceipt = Join-Path $root "Binaries\$Platform\GuiyangMahjongClient-$Platform-$Configuration.target"
+if (!(Test-Path -LiteralPath $clientReceipt -PathType Leaf)) {
+    # UE 5.8 emits the canonical target receipt without platform/configuration suffixes for this
+    # staged client target. Retain compatibility with older engines that used the long filename.
+    $clientReceipt = Join-Path $root "Binaries\$Platform\GuiyangMahjongClient.target"
+}
 & (Join-Path $PSScriptRoot 'Test-PackageIsolation.ps1') -Root $root -Role Client `
     -ClientReceipt $clientReceipt
 Write-Host "CLIENT_PACKAGE_OK target=GuiyangMahjongClient platform=$Platform stage=$StagingDirectory"

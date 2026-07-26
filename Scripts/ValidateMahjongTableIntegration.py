@@ -1,4 +1,4 @@
-"""Headless validation for the Blender 5.2 tabletop-only Unreal asset."""
+"""Headless validation for the Blender 5.1 rounded PBR Unreal tabletop."""
 
 from __future__ import annotations
 
@@ -57,7 +57,7 @@ def main() -> None:
         raise RuntimeError(f"Missing tabletop mesh {MESH_PATH}")
     size = mesh.get_bounds().box_extent * 2.0
     dimensions = (float(size.x), float(size.y), float(size.z))
-    expected = (115.0, 115.0, 6.5)
+    expected = (115.0, 115.0, 17.0)
     if any(
         abs(value - wanted) > 0.25
         for value, wanted in zip(sorted(dimensions), sorted(expected))

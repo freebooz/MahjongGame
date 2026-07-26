@@ -4,8 +4,10 @@ param(
     [ValidateSet('Development', 'Shipping')]
     [string]$Configuration = 'Development',
     [string]$Distribution = 'Ubuntu-22.04',
+    [string]$WslUser = '',
     [string]$LinuxRepositoryPath = '/home/freebooz/src/MahjongGame',
-    [string]$Version = ''
+    [string]$Version = '',
+    [switch]$ReuseExistingBuild
 )
 
 $ErrorActionPreference = 'Stop'
@@ -35,8 +37,24 @@ function Convert-ToWslPath([string]$WindowsPath) {
     return "/mnt/$drive/$relative"
 }
 
-& (Join-Path $PSScriptRoot 'Build-LinuxServer.ps1') `
-    -EngineRoot $EngineRoot -Configuration $Configuration -PostProcessOnly
+function Invoke-WslBash([string]$Command) {
+    $Command = $Command.Replace("`r`n", "`n").Replace("`r", "`n")
+    $arguments = @('-d', $Distribution)
+    if (![string]::IsNullOrWhiteSpace($WslUser)) {
+        $arguments += @('-u', $WslUser)
+    }
+    $arguments += @('--', 'bash', '-lc', $Command)
+    & wsl.exe @arguments
+}
+
+$buildArguments = @{
+    EngineRoot = $EngineRoot
+    Configuration = $Configuration
+}
+if ($ReuseExistingBuild) {
+    $buildArguments.PostProcessOnly = $true
+}
+& (Join-Path $PSScriptRoot 'Build-LinuxServer.ps1') @buildArguments
 if ($LASTEXITCODE -ne 0) { throw "LinuxServer post-processing failed with exit code $LASTEXITCODE" }
 
 $manifestPath = Join-Path $artifact 'build-manifest.json'
@@ -53,7 +71,7 @@ set -e
 file $(Quote-Bash $linuxBinary)
 readelf -h $(Quote-Bash $linuxBinary) | grep -E 'Class:.*ELF64|Machine:.*X86-64'
 "@
-& wsl.exe -d $Distribution -- bash -lc $inspect
+Invoke-WslBash $inspect
 if ($LASTEXITCODE -ne 0) { throw 'LinuxServer ELF inspection failed.' }
 
 $syncAndDeploy = @"
@@ -67,13 +85,11 @@ rsync -a --delete --exclude '.env' --exclude '.deployed-version' --exclude '.pre
 rsync -a $(Quote-Bash "$rootLinux/.dockerignore") $(Quote-Bash "$LinuxRepositoryPath/.dockerignore")
 rsync -a --delete $(Quote-Bash "$artifactLinux/") $(Quote-Bash "$LinuxRepositoryPath/Artifacts/LinuxServer/")
 cd $(Quote-Bash $LinuxRepositoryPath)
-sudo sed -i '/^GAME_SERVER_VARIANT=/d' Deploy/linux/.env
-printf '%s\n' 'GAME_SERVER_VARIANT=unreal' | sudo tee -a Deploy/linux/.env >/dev/null
 sudo sed -i '/^GAME_SERVER_MAP=/d' Deploy/linux/.env
 printf '%s\n' 'GAME_SERVER_MAP=/Game/Maps/MahjongRoomMap?game=/Script/GuiyangMahjongServer.GuiyangMahjongGameMode' | sudo tee -a Deploy/linux/.env >/dev/null
-sudo ./Deploy/linux/deploy.sh upgrade --version $(Quote-Bash $Version)
+  sudo ./Deploy/linux/deploy.sh upgrade --refresh-advertised-ip --version $(Quote-Bash $Version)
 "@
-& wsl.exe -d $Distribution -- bash -lc $syncAndDeploy
+Invoke-WslBash $syncAndDeploy
 if ($LASTEXITCODE -ne 0) { throw "Real UE LinuxServer deployment failed with exit code $LASTEXITCODE" }
 
 Write-Host "UE_LINUX_DEPLOYMENT_OK version=$Version binary=$($manifest.executable) sha256=$actualHash"

@@ -30,7 +30,7 @@ public sealed class AllocatorClientOptions
     [Required, Url] public string BaseUrl { get; init; } = "http://127.0.0.1:18081";
     public string ServiceToken { get; init; } = string.Empty;
     [Range(1, 30)] public int TimeoutSeconds { get; init; } = 5;
-    [Required] public string GameServerBuildVersion { get; init; } = "fake-phase3";
+    [Required] public string GameServerBuildVersion { get; init; } = "unreal-linux";
 }
 
 public sealed class LobbyPersistenceOptions

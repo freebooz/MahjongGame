@@ -101,9 +101,8 @@ void UGuiyangLoginSubsystem::Initialize(FSubsystemCollectionBase& Collection)
         AuthBaseUrl.Reset();
         UE_LOG(LogMahjongOnline, Error, TEXT("RemoteAuth 地址无效；正式环境必须使用 HTTPS，本机开发仅允许 loopback HTTP"));
     }
-    UE_LOG(LogMahjongOnline, Log, TEXT("登录子系统初始化完成，模式=%s，自动登录=%s"),
-        bUseRemoteAuth ? TEXT("RemoteAuth") : TEXT("LocalDevelopment"),
-        LoginSettings && LoginSettings->bAutoLogin ? TEXT("开启") : TEXT("关闭"));
+    UE_LOG(LogMahjongOnline, Log, TEXT("登录子系统初始化完成，模式=%s，自动登录=禁止"),
+        bUseRemoteAuth ? TEXT("RemoteAuth") : TEXT("LocalDevelopment"));
 }
 
 void UGuiyangLoginSubsystem::Deinitialize()
@@ -118,20 +117,6 @@ void UGuiyangLoginSubsystem::Deinitialize()
     CurrentProfile = {};
     LoginState = EGuiyangLoginState::LoggedOut;
     Super::Deinitialize();
-}
-
-void UGuiyangLoginSubsystem::TryAutoLogin()
-{
-    // 自动登录只复用安全存档中的身份提示，远程模式仍需向 Auth 换取新会话。
-    if (LoginState != EGuiyangLoginState::LoggedOut || !LoginSettings || !LoginSettings->bAutoLogin)
-    {
-        return;
-    }
-    if (LoginSettings->SavedProvider == EGuiyangLoginProvider::Guest || LoginSettings->SavedProvider == EGuiyangLoginProvider::SimulatedWechat)
-    {
-        UE_LOG(LogMahjongOnline, Log, TEXT("开始自动登录：Provider=%s"), LoginSettings->SavedProvider == EGuiyangLoginProvider::Guest ? TEXT("游客") : TEXT("模拟微信"));
-        BeginLogin(LoginSettings->SavedProvider, LoginSettings->SavedPlayerId, LoginSettings->SavedDisplayName);
-    }
 }
 
 void UGuiyangLoginSubsystem::LoginAsGuest()
@@ -215,7 +200,6 @@ void UGuiyangLoginSubsystem::CompleteLogin(const EGuiyangLoginProvider Provider,
     SessionToken = FGuid::NewGuid().ToString(EGuidFormats::DigitsWithHyphens);
     SessionExpireAtUtc = FDateTime::UtcNow() + FTimespan::FromHours(12.0);
     LoginState = EGuiyangLoginState::LoggedIn;
-    SaveAutoLoginPreference();
     UE_LOG(LogMahjongOnline, Log, TEXT("登录成功：PlayerId=%s，昵称=%s，Provider=%s"), *CurrentProfile.PlayerId, *CurrentProfile.DisplayName, *CurrentProfile.GetProviderDisplayName());
     OnLoginStateChanged.Broadcast(LoginState, CurrentProfile);
 }
@@ -317,7 +301,6 @@ bool UGuiyangLoginSubsystem::ApplyRemoteSessionResponse(
     if (bInitialLogin)
     {
         LoginState = EGuiyangLoginState::LoggedIn;
-        SaveAutoLoginPreference();
         UE_LOG(LogMahjongOnline, Log, TEXT("RemoteAuth 登录成功：PlayerId=%s，昵称=%s"),
             *CurrentProfile.PlayerId, *CurrentProfile.DisplayName);
         OnLoginStateChanged.Broadcast(LoginState, CurrentProfile);
@@ -376,10 +359,6 @@ void UGuiyangLoginSubsystem::Logout()
     LoginState = EGuiyangLoginState::LoggedOut;
     if (LoginSettings)
     {
-        LoginSettings->bAutoLogin = false;
-        LoginSettings->SavedPlayerId.Reset();
-        LoginSettings->SavedDisplayName.Reset();
-        LoginSettings->SavedProvider = EGuiyangLoginProvider::None;
         UGameplayStatics::SaveGameToSlot(LoginSettings, SaveSlotName, 0);
     }
     UE_LOG(LogMahjongOnline, Log, TEXT("玩家已安全退出登录，本地会话已清理"));
@@ -426,19 +405,6 @@ bool UGuiyangLoginSubsystem::LoginForIntegrationTest(const FString& PlayerId, co
     OnLoginStateChanged.Broadcast(LoginState, CurrentProfile);
     return true;
 #endif
-}
-
-void UGuiyangLoginSubsystem::SaveAutoLoginPreference()
-{
-    if (!LoginSettings || !CurrentProfile.IsValid())
-    {
-        return;
-    }
-    LoginSettings->bAutoLogin = true;
-    LoginSettings->SavedPlayerId = CurrentProfile.PlayerId;
-    LoginSettings->SavedDisplayName = CurrentProfile.DisplayName;
-    LoginSettings->SavedProvider = CurrentProfile.Provider;
-    UGameplayStatics::SaveGameToSlot(LoginSettings, SaveSlotName, 0);
 }
 
 FString UGuiyangLoginSubsystem::MakePlayerSuffix(const FString& PlayerId)

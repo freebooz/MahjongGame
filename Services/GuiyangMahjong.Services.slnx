@@ -3,7 +3,6 @@
   <Project Path="GuiyangMahjong.Allocator/GuiyangMahjong.Allocator.csproj" />
   <Project Path="GuiyangMahjong.Auth.Tests/GuiyangMahjong.Auth.Tests.csproj" />
   <Project Path="GuiyangMahjong.Auth/GuiyangMahjong.Auth.csproj" />
-  <Project Path="GuiyangMahjong.FakeGameServer/GuiyangMahjong.FakeGameServer.csproj" />
   <Project Path="GuiyangMahjong.Lobby.Tests/GuiyangMahjong.Lobby.Tests.csproj" />
   <Project Path="GuiyangMahjong.Lobby/GuiyangMahjong.Lobby.csproj" />
 </Solution>

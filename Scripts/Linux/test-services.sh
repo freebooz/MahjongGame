@@ -20,7 +20,6 @@ common=(--rm
   -v guiyang-test-artifacts:/artifacts
   -v "$PROJECT_ROOT/Services:/src:ro"
   -v "$PROJECT_ROOT/Contracts:/Contracts:ro"
-  -e FAKE_GAME_SERVER_EXECUTABLE=/artifacts/bin/GuiyangMahjong.FakeGameServer/release/GuiyangMahjong.FakeGameServer
   -w /src
   mcr.microsoft.com/dotnet/sdk:10.0)
 

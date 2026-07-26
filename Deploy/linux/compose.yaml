@@ -73,8 +73,6 @@ services:
     build:
       context: ../..
       dockerfile: Services/GuiyangMahjong.Allocator/Dockerfile
-      args:
-        GAME_SERVER_VARIANT: ${GAME_SERVER_VARIANT:-fake}
     environment:
       ASPNETCORE_URLS: http://0.0.0.0:${ALLOCATOR_PORT:-18081}
       ASPNETCORE_ENVIRONMENT: Production
@@ -83,9 +81,7 @@ services:
       Allocator__AdvertisedIp: ${ADVERTISED_IP:?ADVERTISED_IP is required}
       Allocator__GameServerExecutablePath: /opt/guiyang-mahjong/server/GuiyangMahjongServer
       Allocator__GameServerWorkingDirectory: /opt/guiyang-mahjong/server
-      # Real UE servers must receive the authored room map explicitly. Fake servers leave
-      # GAME_SERVER_MAP empty; the launcher ignores the resulting blank prefix argument.
-      Allocator__GameServerPrefixArguments__0: ${GAME_SERVER_MAP:-}
+      Allocator__GameServerPrefixArguments__0: ${GAME_SERVER_MAP:?GAME_SERVER_MAP is required}
       Allocator__MatchResultOutboxDirectory: /var/lib/guiyang-mahjong/outbox
       Allocator__StateFilePath: /var/lib/guiyang-mahjong/state/instances.json
       # UE uses a dynamic UDP port range. Host networking avoids the Docker

@@ -25,6 +25,9 @@ class GUIYANGMAHJONG_API AGuiyangMahjongPlayerController : public APlayerControl
     GENERATED_BODY()
 
 public:
+    /** 房间使用固定桌面镜头，禁止引擎在 Pawn/旁观者状态变化时自动抢回 ViewTarget。 */
+    AGuiyangMahjongPlayerController();
+
     /** 确保本地房间表现 Actor 存在，并返回其引用。 */
     AActor* EnsureMahjongRoomPresentation();
 

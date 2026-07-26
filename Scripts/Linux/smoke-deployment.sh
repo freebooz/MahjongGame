@@ -44,8 +44,11 @@ done
 server_instance_id="$(jq -er '.serverInstanceId' <<<"$route")"
 server_ip="$(jq -er '.serverIp' <<<"$route")"
 server_port="$(jq -er '.serverPort' <<<"$route")"
-[[ "$server_ip" != "0.0.0.0" && "$server_port" -ge 19000 ]] \
+expected_server_ip="$(env_value ADVERTISED_IP)"
+[[ "$server_ip" == "$expected_server_ip" && "$server_port" -ge 19000 ]] \
   || { echo "Smoke route contains an invalid advertised endpoint." >&2; exit 1; }
+ss -H -lun "sport = :$server_port" | grep -q . \
+  || { echo "Smoke route UDP endpoint is not listening: $server_ip:$server_port" >&2; exit 1; }
 
 curl --fail --silent --show-error \
   -X POST \

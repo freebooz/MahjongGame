@@ -4,9 +4,9 @@
 #include "Game/GuiyangClientControllerBridge.h"
 #include "GuiyangClientControllerBridgeImpl.generated.h"
 
-class ACameraActor;
 class AGuiyangMahjongPlayerController;
 class AMahjong3DTableActor;
+class AMahjongRoomCameraActor;
 class AMahjongRoomPresentationActor;
 struct FStreamableHandle;
 class UMobileRootHUDWidget;
@@ -49,7 +49,7 @@ private:
     /** 当前房间的本地表现对象；均不在服务端复制。 */
     UPROPERTY(Transient) TObjectPtr<AMahjongRoomPresentationActor> RoomPresentationActor;
     UPROPERTY(Transient) TObjectPtr<AMahjong3DTableActor> RoomTableActor;
-    UPROPERTY(Transient) TObjectPtr<AActor> RoomCameraActor;
+    UPROPERTY(Transient) TObjectPtr<AMahjongRoomCameraActor> RoomCameraActor;
     /** 等待最短加载展示时间后使用的远程游戏服路由。 */
     UPROPERTY(Transient) FGuiyangGameServerRoute PendingAllocatedRoute;
     /** 延迟旅行定时器和异步表现蓝图加载句柄。 */
@@ -63,6 +63,7 @@ private:
     void RequestRoomPresentationClassLoad();
     void HandleRoomPresentationClassLoaded();
     AMahjongRoomPresentationActor* SpawnRoomPresentation(UClass& PresentationClass);
+    AMahjongRoomCameraActor* EnsureRoomCamera();
     /** 将本地 PlayerController 的视角切换到房间预定摄像机。 */
     void ApplyRoomPresentationViewTarget();
     /** 满足最短加载展示时间后执行 ClientTravel。 */

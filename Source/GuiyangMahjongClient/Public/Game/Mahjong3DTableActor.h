@@ -44,6 +44,17 @@ private:
     UPROPERTY(Transient) TObjectPtr<UStaticMesh> DefaultTileMesh;
     UPROPERTY(Transient) TArray<TObjectPtr<UStaticMesh>> TileMeshes;
     UPROPERTY(Transient) TObjectPtr<UMaterialInterface> BasicMaterial;
+    /** 可在房间展示蓝图的 Child Actor 模板中人工调整的桌面布局距离。 */
+    UPROPERTY(EditAnywhere, Category="Mahjong|Layout", meta=(ClampMin="250.0", ClampMax="480.0"))
+    float WallDistanceFromCenter = 350.0f;
+    UPROPERTY(EditAnywhere, Category="Mahjong|Layout", meta=(ClampMin="300.0", ClampMax="500.0"))
+    float HandDistanceFromCenter = 430.0f;
+    UPROPERTY(EditAnywhere, Category="Mahjong|Layout", meta=(ClampMin="280.0", ClampMax="460.0"))
+    float MeldDistanceFromCenter = 385.0f;
+    UPROPERTY(EditAnywhere, Category="Mahjong|Layout", meta=(ClampMin="120.0", ClampMax="260.0"))
+    float DiscardFirstRowDistanceFromCenter = 170.0f;
+    UPROPERTY(EditAnywhere, Category="Mahjong|Layout", meta=(ClampMin="5", ClampMax="9"))
+    int32 DiscardColumns = 7;
     /** 只读缓存快照及布局版本状态。 */
     UPROPERTY() FMahjongPublicTableState CachedPublicState;
     UPROPERTY() FMahjongPrivatePlayerState CachedPrivateState;

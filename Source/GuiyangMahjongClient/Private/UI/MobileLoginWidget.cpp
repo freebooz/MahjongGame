@@ -21,7 +21,6 @@ void UMobileLoginWidget::NativeConstruct()
     {
         Login->OnLoginStateChanged.AddUniqueDynamic(this, &ThisClass::HandleLoginStateChanged);
         Login->OnLoginFailed.AddUniqueDynamic(this, &ThisClass::HandleLoginFailed);
-        Login->TryAutoLogin();
     }
     UE_LOG(LogMahjongUI, Log, TEXT("登录界面创建完成"));
 }

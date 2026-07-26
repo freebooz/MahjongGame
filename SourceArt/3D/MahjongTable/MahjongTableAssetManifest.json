@@ -1,4 +1,5 @@
 {
+<<<<<<< HEAD
   "generator": "Blender 5.2 GenerateStandardMahjongTable.py",
   "generator_version": "3.4.0",
   "blender_version": "5.2.0 LTS",
@@ -31,64 +32,102 @@
     "mahjong_tiles",
     "mechanical_structure"
   ],
+=======
+  "generator": "Blender 5.1 GenerateStandardMahjongTable.py",
+  "generator_version": "4.0.0",
+  "blender_version": "5.1.1",
+  "asset_root": "SM_StandardMahjongTable",
+  "asset_scope": "tabletop_only",
+  "reference_style": "premium_rounded_walnut_frame_with_recessed_green_felt",
+  "frame_construction": "segmented_rail_with_geometric_joinery_seams",
+>>>>>>> 0c9535ac9fd94c6fd02ed84a6dedfc084cd8892e
   "nominal_dimensions_mm": [
     1150.0,
     1150.0,
-    65.0
+    125.0
   ],
   "measured_bounds_mm": {
     "minimum": [
       -575.0,
       -575.0,
-      -60.0
+      -95.0
     ],
     "maximum": [
       575.0,
       575.0,
-      5.0
+      30.12
     ],
     "size": [
       1150.0,
       1150.0,
-      65.0
+      125.12
     ]
   },
   "playing_surface_mm": [
-    970.0,
-    970.0
+    920.0,
+    920.0
   ],
   "playing_surface_z_mm": 0.0,
   "pivot": "playing_surface_center",
-  "mesh_object_count": 2,
+  "mesh_object_count": 3,
   "geometry": {
+<<<<<<< HEAD
     "SM_Mahjong_Table_Frame_MiterJoint": {
       "vertices": 1232,
       "polygons": 2432,
       "triangles": 2432,
       "material": "M_Table_Walnut_PBR",
+=======
+    "SM_MahjongTable_RoundedWalnutFrame": {
+      "vertices": 1440,
+      "polygons": 2872,
+      "triangles": 2872,
+>>>>>>> 0c9535ac9fd94c6fd02ed84a6dedfc084cd8892e
       "material_slots": [
         "M_Table_Walnut_PBR"
       ]
     },
-    "Mahjong_Felt_Surface": {
-      "vertices": 130,
-      "polygons": 192,
-      "triangles": 256,
-      "material": "M_Table_Felt_Green_PBR",
+    "SM_MahjongTable_JoinerySeams": {
+      "vertices": 288,
+      "polygons": 144,
+      "triangles": 144,
+      "material_slots": [
+        "M_Table_WoodJoint_PBR"
+      ]
+    },
+    "SM_MahjongTable_RecessedFelt": {
+      "vertices": 480,
+      "polygons": 956,
+      "triangles": 956,
       "material_slots": [
         "M_Table_Felt_Green_PBR"
       ]
     }
   },
+<<<<<<< HEAD
   "triangle_count": 2688,
   "mobile_triangle_budget": 5000,
   "materials": [
     "M_Table_Walnut_PBR",
+=======
+  "triangle_count": 3972,
+  "mobile_triangle_budget": 5000,
+  "materials": [
+    "M_Table_Walnut_PBR",
+    "M_Table_WoodJoint_PBR",
+>>>>>>> 0c9535ac9fd94c6fd02ed84a6dedfc084cd8892e
     "M_Table_Felt_Green_PBR"
   ],
   "material_workflow": "PBR metallic-roughness",
+  "pbr_channels": [
+    "BaseColor",
+    "Roughness",
+    "Normal",
+    "AO"
+  ],
   "dimensions_m": {
     "size": 1.15,
+<<<<<<< HEAD
     "thickness": 0.065,
     "frame_width": 0.09,
     "felt_thickness": 0.006,
@@ -105,10 +144,43 @@
     "miter_joint_width": 0.0006,
     "felt_corner_radius": 0.012,
     "felt_corner_segments": 16
+=======
+    "playing_size": 0.92,
+    "total_height": 0.125,
+    "apron_bottom": -0.095,
+    "apron_top": -0.006,
+    "apron_corner_radius": 0.052,
+    "apron_bevel": 0.01,
+    "apron_bevel_segments": 5,
+    "rail_bottom": -0.018,
+    "rail_top": 0.03,
+    "rail_outer_corner_radius": 0.062,
+    "rail_inner_corner_radius": 0.028,
+    "rail_corner_segments": 12,
+    "felt_bottom": -0.01,
+    "felt_top": 0.0,
+    "felt_corner_radius": 0.028,
+    "felt_bevel": 0.003,
+    "felt_bevel_segments": 4,
+    "decorative_band_z": -0.028,
+    "seam_distance_from_corner": 0.155,
+    "seam_width": 0.0012
+  },
+  "studio": {
+    "camera": "MahjongTable_ProductCamera",
+    "lights": [
+      "Studio_Key_Warm",
+      "Studio_Fill_Soft",
+      "Studio_Rim_Warm",
+      "Studio_Top_Felt"
+    ],
+    "artist_editable": true
+>>>>>>> 0c9535ac9fd94c6fd02ed84a6dedfc084cd8892e
   },
   "files": [
     {
       "path": "SourceArt/3D/MahjongTable/SM_StandardMahjongTable.blend",
+<<<<<<< HEAD
       "bytes": 167023,
       "sha256": "b1a8a542981498ff1637f1ec5089f04f792c6f1e44feac88d42c9ad6f526de23"
     },
@@ -126,6 +198,25 @@
       "path": "SourceArt/3D/MahjongTable/StandardMahjongTable_Preview.png",
       "bytes": 845980,
       "sha256": "e81a0025be1e08dd11e2b144d8575573b41d64986db03569488729f89dba6f55"
+=======
+      "bytes": 20750130,
+      "sha256": "63e96222b1e324a29b5f87c74cc6bd342d6d74444505305ffbb2d05477e78a4a"
+    },
+    {
+      "path": "SourceArt/3D/MahjongTable/SM_StandardMahjongTable.fbx",
+      "bytes": 256876,
+      "sha256": "721852cfffa8a8044186362604cb42c069286b36ba9a67184a194bcebadaac00"
+    },
+    {
+      "path": "SourceArt/3D/MahjongTable/SM_StandardMahjongTable.glb",
+      "bytes": 21936228,
+      "sha256": "591c2f82d0e332fc3bdd3a491fdbce66710f79c090262b3935c8a444f8693ad4"
+    },
+    {
+      "path": "SourceArt/3D/MahjongTable/StandardMahjongTable_Preview.png",
+      "bytes": 1439902,
+      "sha256": "a02f86d88951f9ae56b832bcf27875a232d63c5ce42ba051e3f9c7030d136a05"
+>>>>>>> 0c9535ac9fd94c6fd02ed84a6dedfc084cd8892e
     }
   ]
 }

@@ -27,6 +27,7 @@
 #include "UI/MobileSettingsWidget.h"
 #include "UI/MahjongResponsiveScaleBox.h"
 #include "UI/MahjongUIScalingRule.h"
+#include "Game/GuiyangMahjongPlayerController.h"
 #include "Game/Mahjong3DTableActor.h"
 #include "Game/MahjongRoomCameraActor.h"
 #include "Game/MahjongRoomPresentationActor.h"
@@ -1128,8 +1129,8 @@ bool FMahjongLoginPersistenceSecurityTest::RunTest(const FString& Parameters)
     return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMahjongWechatAutoLoginTest, "GuiyangMahjong.Auth.SimulatedWechatAndAutoLogin", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
-bool FMahjongWechatAutoLoginTest::RunTest(const FString& Parameters)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMahjongExplicitLoginRequiredTest, "GuiyangMahjong.Auth.ExplicitLoginRequired", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMahjongExplicitLoginRequiredTest::RunTest(const FString& Parameters)
 {
     static const FString SlotName = TEXT("GuiyangLoginSettings");
     UGameplayStatics::DeleteGameInSlot(SlotName, 0);
@@ -1142,16 +1143,14 @@ bool FMahjongWechatAutoLoginTest::RunTest(const FString& Parameters)
     FirstLogin->LoginWithWechat();
 #if PLATFORM_WINDOWS
     TestEqual(TEXT("Windows 微信入口必须明确使用模拟 Provider"), FirstLogin->GetCurrentProfile().Provider, EGuiyangLoginProvider::SimulatedWechat);
-    const FString FirstPlayerId = FirstLogin->GetCurrentProfile().PlayerId;
-    TestTrue(TEXT("模拟微信 PlayerId 必须生成"), !FirstPlayerId.IsEmpty());
+    TestTrue(TEXT("模拟微信 PlayerId 必须生成"), !FirstLogin->GetCurrentProfile().PlayerId.IsEmpty());
     FirstInstance->Shutdown();
 
     UGameInstance* SecondInstance = NewObject<UGameInstance>();
     SecondInstance->Init();
     UGuiyangLoginSubsystem* SecondLogin = SecondInstance->GetSubsystem<UGuiyangLoginSubsystem>();
-    SecondLogin->TryAutoLogin();
-    TestTrue(TEXT("模拟微信账号必须支持自动登录"), SecondLogin->IsSessionValid());
-    TestEqual(TEXT("自动登录必须恢复同一匿名账号标识"), SecondLogin->GetCurrentProfile().PlayerId, FirstPlayerId);
+    TestFalse(TEXT("重新启动后必须保持未登录，等待用户明确选择登录方式"), SecondLogin->IsSessionValid());
+    TestEqual(TEXT("重新启动后的登录状态必须为 LoggedOut"), SecondLogin->GetLoginState(), EGuiyangLoginState::LoggedOut);
     SecondLogin->Logout();
     SecondInstance->Shutdown();
 #else
@@ -1363,6 +1362,14 @@ bool FMahjongThreeDTableLayoutTest::RunTest(const FString& Parameters)
     TestNotNull(TEXT("准备状态提示必须直接位于三维牌桌 HUD"),
         GameHUD->WidgetTree->FindWidget(TEXT("Txt_ReadyStatus")));
     TestNotNull(TEXT("三维牌桌 Actor 类必须可加载"), AMahjong3DTableActor::StaticClass());
+    const AGuiyangMahjongPlayerController* ControllerDefault =
+        GetDefault<AGuiyangMahjongPlayerController>();
+    TestNotNull(TEXT("房间玩家控制器必须可加载"), ControllerDefault);
+    if (ControllerDefault)
+    {
+        TestFalse(TEXT("房间固定镜头不得被 Pawn 或旁观者自动接管"),
+            ControllerDefault->bAutoManageActiveCameraTarget);
+    }
     const AMahjongRoomCameraActor* CameraDefault = GetDefault<AMahjongRoomCameraActor>();
     TestNotNull(TEXT("房间电影摄像机预设类必须可加载"), CameraDefault);
     if (CameraDefault && CameraDefault->GetCineCameraComponent())

@@ -2,12 +2,13 @@
 
 #include "Auth/GuiyangLoginSubsystem.h"
 #include "Engine/AssetManager.h"
-#include "Camera/CameraActor.h"
+#include "CineCameraComponent.h"
 #include "EngineUtils.h"
 #include "Game/GuiyangMahjongGameState.h"
 #include "Game/GuiyangMahjongPlayerController.h"
 #include "Game/GuiyangMahjongPlayerState.h"
 #include "Game/Mahjong3DTableActor.h"
+#include "Game/MahjongRoomCameraActor.h"
 #include "Game/MahjongRoomPresentationActor.h"
 #include "GenericPlatform/GenericPlatformHttp.h"
 #include "GuiyangMahjong.h"
@@ -15,7 +16,6 @@
 #include "HAL/PlatformMisc.h"
 #include "HAL/PlatformTime.h"
 #include "History/GuiyangMatchHistorySubsystem.h"
-#include "Interfaces/IPv4/IPv4Address.h"
 #include "Lobby/GuiyangLobbySubsystem.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
@@ -159,8 +159,8 @@ AActor* UGuiyangClientControllerBridgeImpl::EnsureRoomPresentation()
     if (RoomPresentationActor)
     {
         RoomTableActor = RoomPresentationActor->GetTableActor();
-        RoomCameraActor = RoomPresentationActor->GetRoomCameraActor();
     }
+    RoomCameraActor = EnsureRoomCamera();
     ApplyRoomPresentationViewTarget();
     return RoomTableActor;
 }
@@ -244,10 +244,90 @@ AMahjongRoomPresentationActor* UGuiyangClientControllerBridgeImpl::SpawnRoomPres
     return Spawned;
 }
 
+AMahjongRoomCameraActor* UGuiyangClientControllerBridgeImpl::EnsureRoomCamera()
+{
+    if (!GetWorld())
+    {
+        return nullptr;
+    }
+    if (IsValid(RoomCameraActor))
+    {
+        return RoomCameraActor;
+    }
+
+    // The presentation Blueprint owns the table, lights, and a legacy camera component. Treating
+    // that whole Actor as a ViewTarget allows component registration/construction to reset the
+    // camera after the first frame. A dedicated Actor has one authoritative transform.
+    for (TActorIterator<AMahjongRoomCameraActor> It(GetWorld()); It; ++It)
+    {
+        if (It->ActorHasTag(AMahjongRoomCameraActor::RoomCameraTag))
+        {
+            return *It;
+        }
+    }
+
+    FActorSpawnParameters Parameters;
+    Parameters.SpawnCollisionHandlingOverride =
+        ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+    AMahjongRoomCameraActor* Spawned = GetWorld()->SpawnActor<AMahjongRoomCameraActor>(
+        AMahjongRoomCameraActor::StaticClass(), FTransform::Identity, Parameters);
+    if (Spawned)
+    {
+        Spawned->SetReplicates(false);
+        UE_LOG(LogMahjongUI, Display, TEXT("Spawned fixed local Mahjong room camera"));
+    }
+    return Spawned;
+}
+
 void UGuiyangClientControllerBridgeImpl::ApplyRoomPresentationViewTarget()
 {
-    // 使用表现 Actor 内预定摄像机作为 ViewTarget，禁止默认 Pawn 摄像机覆盖构图。
-    if (RoomCameraActor && Controller && Controller->GetViewTarget() != RoomCameraActor)
+    if (!RoomCameraActor || !Controller)
+    {
+        return;
+    }
+
+    UCineCameraComponent* RuntimeCamera = RoomCameraActor->GetCineCameraComponent();
+    const UCineCameraComponent* EditorCamera = RoomPresentationActor
+        ? RoomPresentationActor->FindComponentByClass<UCineCameraComponent>() : nullptr;
+    if (RuntimeCamera && EditorCamera)
+    {
+        // Camera composition remains artist-authored in BP_MahjongRoomPresentation. Copy the
+        // editor camera into a dedicated runtime ViewTarget so Blueprint component registration
+        // cannot move the active camera after the first rendered frame.
+        RoomCameraActor->SetActorLocationAndRotation(
+            EditorCamera->GetComponentLocation(), EditorCamera->GetComponentRotation());
+        RuntimeCamera->SetFilmback(EditorCamera->Filmback);
+        RuntimeCamera->SetLensSettings(EditorCamera->LensSettings);
+        RuntimeCamera->SetFocusSettings(EditorCamera->FocusSettings);
+        RuntimeCamera->SetCurrentFocalLength(EditorCamera->CurrentFocalLength);
+        RuntimeCamera->SetCurrentAperture(EditorCamera->CurrentAperture);
+        RuntimeCamera->SetConstraintAspectRatio(EditorCamera->bConstrainAspectRatio);
+        RuntimeCamera->PostProcessSettings = EditorCamera->PostProcessSettings;
+        RuntimeCamera->PostProcessBlendWeight = EditorCamera->PostProcessBlendWeight;
+        UE_LOG(LogMahjongUI, Display,
+            TEXT("Applied editor-authored room camera: location=%s rotation=%s focal=%.1fmm"),
+            *RoomCameraActor->GetActorLocation().ToCompactString(),
+            *RoomCameraActor->GetActorRotation().ToCompactString(),
+            RuntimeCamera->CurrentFocalLength);
+    }
+    else if (RuntimeCamera)
+    {
+        // Native fallback is only used if the configured presentation asset is unavailable.
+        const FVector TableCenter = RoomTableActor
+            ? RoomTableActor->GetActorLocation() + FVector(0.0f, 0.0f, 35.0f)
+            : FVector(0.0f, 0.0f, 35.0f);
+        const FVector CameraLocation = TableCenter + FVector(0.0f, -1050.0f, 1350.0f);
+        const FRotator CameraRotation = (TableCenter - CameraLocation).Rotation();
+        RoomCameraActor->SetActorLocationAndRotation(CameraLocation, CameraRotation);
+        RuntimeCamera->SetFieldOfView(52.0f);
+        RuntimeCamera->SetConstraintAspectRatio(false);
+        UE_LOG(LogMahjongUI, Warning,
+            TEXT("Applied native fallback room camera because editor camera is unavailable"));
+    }
+
+    // Automatic camera management is disabled by the PlayerController constructor. ClientRestart,
+    // spectator creation, and replicated Pawn changes therefore cannot replace this target later.
+    if (Controller->GetViewTarget() != RoomCameraActor)
     {
         Controller->SetViewTarget(RoomCameraActor);
     }
@@ -316,21 +396,13 @@ void UGuiyangClientControllerBridgeImpl::TravelToAllocatedServer(FGuiyangGameSer
 {
     // 票据只放在一次旅行 URL 中，并在生成 URL 后清除待处理路由中的副本。
     if (!Controller) return;
-    FString ConnectServerIP = Route.ServerIP;
-    FString Override;
-    if (FParse::Value(FCommandLine::Get(), TEXT("MahjongGameServerHostOverride="), Override))
-    {
-        Override.TrimStartAndEndInline();
-        FIPv4Address Address;
-        if (FIPv4Address::Parse(Override, Address) && Address != FIPv4Address::Any) ConnectServerIP = Override;
-    }
     if (UGuiyangReconnectSubsystem* Reconnect = Controller->GetGameInstance()
         ? Controller->GetGameInstance()->GetSubsystem<UGuiyangReconnectSubsystem>() : nullptr)
     {
         Reconnect->RememberRemoteRoute(Route.RoomId, Route.MatchId);
     }
     const FString URL = FString::Printf(TEXT("%s:%d?PlayerId=%s?JoinTicket=%s"),
-        *ConnectServerIP, Route.ServerPort,
+        *Route.ServerIP, Route.ServerPort,
         *FGenericPlatformHttp::UrlEncode(Route.PlayerId.TrimStartAndEnd()),
         *FGenericPlatformHttp::UrlEncode(Route.JoinTicket));
     Controller->ClientTravel(URL, TRAVEL_Absolute);
