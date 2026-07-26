@@ -1376,8 +1376,8 @@ bool FMahjongThreeDTableLayoutTest::RunTest(const FString& Parameters)
     {
         TestTrue(TEXT("房间摄像机必须带稳定标签"),
             CameraDefault->ActorHasTag(AMahjongRoomCameraActor::RoomCameraTag));
-        TestEqual(TEXT("默认摄像机焦距必须为 45mm"),
-            CameraDefault->GetCineCameraComponent()->CurrentFocalLength, 45.0f);
+        TestEqual(TEXT("默认摄像机焦距必须为 30mm"),
+            CameraDefault->GetCineCameraComponent()->CurrentFocalLength, 30.0f);
         TestFalse(TEXT("移动横屏摄像机不得强制黑边宽高比"),
             CameraDefault->GetCineCameraComponent()->bConstrainAspectRatio);
         const UCineCameraComponent* CameraComponent = CameraDefault->GetCineCameraComponent();

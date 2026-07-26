@@ -47,11 +47,7 @@ void AMahjongRoomCameraActor::ConfigureStablePostProcess()
     Settings.bOverride_DepthOfFieldEnabled = true;
     Settings.DepthOfFieldEnabled = false;
     Settings.bOverride_Sharpen = true;
-<<<<<<< HEAD
     Settings.Sharpen = 0.5f;
     Camera->FocusSettings.FocusMethod = ECameraFocusMethod::Disable;
-=======
-    Settings.Sharpen = 0.75f;
->>>>>>> 786a414 (WIP: Save local changes before merging)
     Camera->PostProcessBlendWeight = 1.0f;
 }

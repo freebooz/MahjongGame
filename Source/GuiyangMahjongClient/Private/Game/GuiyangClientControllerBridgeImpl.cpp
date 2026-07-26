@@ -362,7 +362,7 @@ void UGuiyangClientControllerBridgeImpl::ApplyRoomPresentationViewTarget()
             : FVector(0.0f, 0.0f, 35.0f);
         // The requested 60-degree tabletop-normal angle is a -30 degree UE pitch.
         // This keeps the near hand visible while retaining the reference image's table depth.
-        const FVector CameraLocation = TableCenter + FVector(0.0f, -2350.0f, 1357.0f);
+        const FVector CameraLocation = TableCenter + FVector(0.0f, -2020.0f, 1165.0f);
         const FRotator CameraRotation(-30.0f, 90.0f, 0.0f);
         RoomCameraActor->SetActorLocationAndRotation(CameraLocation, CameraRotation);
         RuntimeCamera->SetCurrentFocalLength(30.0f);

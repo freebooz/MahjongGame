@@ -27,7 +27,7 @@ if not camera:
     raise RuntimeError("MahjongRoomCamera component was not found")
 
 camera.set_editor_property(
-    "relative_location", unreal.Vector(0.0, -1950.0, 1155.0)
+    "relative_location", unreal.Vector(0.0, -2020.0, 1200.0)
 )
 camera.set_editor_property(
     "relative_rotation", unreal.Rotator(0.0, -30.0, 90.0)
@@ -38,6 +38,6 @@ camera.set_editor_property("constrain_aspect_ratio", False)
 unreal.BlueprintEditorLibrary.compile_blueprint(blueprint)
 unreal.EditorAssetLibrary.save_loaded_asset(blueprint, only_if_is_dirty=False)
 unreal.log(
-    "REFERENCE_ROOM_CAMERA_ADJUSTED location=(0,-1950,1155) "
+    "REFERENCE_ROOM_CAMERA_ADJUSTED location=(0,-2020,1200) "
     "table-normal-angle=60 pitch=-30 focal=30"
 )
