@@ -11,8 +11,11 @@
 #include "Framework/Docking/TabManager.h"
 #include "HAL/IConsoleManager.h"
 #include "IContentBrowserSingleton.h"
+#include "IMaterialEditor.h"
 #include "IStaticMeshEditor.h"
 #include "Kismet2/BlueprintEditorUtils.h"
+#include "MaterialEditorModule.h"
+#include "Materials/Material.h"
 #include "Misc/CoreDelegates.h"
 #include "Misc/PackageName.h"
 #include "Modules/ModuleManager.h"
@@ -27,6 +30,12 @@ constexpr TCHAR RoomPresentationAssetPath[] =
 constexpr TCHAR MahjongTableAssetPath[] =
     TEXT("/Game/Art/Mahjong/Table/Meshes/"
          "SM_StandardMahjongTable.SM_StandardMahjongTable");
+constexpr TCHAR MahjongTableWalnutMaterialPath[] =
+    TEXT("/Game/Art/Mahjong/Table/Materials/"
+         "M_Table_Walnut_Miter_PBR.M_Table_Walnut_Miter_PBR");
+constexpr TCHAR MahjongTableFeltMaterialPath[] =
+    TEXT("/Game/Art/Mahjong/Table/Materials/"
+         "M_Table_Felt_Green_Fiber_PBR.M_Table_Felt_Green_Fiber_PBR");
 
 UBlueprint* LoadAndRepairRoomPresentationBlueprint()
 {
@@ -106,6 +115,13 @@ void FGuiyangMahjongEditorToolsModule::StartupModule()
             this, &FGuiyangMahjongEditorToolsModule::OpenMahjongTableStaticMeshEditor),
         ECVF_Default);
 
+    OpenMahjongTableMaterialsCommand = IConsoleManager::Get().RegisterConsoleCommand(
+        TEXT("Mahjong.OpenTableMaterialEditors"),
+        TEXT("Open both Mahjong table materials in the full Material Editor with node graphs."),
+        FConsoleCommandDelegate::CreateRaw(
+            this, &FGuiyangMahjongEditorToolsModule::OpenMahjongTableMaterialEditors),
+        ECVF_Default);
+
     // Loading and saving an Actor Blueprint during StartupModule is too early for World
     // Partition class descriptors. Repair it only after the engine has fully initialized.
     PostEngineInitHandle = FCoreDelegates::GetOnPostEngineInit().AddRaw(
@@ -130,6 +146,12 @@ void FGuiyangMahjongEditorToolsModule::ShutdownModule()
     {
         IConsoleManager::Get().UnregisterConsoleObject(OpenMahjongTableCommand);
         OpenMahjongTableCommand = nullptr;
+    }
+
+    if (OpenMahjongTableMaterialsCommand)
+    {
+        IConsoleManager::Get().UnregisterConsoleObject(OpenMahjongTableMaterialsCommand);
+        OpenMahjongTableMaterialsCommand = nullptr;
     }
 }
 
@@ -212,6 +234,54 @@ void FGuiyangMahjongEditorToolsModule::OpenMahjongTableStaticMeshEditor()
         Display,
         TEXT("MAHJONG_FULL_STATIC_MESH_EDITOR_OPEN_OK asset=%s"),
         MahjongTableAssetPath);
+}
+
+void FGuiyangMahjongEditorToolsModule::OpenMahjongTableMaterialEditors()
+{
+    UMaterial* FeltMaterial =
+        LoadObject<UMaterial>(nullptr, MahjongTableFeltMaterialPath);
+    UMaterial* WalnutMaterial =
+        LoadObject<UMaterial>(nullptr, MahjongTableWalnutMaterialPath);
+    if (!FeltMaterial || !WalnutMaterial)
+    {
+        UE_LOG(
+            LogTemp,
+            Error,
+            TEXT("Mahjong table materials were not found: felt=%s walnut=%s"),
+            FeltMaterial ? TEXT("ok") : TEXT("missing"),
+            WalnutMaterial ? TEXT("ok") : TEXT("missing"));
+        return;
+    }
+
+    FContentBrowserModule& ContentBrowser =
+        FModuleManager::LoadModuleChecked<FContentBrowserModule>(TEXT("ContentBrowser"));
+    ContentBrowser.Get().SyncBrowserToAssets(
+        {FAssetData(FeltMaterial), FAssetData(WalnutMaterial)});
+
+    IMaterialEditorModule& MaterialEditorModule =
+        FModuleManager::LoadModuleChecked<IMaterialEditorModule>(TEXT("MaterialEditor"));
+
+    // Open felt first and walnut last so the table's main visible material is foreground.
+    const TSharedRef<IMaterialEditor> FeltEditor =
+        MaterialEditorModule.CreateMaterialEditor(
+            EToolkitMode::Standalone,
+            TSharedPtr<IToolkitHost>(),
+            FeltMaterial);
+    FeltEditor->GetTabManager()->TryInvokeTab(FName(TEXT("Document")));
+
+    const TSharedRef<IMaterialEditor> WalnutEditor =
+        MaterialEditorModule.CreateMaterialEditor(
+            EToolkitMode::Standalone,
+            TSharedPtr<IToolkitHost>(),
+            WalnutMaterial);
+    WalnutEditor->GetTabManager()->TryInvokeTab(FName(TEXT("Document")));
+
+    UE_LOG(
+        LogTemp,
+        Display,
+        TEXT("MAHJONG_FULL_MATERIAL_EDITORS_OPEN_OK felt=%s walnut=%s"),
+        MahjongTableFeltMaterialPath,
+        MahjongTableWalnutMaterialPath);
 }
 
 IMPLEMENT_MODULE(FGuiyangMahjongEditorToolsModule, GuiyangMahjongEditorTools)

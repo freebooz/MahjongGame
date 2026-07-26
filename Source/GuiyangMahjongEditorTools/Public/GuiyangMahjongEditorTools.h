@@ -19,10 +19,12 @@ private:
     /** 强制以包含组件树和三维视口的完整蓝图编辑器打开展示蓝图。 */
     void OpenRoomPresentationEditor();
     void OpenMahjongTableStaticMeshEditor();
+    void OpenMahjongTableMaterialEditors();
 
     /** 用于在模块卸载时精确移除延迟回调。 */
     FDelegateHandle PostEngineInitHandle;
     /** “Mahjong.OpenRoomPresentationEditor”控制台命令句柄。 */
     IConsoleObject* OpenRoomPresentationCommand = nullptr;
     IConsoleObject* OpenMahjongTableCommand = nullptr;
+    IConsoleObject* OpenMahjongTableMaterialsCommand = nullptr;
 };
