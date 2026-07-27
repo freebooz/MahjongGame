@@ -12,6 +12,7 @@ namespace GuiyangMahjong.Admin.Services;
 
 public sealed partial class AdminActionWorkflow(
     IAdminActionStore store,
+    IAdminCaseStore caseStore,
     MonitoringAggregationService monitoring,
     PlayerMonitoringService playerMonitoring,
     IOptions<AdminOptions> options,
@@ -24,20 +25,62 @@ public sealed partial class AdminActionWorkflow(
         CreateAdminActionRequest request,
         string traceId,
         CancellationToken cancellationToken)
+        => await CreateAsync(
+            principal,
+            request,
+            traceId,
+            null,
+            cancellationToken);
+
+    public async Task<AdminActionRecord> CreateAsync(
+        AdminPrincipal principal,
+        CreateAdminActionRequest request,
+        string traceId,
+        string? idempotencyKey,
+        CancellationToken cancellationToken)
     {
         EnsureEnabled();
         RequireRole(principal, IsPlayerAction(request.ActionType)
             ? AdminRoles.PlayerViewer
             : AdminRoles.RoomViewer);
         RequireRole(principal, RequiredOperatorRole(request.ActionType));
-        ValidateInput(request);
+        var parameters = ValidateInput(request);
+        var actionRequestId = string.IsNullOrEmpty(idempotencyKey)
+            ? Guid.NewGuid().ToString()
+            : CreateDeterministicActionId(principal.OperatorId, idempotencyKey);
+        var existing = await store.GetAsync(
+            actionRequestId,
+            cancellationToken);
+        if (existing is not null)
+        {
+            if (existing.ActionType != request.ActionType
+                || existing.TargetId != request.TargetId
+                || existing.RequestedBy != principal.OperatorId
+                || existing.Reason != NormalizeText(request.Reason)
+                || existing.TicketId != NormalizeText(request.TicketId)
+                || !SameJson(existing.Parameters, parameters))
+            {
+                throw AdminOperationException.Conflict(
+                    "Idempotency-Key was reused for a different management request.");
+            }
+            return existing;
+        }
+        await EnsureAssetCaseAsync(
+            request.ActionType,
+            parameters,
+            cancellationToken);
+        await EnsureSanctionReferenceAsync(
+            request.ActionType,
+            request.TargetId,
+            parameters,
+            cancellationToken);
         var target = await LoadTargetAsync(
             request.ActionType, request.TargetId, cancellationToken);
         EnsureExpectedState(
             request.ExpectedStateSequence, null, target);
         var now = timeProvider.GetUtcNow();
         var action = new AdminActionRecord(
-            Guid.NewGuid().ToString(),
+            actionRequestId,
             request.ActionType,
             target.TargetType,
             request.TargetId,
@@ -54,15 +97,33 @@ public sealed partial class AdminActionWorkflow(
             target.State,
             AdminActionStatus.AwaitingConfirmation,
             null,
-            1);
+            1,
+            parameters);
         await store.CreateAsync(
             action,
             Audit(
                 now, principal.OperatorId, "ActionRequested", action,
                 null, JsonSerializer.SerializeToElement(action), null),
             cancellationToken);
-        return action;
+        return await store.GetAsync(
+                action.ActionRequestId,
+                cancellationToken)
+            ?? action;
     }
+
+    private static string CreateDeterministicActionId(
+        string operatorId,
+        string idempotencyKey)
+    {
+        var bytes = SHA256.HashData(
+            Encoding.UTF8.GetBytes($"{operatorId}\n{idempotencyKey}"));
+        return new Guid(bytes.AsSpan(0, 16)).ToString();
+    }
+
+    private static bool SameJson(JsonElement? left, JsonElement? right) =>
+        left.HasValue == right.HasValue
+        && (!left.HasValue
+            || JsonElement.DeepEquals(left.Value, right!.Value));
 
     public async Task<AdminActionRecord> ConfirmAsync(
         AdminPrincipal principal,
@@ -172,9 +233,12 @@ public sealed partial class AdminActionWorkflow(
         var actions = await store.ListAsync(Math.Clamp(limit, 1, 500), cancellationToken);
         if (principal.HasRole(AdminRoles.AuditViewer)) return actions;
         return actions.Where(action =>
-                action.TargetType == "Player"
-                    ? principal.HasRole(AdminRoles.PlayerViewer)
-                    : principal.HasRole(AdminRoles.RoomViewer))
+                action.RequestedBy == principal.OperatorId
+                || (action.TargetType == "Player"
+                    && principal.HasRole(AdminRoles.PlayerApprover))
+                || (action.TargetType != "Player"
+                    && principal.HasRole(AdminRoles.RoomApprover))
+                || principal.HasRole(RequiredOperatorRole(action.ActionType)))
             .ToArray();
     }
 
@@ -275,9 +339,11 @@ public sealed partial class AdminActionWorkflow(
             room.PublicRoom,
             room.AutoStart,
             room.NewPlayersProhibited,
+            room.MaintenanceMode,
             room.MarkedAbnormal,
             room.DedicatedServer,
             room.Runtime,
+            room.Timeline,
             room.TelemetryStatus
         });
         return new TargetSnapshot(
@@ -354,7 +420,7 @@ public sealed partial class AdminActionWorkflow(
             AdminManagementActionType.ViewPlayerReplay or
             AdminManagementActionType.CreatePlayerSupportTicket;
 
-    private static void ValidateInput(CreateAdminActionRequest request)
+    private static JsonElement? ValidateInput(CreateAdminActionRequest request)
     {
         if (!Enum.IsDefined(request.ActionType))
             throw AdminOperationException.Invalid("管理操作类型无效。");
@@ -367,6 +433,180 @@ public sealed partial class AdminActionWorkflow(
             throw AdminOperationException.Invalid("操作原因长度必须为 10 到 1000 个字符。");
         if (ticket.Length is < 3 or > 128 || !SafeIdentifierPattern().IsMatch(ticket))
             throw AdminOperationException.Invalid("关联工单格式无效。");
+        return request.ActionType switch
+        {
+            AdminManagementActionType.GrantPlayerCompensation =>
+                NormalizeGrantParameters(request.Parameters),
+            AdminManagementActionType.RevokeErroneousReward =>
+                NormalizeRevokeParameters(request.Parameters),
+            AdminManagementActionType.LiftPlayerBan or
+            AdminManagementActionType.UnmutePlayer =>
+                NormalizeSanctionReversalParameters(request.Parameters),
+            _ => RejectUnexpectedParameters(request.Parameters)
+        };
+    }
+
+    private static JsonElement NormalizeGrantParameters(JsonElement? parameters)
+    {
+        var value = RequireParameterObject(parameters);
+        var caseId = RequireCaseId(value);
+        var assetCode = RequireSafeParameter(value, "assetCode", 2, 32)
+            .ToUpperInvariant();
+        if (!value.TryGetProperty("amount", out var amountElement)
+            || !amountElement.TryGetInt64(out var amount)
+            || amount is < 1 or > 1_000_000_000)
+        {
+            throw AdminOperationException.Invalid(
+                "补偿数量必须是 1 到 1000000000 之间的整数。");
+        }
+        return JsonSerializer.SerializeToElement(new
+        {
+            caseId,
+            assetCode,
+            amount
+        });
+    }
+
+    private static JsonElement NormalizeRevokeParameters(JsonElement? parameters)
+    {
+        var value = RequireParameterObject(parameters);
+        return JsonSerializer.SerializeToElement(new
+        {
+            caseId = RequireCaseId(value),
+            rewardGrantId = RequireSafeParameter(
+                value,
+                "rewardGrantId",
+                3,
+                128)
+        });
+    }
+
+    private static JsonElement NormalizeSanctionReversalParameters(
+        JsonElement? parameters)
+    {
+        var value = RequireParameterObject(parameters);
+        return JsonSerializer.SerializeToElement(new
+        {
+            originalCommandId = RequireSafeParameter(
+                value,
+                "originalCommandId",
+                16,
+                128)
+        });
+    }
+
+    private static JsonElement RequireParameterObject(JsonElement? parameters)
+    {
+        if (!parameters.HasValue
+            || parameters.Value.ValueKind != JsonValueKind.Object)
+        {
+            throw AdminOperationException.Invalid(
+                "资产操作必须提供结构化参数。");
+        }
+        return parameters.Value;
+    }
+
+    private static string RequireCaseId(JsonElement parameters)
+    {
+        var caseId = RequireSafeParameter(parameters, "caseId", 36, 36);
+        if (!Guid.TryParse(caseId, out var parsed))
+            throw AdminOperationException.Invalid("补偿案件 ID 格式无效。");
+        return parsed.ToString();
+    }
+
+    private static string RequireSafeParameter(
+        JsonElement parameters,
+        string propertyName,
+        int minimumLength,
+        int maximumLength)
+    {
+        if (!parameters.TryGetProperty(propertyName, out var element)
+            || element.ValueKind != JsonValueKind.String)
+        {
+            throw AdminOperationException.Invalid(
+                $"资产操作参数 {propertyName} 缺失。");
+        }
+        var value = NormalizeText(element.GetString());
+        if (value.Length < minimumLength
+            || value.Length > maximumLength
+            || !SafeIdentifierPattern().IsMatch(value))
+        {
+            throw AdminOperationException.Invalid(
+                $"资产操作参数 {propertyName} 格式无效。");
+        }
+        return value;
+    }
+
+    private static JsonElement? RejectUnexpectedParameters(
+        JsonElement? parameters)
+    {
+        if (parameters.HasValue
+            && parameters.Value.ValueKind is not (
+                JsonValueKind.Null or JsonValueKind.Undefined))
+        {
+            throw AdminOperationException.Invalid(
+                "当前管理操作不接受附加参数。");
+        }
+        return null;
+    }
+
+    private async Task EnsureAssetCaseAsync(
+        AdminManagementActionType actionType,
+        JsonElement? parameters,
+        CancellationToken cancellationToken)
+    {
+        if (actionType is not (
+                AdminManagementActionType.GrantPlayerCompensation
+                or AdminManagementActionType.RevokeErroneousReward))
+        {
+            return;
+        }
+        var caseId = parameters!.Value.GetProperty("caseId").GetString()!;
+        var compensationCase = await caseStore.GetAsync(
+            caseId,
+            cancellationToken);
+        if (compensationCase is null)
+            throw AdminOperationException.NotFound("补偿审查案件不存在。");
+        if (compensationCase.CaseType != AdminCaseType.CompensationReview
+            || compensationCase.Status != "Open")
+        {
+            throw AdminOperationException.Conflict(
+                "资产操作只能关联处于 Open 状态的补偿审查案件。");
+        }
+    }
+
+    private async Task EnsureSanctionReferenceAsync(
+        AdminManagementActionType actionType,
+        string playerId,
+        JsonElement? parameters,
+        CancellationToken cancellationToken)
+    {
+        if (actionType is not (
+                AdminManagementActionType.LiftPlayerBan
+                or AdminManagementActionType.UnmutePlayer))
+        {
+            return;
+        }
+        var originalCommandId = parameters!.Value
+            .GetProperty("originalCommandId")
+            .GetString()!;
+        var player = await playerMonitoring.GetPlayerAsync(
+            playerId,
+            cancellationToken)
+            ?? throw AdminOperationException.NotFound(
+                "Player was not found.");
+        var original = player.ControlHistory.SingleOrDefault(
+            item => item.CommandId == originalCommandId);
+        var expectedOriginalType = actionType ==
+            AdminManagementActionType.LiftPlayerBan
+                ? AdminManagementActionType.PermanentBanPlayer.ToString()
+                : AdminManagementActionType.MutePlayer.ToString();
+        if (original is null
+            || original.ActionType != expectedOriginalType)
+        {
+            throw AdminOperationException.Conflict(
+                "The referenced original sanction does not exist or has the wrong type.");
+        }
     }
 
     private static string NormalizeText(string? value) =>

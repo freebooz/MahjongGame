@@ -19,12 +19,30 @@ documented in `../../Docs/PLAYER_MONITORING_ADMIN_DESIGN.md`.
 - Per-player session, known-device, room, and disconnect history. Session IDs are
   shortened references and access/refresh tokens are never exposed.
 - Player search by player ID or display name.
+- Durable, idempotent player evidence projections for reports, asset changes,
+  reward claims, payment orders, and replay metadata. Authoritative domain
+  services write them through a dedicated ingestion credential; the Admin
+  service never invents business outcomes.
+- Evidence ingestion enforces sensitivity classification, a 16 KiB payload
+  ceiling, UUID idempotency, source-reference uniqueness, and recursive
+  rejection of credentials, complete IP addresses, identity documents, phone
+  numbers, names, and payment-card fields.
+- Sensitive evidence reads require a role and work-item reference and append a
+  metadata-only entry to the hash-chained audit ledger.
+- Chat access is represented by a short-lived, independently approved grant
+  bound to a player, operator, ticket, time window, and scope. The Admin API
+  only answers whether access is allowed; it does not return chat content.
+- Basic `player.viewer` access redacts session, login, known-device, and
+  control history. Those fields are disclosed independently according to the
+  operator's duties.
 - Separate read-only credentials for Admin-to-Lobby and Admin-to-Allocator calls.
 - Role-scoped room management requests with a mandatory second confirmation.
 - Role-scoped player actions for logout/session reset, sanctions, risk tagging,
   compensation/reward reversal, replay access, and support-ticket creation.
 - Separate-person approval, state-sequence conflict detection, expiry, and
   SHA-256 hash-chained audit records.
+- Management request creation requires an `Idempotency-Key`; retries by the
+  same operator return the original request and conflicting reuse is rejected.
 - Player actions use a SHA-256 state fingerprint over masked account, session,
   online, room, and server state; confirmation or approval fails if it changes.
 - Approved requests create one durable command Outbox record in the same
@@ -46,7 +64,21 @@ documented in `../../Docs/PLAYER_MONITORING_ADMIN_DESIGN.md`.
   Control-history reasons, operator identities, tickets, and TraceIds are
   redacted unless the viewer is a sanction/risk operator, player approver, or
   auditor.
-- `MarkRoomAbnormal` and `ProhibitNewPlayers` have idempotent Lobby adapters.
+- `StartDisputeInvestigation`, `CreatePlayerSupportTicket`, and
+  `TriggerCompensation` create idempotent records in an independent management
+  case ledger after approval. Cases preserve the requester, approver, reason,
+  ticket, TraceId, target snapshot, and creation time.
+- `ViewPlayerReplay` creates a separate `ReplayReview` case after confirmation
+  and independent approval. Replay metadata cannot be queried without that
+  open case.
+- Approved compensation and erroneous-reward actions create an immutable
+  intent linked to an open compensation case, then call the authoritative
+  PlayerData wallet with the Outbox ID as the idempotency key. Completion or
+  rejection is persisted without modifying any match result.
+- A compensation case starts a review workflow only. It does not credit assets,
+  reverse rewards, or modify a match result.
+- `MarkRoomAbnormal`, `ProhibitNewPlayers`, and `EnableMaintenanceMode` have
+  idempotent Lobby adapters.
   They require the approved room state sequence; stale commands fail without
   mutation. Admission control permits existing members to reconnect but rejects
   new room members.
@@ -60,9 +92,11 @@ documented in `../../Docs/PLAYER_MONITORING_ADMIN_DESIGN.md`.
 - Allocator mutations use a dedicated management credential that is rejected
   on monitoring and ordinary allocation paths. The web console exposes server
   termination only to `infrastructure.operator`.
-- Other high-privilege Lobby/Auth/Allocator command adapters are not configured
-  yet, so production command execution remains hard-blocked during staged
-  rollout.
+- Room log export and room/player replay review create independently approved
+  scoped cases. An open room-log case produces a watermarked JSON download from
+  the approved room snapshot and timeline. An open room-replay case exposes
+  only replay evidence whose room ID matches the approved case. Both reads add
+  a new audit record.
 - Match-result mutation is absent from the action type model and rejected by API binding.
 
 ## Local configuration
@@ -71,6 +105,14 @@ Set values through environment variables or user secrets. Never commit real toke
 
 ```text
 Admin__ReadOnlyAccessToken=<32+ random characters>
+Admin__EvidenceIngestionToken=<dedicated 32+ projection token>
+Admin__EnterpriseIdentity__Enabled=true
+Admin__EnterpriseIdentity__Authority=https://<enterprise-idp>/<tenant>
+Admin__EnterpriseIdentity__Audience=mahjong-admin
+Admin__EnterpriseIdentity__RequireMfa=true
+Admin__AuditArchive__Enabled=true
+Admin__AuditArchive__AppendUrl=https://<worm-archive>/v1/admin-audit
+Admin__AuditArchive__AppendToken=<dedicated 32+ archive token>
 Admin__Management__Enabled=false
 Admin__Management__ExecutionEnabled=false
 Admin__Management__PollIntervalMilliseconds=1000
@@ -85,6 +127,9 @@ Admin__Management__MuteHours=24
 Admin__Management__RiskLabelTtlDays=30
 Admin__Management__PersistenceMode=Postgres
 Admin__Management__PostgresConnectionString=<secret PostgreSQL connection string>
+Admin__Wallet__Enabled=true
+Admin__Wallet__BaseUrl=http://mahjong-player-data:8080
+Admin__Wallet__CommandToken=<dedicated PlayerData admin command token>
 Admin__Principals__0__OperatorId=<stable enterprise operator id>
 Admin__Principals__0__AccessToken=<32+ operator token>
 Admin__Principals__0__Roles__0=room.viewer
@@ -113,6 +158,18 @@ Admin__Principals__6__OperatorId=<risk analyst id>
 Admin__Principals__6__AccessToken=<different 32+ risk analyst token>
 Admin__Principals__6__Roles__0=player.viewer
 Admin__Principals__6__Roles__1=risk.analyst
+Admin__Principals__7__OperatorId=<support operator id>
+Admin__Principals__7__AccessToken=<different 32+ support operator token>
+Admin__Principals__7__Roles__0=player.viewer
+Admin__Principals__7__Roles__1=support.operator
+Admin__Principals__8__OperatorId=<compensation operator id>
+Admin__Principals__8__AccessToken=<different 32+ compensation operator token>
+Admin__Principals__8__Roles__0=room.viewer
+Admin__Principals__8__Roles__1=compensation.operator
+Admin__Principals__9__OperatorId=<chat compliance operator id>
+Admin__Principals__9__AccessToken=<different 32+ chat compliance token>
+Admin__Principals__9__Roles__0=player.viewer
+Admin__Principals__9__Roles__1=chat.compliance
 Admin__Auth__MonitoringToken=<read-only token configured on Auth>
 Admin__Lobby__MonitoringToken=<different 32+ random characters>
 Admin__Allocators__0__MonitoringToken=<same read-only monitoring token configured on Allocator>
@@ -121,7 +178,29 @@ Admin__Allocators__0__ManagementCommandToken=<dedicated 32+ token configured on 
 
 The web console is served from `/`; health endpoints are `/health/live` and
 `/health/ready`. Monitoring APIs are under `/admin/v1` and require the Admin
-read-only Bearer token.
+read-only Bearer token. Authorized case viewers use `GET /admin/v1/cases`;
+results are filtered by case type and role.
+
+Authoritative services publish projections through:
+
+- `POST /internal/projections/player-evidence`
+- `POST /internal/projections/player-chat-access-grants`
+
+Approved room evidence results:
+
+- `GET /admin/v1/rooms/{roomId}/log-exports/{caseId}`
+- `GET /admin/v1/rooms/{roomId}/replays?caseId={caseId}`
+
+The caller must be the case requester, its independent approver, or an auditor.
+Log files include an operator/time/case watermark. Replay results are restricted
+to players captured in the approved room snapshot and evidence carrying the
+same room ID.
+
+Both endpoints require the dedicated evidence Bearer credential and an
+`Idempotency-Key` equal to the event or grant UUID. Sensitive player queries
+are exposed as `reports`, `asset-changes`, `reward-claims`, `payment-orders`,
+`replays`, and `chat-permission` resources below
+`/admin/v1/players/{playerId}`.
 
 ## Security boundary
 
@@ -132,10 +211,11 @@ monitoring credentials can only read explicitly scoped internal monitoring
 endpoints; attempts to use them for mutation operations are rejected.
 
 Account state and player controls are sourced from the Auth control ledger.
-Payment, assets, rewards, chat content, reports, replay evidence, and support
-ticket systems remain outside this delivery stage. Mute state is authoritative
-and visible to downstream services, but enforcement awaits the introduction of
-the chat service.
+PlayerData is the authoritative append-only wallet/reward ledger and the
+ingress boundary for sanitized payment, report, and replay source events.
+Admin stores only their monitoring projections. Chat content remains outside
+Admin; the PlayerData chat policy gateway checks Auth mute state and fails
+closed before a chat transport publishes a message.
 
 The deployment configuration keeps management disabled by default. PostgreSQL
 mode transactionally persists the request transition, separate approval,
@@ -167,13 +247,12 @@ appends the domain event, and revokes sessions in one PostgreSQL transaction.
 Re-delivery with the same Outbox ID returns the original result; reusing that ID
 with different parameters is rejected.
 
-Before enabling command execution, replace development tokens with enterprise
-OIDC/MFA identities, replicate the audit chain to WORM storage, and attach
-idempotent domain adapters using dedicated least-privilege command credentials.
-Production startup currently rejects `ExecutionEnabled=true`; remove that
-safety gate only when those adapters and their integration tests are present.
-Production startup also rejects enabled management unless PostgreSQL
-persistence is configured.
+Before enabling command execution, configure enterprise OIDC/MFA, an HTTPS
+append-only WORM endpoint, PostgreSQL, and dedicated least-privilege domain
+credentials. Production startup rejects management without OIDC and rejects
+execution unless immutable audit archival and the authoritative wallet adapter
+are enabled. The deployment template keeps execution off until real identity,
+archive, and secret values replace its placeholders.
 
 Additional least-privilege player roles are `sanction.operator`,
 `risk.analyst`, `support.operator`, and `compensation.operator`. Do not assign

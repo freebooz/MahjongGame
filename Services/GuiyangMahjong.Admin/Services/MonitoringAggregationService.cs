@@ -88,6 +88,7 @@ public sealed class MonitoringAggregationService(
             room.PublicRoom,
             room.AutoStart,
             room.NewPlayersProhibited,
+            room.MaintenanceMode,
             room.MarkedAbnormal,
             server,
             runtime,

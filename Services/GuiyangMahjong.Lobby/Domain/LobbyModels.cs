@@ -72,6 +72,7 @@ public sealed record LobbyRoom
     public DateTimeOffset UpdatedAtUtc { get; init; }
     public DateTimeOffset? EmptySinceUtc { get; init; }
     public bool NewPlayersProhibited { get; init; }
+    public bool MaintenanceMode { get; init; }
     public bool MarkedAbnormal { get; init; }
 }
 
@@ -215,6 +216,7 @@ public sealed record AdminUpdateRoomControlResult(
     string ActionType,
     long StateSequence,
     bool NewPlayersProhibited,
+    bool MaintenanceMode,
     bool MarkedAbnormal,
     RoomLifecycle Lifecycle,
     string? ServerInstanceId,

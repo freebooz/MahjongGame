@@ -7,11 +7,38 @@ public sealed class AdminOptions
     public const string SectionName = "Admin";
 
     [MinLength(32)] public string ReadOnlyAccessToken { get; init; } = string.Empty;
+    public string EvidenceIngestionToken { get; init; } = string.Empty;
     public AdminPrincipalOptions[] Principals { get; init; } = [];
+    [Required] public EnterpriseIdentityOptions EnterpriseIdentity { get; init; } = new();
+    [Required] public AuditArchiveOptions AuditArchive { get; init; } = new();
     [Required] public AdminManagementOptions Management { get; init; } = new();
     [Required] public AuthMonitoringOptions Auth { get; init; } = new();
     [Required] public LobbyMonitoringOptions Lobby { get; init; } = new();
+    [Required] public WalletExecutionOptions Wallet { get; init; } = new();
     public AllocatorMonitoringOptions[] Allocators { get; init; } = [];
+}
+
+public sealed class EnterpriseIdentityOptions
+{
+    public bool Enabled { get; init; }
+    public string Authority { get; init; } = string.Empty;
+    public string Audience { get; init; } = string.Empty;
+    public bool RequireHttpsMetadata { get; init; } = true;
+    public bool RequireMfa { get; init; } = true;
+    [Required] public string OperatorIdClaim { get; init; } = "sub";
+    [Required] public string RoleClaim { get; init; } = "roles";
+    [Required] public string AuthenticationMethodClaim { get; init; } = "amr";
+    [Required] public string MfaValue { get; init; } = "mfa";
+}
+
+public sealed class AuditArchiveOptions
+{
+    public bool Enabled { get; init; }
+    public string AppendUrl { get; init; } = string.Empty;
+    public string AppendToken { get; init; } = string.Empty;
+    [Range(100, 60000)] public int PollIntervalMilliseconds { get; init; } = 1000;
+    [Range(1, 50)] public int MaxAttempts { get; init; } = 20;
+    [Range(1, 30)] public int TimeoutSeconds { get; init; } = 5;
 }
 
 public sealed class AdminPrincipalOptions
@@ -54,6 +81,15 @@ public sealed class LobbyMonitoringOptions
     public bool Enabled { get; init; } = true;
     [Required, Url] public string BaseUrl { get; init; } = "http://127.0.0.1:18080";
     public string MonitoringToken { get; init; } = string.Empty;
+    [Range(1, 30)] public int TimeoutSeconds { get; init; } = 5;
+}
+
+public sealed class WalletExecutionOptions
+{
+    public bool Enabled { get; init; }
+    [Required, Url] public string BaseUrl { get; init; } =
+        "http://127.0.0.1:18084";
+    public string CommandToken { get; init; } = string.Empty;
     [Range(1, 30)] public int TimeoutSeconds { get; init; } = 5;
 }
 

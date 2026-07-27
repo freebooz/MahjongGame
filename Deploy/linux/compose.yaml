@@ -156,6 +156,44 @@ services:
     security_opt: ["no-new-privileges:true"]
     logging: *logging
 
+  player-data:
+    image: ${IMAGE_REGISTRY:-local}/guiyang-mahjong-player-data:${MAHJONG_VERSION:-dev}
+    build:
+      context: ../..
+      dockerfile: Services/GuiyangMahjong.PlayerData/Dockerfile
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      PlayerData__PersistenceMode: Postgres
+      PlayerData__PostgresConnectionString: Host=postgres;Port=5432;Database=mahjong;Username=mahjong;Password=${POSTGRES_PASSWORD}
+      PlayerData__SourceIngestionToken: ${PLAYER_DATA_SOURCE_INGESTION_TOKEN:?PLAYER_DATA_SOURCE_INGESTION_TOKEN is required}
+      PlayerData__AdminCommandToken: ${PLAYER_DATA_ADMIN_COMMAND_TOKEN:?PLAYER_DATA_ADMIN_COMMAND_TOKEN is required}
+      PlayerData__ChatGatewayToken: ${PLAYER_DATA_CHAT_GATEWAY_TOKEN:?PLAYER_DATA_CHAT_GATEWAY_TOKEN is required}
+      PlayerData__MonitoringToken: ${PLAYER_DATA_MONITORING_TOKEN:?PLAYER_DATA_MONITORING_TOKEN is required}
+      PlayerData__AuthBaseUrl: http://auth:8080
+      PlayerData__AuthMonitoringToken: ${MONITORING_READ_ONLY_TOKEN:?MONITORING_READ_ONLY_TOKEN is required}
+      PlayerData__AdminProjectionBaseUrl: http://admin:8080
+      PlayerData__AdminEvidenceIngestionToken: ${ADMIN_EVIDENCE_INGESTION_TOKEN:?ADMIN_EVIDENCE_INGESTION_TOKEN is required}
+      PlayerData__ProjectionEnabled: "true"
+      PlayerData__ProjectionPollMilliseconds: ${PLAYER_DATA_PROJECTION_POLL_MS:-1000}
+      PlayerData__ProjectionMaxAttempts: ${PLAYER_DATA_PROJECTION_MAX_ATTEMPTS:-10}
+    depends_on:
+      postgres: {condition: service_healthy}
+      auth: {condition: service_healthy}
+    ports: ["${PLAYER_DATA_PORT:-18084}:8080"]
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "--show-error", "http://127.0.0.1:8080/health/ready"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+    cpus: ${PLAYER_DATA_CPUS:-1.0}
+    mem_limit: ${PLAYER_DATA_MEMORY:-512m}
+    pids_limit: 256
+    read_only: true
+    tmpfs: ["/tmp:rw,noexec,nosuid,size=64m"]
+    security_opt: ["no-new-privileges:true"]
+    logging: *logging
+
   admin:
     image: ${IMAGE_REGISTRY:-local}/guiyang-mahjong-admin:${MAHJONG_VERSION:-dev}
     build:
@@ -164,6 +202,17 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       Admin__ReadOnlyAccessToken: ${ADMIN_READ_ONLY_TOKEN:?ADMIN_READ_ONLY_TOKEN is required}
+      Admin__EvidenceIngestionToken: ${ADMIN_EVIDENCE_INGESTION_TOKEN:?ADMIN_EVIDENCE_INGESTION_TOKEN is required}
+      Admin__EnterpriseIdentity__Enabled: ${ADMIN_ENTERPRISE_IDENTITY_ENABLED:-false}
+      Admin__EnterpriseIdentity__Authority: ${ADMIN_OIDC_AUTHORITY:-}
+      Admin__EnterpriseIdentity__Audience: ${ADMIN_OIDC_AUDIENCE:-}
+      Admin__EnterpriseIdentity__RequireHttpsMetadata: "true"
+      Admin__EnterpriseIdentity__RequireMfa: "true"
+      Admin__AuditArchive__Enabled: ${ADMIN_AUDIT_ARCHIVE_ENABLED:-false}
+      Admin__AuditArchive__AppendUrl: ${ADMIN_AUDIT_ARCHIVE_APPEND_URL:-}
+      Admin__AuditArchive__AppendToken: ${ADMIN_AUDIT_ARCHIVE_APPEND_TOKEN:-}
+      Admin__AuditArchive__PollIntervalMilliseconds: ${ADMIN_AUDIT_ARCHIVE_POLL_MS:-1000}
+      Admin__AuditArchive__MaxAttempts: ${ADMIN_AUDIT_ARCHIVE_MAX_ATTEMPTS:-20}
       Admin__Management__Enabled: ${ADMIN_MANAGEMENT_ENABLED:-false}
       Admin__Management__ExecutionEnabled: ${ADMIN_COMMAND_EXECUTION_ENABLED:-false}
       Admin__Management__PollIntervalMilliseconds: ${ADMIN_COMMAND_POLL_INTERVAL_MS:-1000}
@@ -178,6 +227,10 @@ services:
       Admin__Management__RiskLabelTtlDays: ${ADMIN_RISK_LABEL_TTL_DAYS:-30}
       Admin__Management__PersistenceMode: Postgres
       Admin__Management__PostgresConnectionString: Host=postgres;Port=5432;Database=mahjong;Username=mahjong;Password=${POSTGRES_PASSWORD}
+      Admin__Wallet__Enabled: "true"
+      Admin__Wallet__BaseUrl: http://player-data:8080
+      Admin__Wallet__CommandToken: ${PLAYER_DATA_ADMIN_COMMAND_TOKEN:?PLAYER_DATA_ADMIN_COMMAND_TOKEN is required}
+      Admin__Wallet__TimeoutSeconds: ${ADMIN_WALLET_TIMEOUT_SECONDS:-5}
       Admin__Principals__0__OperatorId: ${ADMIN_ROOM_OPERATOR_ID:-room-operator}
       Admin__Principals__0__AccessToken: ${ADMIN_ROOM_OPERATOR_TOKEN:?ADMIN_ROOM_OPERATOR_TOKEN is required}
       Admin__Principals__0__Roles__0: room.viewer
@@ -209,6 +262,18 @@ services:
       Admin__Principals__6__AccessToken: ${ADMIN_RISK_ANALYST_TOKEN:?ADMIN_RISK_ANALYST_TOKEN is required}
       Admin__Principals__6__Roles__0: player.viewer
       Admin__Principals__6__Roles__1: risk.analyst
+      Admin__Principals__7__OperatorId: ${ADMIN_SUPPORT_OPERATOR_ID:-support-operator}
+      Admin__Principals__7__AccessToken: ${ADMIN_SUPPORT_OPERATOR_TOKEN:?ADMIN_SUPPORT_OPERATOR_TOKEN is required}
+      Admin__Principals__7__Roles__0: player.viewer
+      Admin__Principals__7__Roles__1: support.operator
+      Admin__Principals__8__OperatorId: ${ADMIN_COMPENSATION_OPERATOR_ID:-compensation-operator}
+      Admin__Principals__8__AccessToken: ${ADMIN_COMPENSATION_OPERATOR_TOKEN:?ADMIN_COMPENSATION_OPERATOR_TOKEN is required}
+      Admin__Principals__8__Roles__0: room.viewer
+      Admin__Principals__8__Roles__1: compensation.operator
+      Admin__Principals__9__OperatorId: ${ADMIN_CHAT_COMPLIANCE_ID:-chat-compliance}
+      Admin__Principals__9__AccessToken: ${ADMIN_CHAT_COMPLIANCE_TOKEN:?ADMIN_CHAT_COMPLIANCE_TOKEN is required}
+      Admin__Principals__9__Roles__0: player.viewer
+      Admin__Principals__9__Roles__1: chat.compliance
       Admin__Auth__Enabled: "true"
       Admin__Auth__BaseUrl: http://auth:8080
       Admin__Auth__MonitoringToken: ${MONITORING_READ_ONLY_TOKEN:?MONITORING_READ_ONLY_TOKEN is required}
@@ -225,6 +290,7 @@ services:
       auth: {condition: service_healthy}
       lobby: {condition: service_healthy}
       game-node: {condition: service_healthy}
+      player-data: {condition: service_healthy}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports: ["${ADMIN_PORT:-18083}:8080"]

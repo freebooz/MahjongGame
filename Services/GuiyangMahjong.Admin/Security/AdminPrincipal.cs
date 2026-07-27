@@ -13,6 +13,7 @@ public static class AdminRoles
     public const string RoomApprover = "room.approver";
     public const string InfrastructureOperator = "infrastructure.operator";
     public const string CompensationOperator = "compensation.operator";
+    public const string ChatCompliance = "chat.compliance";
     public const string AuditViewer = "audit.viewer";
 
     public static readonly IReadOnlySet<string> Known = new HashSet<string>(
@@ -28,6 +29,7 @@ public static class AdminRoles
             RoomApprover,
             InfrastructureOperator,
             CompensationOperator,
+            ChatCompliance,
             AuditViewer
         ],
         StringComparer.Ordinal);

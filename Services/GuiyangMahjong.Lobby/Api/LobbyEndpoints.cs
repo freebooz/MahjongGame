@@ -169,6 +169,7 @@ public static class LobbyEndpoints
                 || request.ActionType is not (
                     nameof(AdminManagementRoomAction.MarkRoomAbnormal)
                     or nameof(AdminManagementRoomAction.ProhibitNewPlayers)
+                    or nameof(AdminManagementRoomAction.EnableMaintenanceMode)
                     or nameof(AdminManagementRoomAction.ForceDissolveRoom))
                 || request.ExpectedStateSequence < 1
                 || (request.Reason ?? string.Empty).Trim().Length is < 5 or > 500
@@ -227,6 +228,7 @@ public static class LobbyEndpoints
                             PendingServerInstanceId = null,
                             LastServerInstanceId = serverInstanceId,
                             NewPlayersProhibited = true,
+                            MaintenanceMode = room.MaintenanceMode,
                             MarkedAbnormal = true
                         }
                         : room with
@@ -234,7 +236,13 @@ public static class LobbyEndpoints
                             NewPlayersProhibited =
                                 room.NewPlayersProhibited
                                 || request.ActionType ==
-                                    nameof(AdminManagementRoomAction.ProhibitNewPlayers),
+                                    nameof(AdminManagementRoomAction.ProhibitNewPlayers)
+                                || request.ActionType ==
+                                    nameof(AdminManagementRoomAction.EnableMaintenanceMode),
+                            MaintenanceMode =
+                                room.MaintenanceMode
+                                || request.ActionType ==
+                                    nameof(AdminManagementRoomAction.EnableMaintenanceMode),
                             MarkedAbnormal =
                                 room.MarkedAbnormal
                                 || request.ActionType ==
@@ -263,6 +271,8 @@ public static class LobbyEndpoints
                                     ["reason"] = request.Reason,
                                     ["newPlayersProhibited"] =
                                         updated.NewPlayersProhibited,
+                                    ["maintenanceMode"] =
+                                        updated.MaintenanceMode,
                                     ["markedAbnormal"] = updated.MarkedAbnormal
                                 }),
                             cancellationToken);
@@ -549,6 +559,7 @@ public static class LobbyEndpoints
             actionType,
             room.StateSequence,
             room.NewPlayersProhibited,
+            room.MaintenanceMode,
             room.MarkedAbnormal,
             room.Lifecycle,
             room.Route?.ServerInstanceId
@@ -560,6 +571,7 @@ public static class LobbyEndpoints
     {
         MarkRoomAbnormal,
         ProhibitNewPlayers,
+        EnableMaintenanceMode,
         ForceDissolveRoom
     }
 

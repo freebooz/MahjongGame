@@ -1,7 +1,7 @@
 const byId=id=>document.getElementById(id);
 const state={
   token:sessionStorage.getItem("mahjong-admin-token")||"",
-  timer:null,me:null,pendingAction:null,currentTarget:null
+  timer:null,me:null,pendingAction:null,currentTarget:null,actions:[],cases:[]
 };
 const esc=value=>String(value??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const date=value=>value?new Date(value).toLocaleString("zh-CN",{hour12:false}):"—";
@@ -23,6 +23,7 @@ const actionNames={
 async function request(path,options={}){
   const headers={Authorization:`Bearer ${state.token}`,...(options.body?{"Content-Type":"application/json"}:{})};
   if(options.trace)headers["X-Trace-Id"]=crypto.randomUUID();
+  if(options.idempotent)headers["Idempotency-Key"]=crypto.randomUUID();
   const response=await fetch(path,{...options,headers:{...headers,...options.headers}});
   if(response.status===401)throw new Error("管理凭证无效或已失效");
   if(!response.ok){
@@ -51,17 +52,24 @@ async function refresh(){
     if(byId("playerSearch").value)playerQuery.set("search",byId("playerSearch").value);
     const canRooms=hasRole("room.viewer"),canPlayers=hasRole("player.viewer");
     const canAudit=hasRole("audit.viewer");
+    const canCases=["room.operator","room.approver","support.operator","player.approver",
+      "risk.analyst","compensation.operator","audit.viewer"].some(hasRole);
+    const canAssetOperations=["compensation.operator","player.approver","audit.viewer"].some(hasRole);
     const canActions=["room.operator","room.approver","player.operator","player.approver",
       "sanction.operator","risk.analyst","support.operator","infrastructure.operator",
       "compensation.operator","audit.viewer"].some(hasRole);
-    const [overview,players,rooms,instances,actions,outbox]=await Promise.all([
+    const [overview,players,rooms,instances,actions,outbox,cases,assetOperations]=await Promise.all([
       canRooms?request("/admin/v1/overview"):emptyOverview(),
       canPlayers?request(`/admin/v1/players?${playerQuery}`):[],
       canRooms?request(`/admin/v1/rooms?${roomQuery}`):[],
       canRooms?request("/admin/v1/instances"):[],
       canActions&&state.me.managementEnabled?request("/admin/v1/action-requests"):[],
-      canAudit&&state.me.managementEnabled?request("/admin/v1/command-outbox"):[]
+      canAudit&&state.me.managementEnabled?request("/admin/v1/command-outbox"):[],
+      canCases&&state.me.managementEnabled?request("/admin/v1/cases"):[],
+      canAssetOperations&&state.me.managementEnabled
+        ?request("/admin/v1/player-asset-operations"):[]
     ]);
+    state.actions=actions;state.cases=cases;
     byId("totalRooms").textContent=overview.totalRooms;
     byId("activeRooms").textContent=overview.activeRooms;
     byId("abnormalRooms").textContent=overview.abnormalRooms;
@@ -69,9 +77,14 @@ async function refresh(){
     byId("serverInstances").textContent=overview.dedicatedServerInstances;
     byId("totalPlayers").textContent=players.length;
     byId("pendingCommands").textContent=outbox.filter(item=>item.status==="Pending").length;
-    renderPlayers(players);renderRooms(rooms);renderInstances(instances);renderActions(actions);renderOutbox(outbox);
+    byId("pendingWalletOperations").textContent=assetOperations.filter(
+      item=>item.status==="ApprovedPendingWalletExecution").length;
+    renderPlayers(players);renderRooms(rooms);renderInstances(instances);renderActions(actions);
+    renderOutbox(outbox);renderCases(cases);renderAssetOperations(assetOperations);
     byId("actionsPanel").hidden=!(canActions&&state.me.managementEnabled);
     byId("outboxPanel").hidden=!(canAudit&&state.me.managementEnabled);
+    byId("casesPanel").hidden=!(canCases&&state.me.managementEnabled);
+    byId("assetOperationsPanel").hidden=!(canAssetOperations&&state.me.managementEnabled);
     setConnection(true,`已更新 ${new Date().toLocaleTimeString("zh-CN",{hour12:false})}`);
   }catch(error){setConnection(false,error.message);}
 }
@@ -112,7 +125,8 @@ function renderInstances(items){
 }
 function renderActions(actions){
   byId("actionsBody").innerHTML=actions.length?actions.map(action=>`<tr>
-    <td class="mono">${esc(action.actionRequestId)}</td><td>${esc(actionNames[action.actionType]||action.actionType)}</td>
+    <td class="mono">${esc(action.actionRequestId)}</td><td>${esc(actionNames[action.actionType]||action.actionType)}
+      ${actionParameterSummary(action)?`<br><small>${esc(actionParameterSummary(action))}</small>`:""}</td>
     <td class="mono">${esc(action.targetId)}</td><td>${esc(action.requestedBy)}</td>
     <td><span class="pill">${esc(action.status)}</span></td><td>${esc(action.ticketId)}</td>
     <td>${date(action.requestedAtUtc)}</td><td>${((action.targetType==="Player"&&hasRole("player.approver"))
@@ -121,10 +135,20 @@ function renderActions(actions){
     :'<tr><td colspan="8" class="empty">暂无管理申请</td></tr>';
   byId("actionsBody").querySelectorAll("[data-approve]").forEach(button=>button.onclick=()=>{
     byId("approvalDialog").dataset.actionId=button.dataset.approve;
-    byId("approvalTarget").textContent=`目标：${button.dataset.target}`;
+    const action=state.actions.find(item=>item.actionRequestId===button.dataset.approve);
+    byId("approvalTarget").textContent=`目标：${button.dataset.target}${
+      actionParameterSummary(action)?` · ${actionParameterSummary(action)}`:""}`;
     byId("approvalComment").value="";
     byId("approvalDialog").showModal();
   });
+}
+function actionParameterSummary(action){
+  const parameters=action?.parameters;
+  if(action?.actionType==="GrantPlayerCompensation"&&parameters)
+    return `案件 ${parameters.caseId} · ${parameters.assetCode} × ${parameters.amount}`;
+  if(action?.actionType==="RevokeErroneousReward"&&parameters)
+    return `案件 ${parameters.caseId} · 奖励 ${parameters.rewardGrantId}`;
+  return "";
 }
 function renderOutbox(items){
   byId("outboxBody").innerHTML=items.length?items.map(item=>`<tr>
@@ -133,6 +157,63 @@ function renderOutbox(items){
     <td><span class="pill">${esc(item.status)}</span></td><td>${item.attemptCount}</td>
     <td>${date(item.availableAtUtc)}</td><td class="mono">${esc(item.traceId)}</td></tr>`).join("")
     :'<tr><td colspan="7" class="empty">暂无待执行命令</td></tr>';
+}
+function renderCases(items){
+  const resultAction=item=>item.status!=="Open"||item.targetType!=="Room"?"—"
+    :item.caseType==="RoomLogExport"
+      ?`<button type="button" class="secondary" data-case-result="logs" data-case-id="${esc(item.caseId)}" data-target-id="${esc(item.targetId)}">下载日志</button>`
+      :item.caseType==="ReplayReview"
+        ?`<button type="button" class="secondary" data-case-result="replay" data-case-id="${esc(item.caseId)}" data-target-id="${esc(item.targetId)}">查看回放</button>`
+        :"—";
+  byId("casesBody").innerHTML=items.length?items.map(item=>`<tr>
+    <td class="mono">${esc(item.caseId)}</td><td>${esc(item.caseType)}</td>
+    <td><span class="pill">${esc(item.targetType)}</span><br><span class="mono">${esc(item.targetId)}</span></td>
+    <td><span class="pill">${esc(item.status)}</span></td><td>${esc(item.ticketId)}</td>
+    <td>${esc(item.requestedBy)} → ${esc(item.approvedBy)}</td>
+    <td>${date(item.createdAtUtc)}</td><td class="mono">${esc(item.traceId)}</td>
+    <td>${resultAction(item)}</td></tr>`).join("")
+    :'<tr><td colspan="9" class="empty">暂无管理案件</td></tr>';
+  byId("casesBody").querySelectorAll("[data-case-result]").forEach(button=>{
+    button.onclick=()=>openCaseResult(
+      button.dataset.caseResult,
+      button.dataset.targetId,
+      button.dataset.caseId);
+  });
+}
+function saveBlob(blob,fileName){
+  const url=URL.createObjectURL(blob),link=document.createElement("a");
+  link.href=url;link.download=fileName;document.body.appendChild(link);link.click();
+  link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+async function openCaseResult(kind,roomId,caseId){
+  try{
+    if(kind==="logs"){
+      const response=await fetch(
+        `/admin/v1/rooms/${encodeURIComponent(roomId)}/log-exports/${encodeURIComponent(caseId)}`,
+        {headers:{Authorization:`Bearer ${state.token}`,"X-Trace-Id":crypto.randomUUID()}});
+      if(!response.ok)throw new Error(`日志导出失败（${response.status}）`);
+      saveBlob(await response.blob(),`room-${roomId}-logs-${caseId}.json`);
+      return;
+    }
+    const records=await request(
+      `/admin/v1/rooms/${encodeURIComponent(roomId)}/replays?caseId=${encodeURIComponent(caseId)}`,
+      {trace:true});
+    saveBlob(
+      new Blob([JSON.stringify(records,null,2)],{type:"application/json"}),
+      `room-${roomId}-replays-${caseId}.json`);
+  }catch(error){setConnection(false,error.message);}
+}
+function renderAssetOperations(items){
+  byId("assetOperationsBody").innerHTML=items.length?items.map(item=>`<tr>
+    <td class="mono">${esc(item.operationId)}</td><td class="mono">${esc(item.playerId)}</td>
+    <td>${esc(item.operationType)}</td>
+    <td>${item.operationType==="GrantCompensation"
+      ?`${esc(item.assetCode)} × ${item.amount}`:esc(item.rewardGrantId)}</td>
+    <td><span class="pill">${esc(item.status)}</span></td>
+    <td class="mono">${esc(item.caseId)}</td>
+    <td>${esc(item.requestedBy)} → ${esc(item.approvedBy)}</td>
+    <td>${date(item.createdAtUtc)}</td><td class="mono">${esc(item.traceId)}</td></tr>`).join("")
+    :'<tr><td colspan="9" class="empty">暂无资产操作</td></tr>';
 }
 async function showRoom(roomId){
   try{
@@ -166,6 +247,7 @@ function availableActions(kind){
   if(kind==="room"){
     add("room.operator",["MarkRoomAbnormal","ProhibitNewPlayers","EnableMaintenanceMode",
       "ForceDissolveRoom","ExportRoomLogs","ViewReplay","StartDisputeInvestigation"]);
+    add("compensation.operator",["TriggerCompensation"]);
   }else if(kind==="player"){
     add("player.operator",["ForceLogoutPlayer","ResetAbnormalPlayerSession"]);
     add("sanction.operator",["TemporaryFreezePlayer","PermanentBanPlayer","LiftPlayerBan","MutePlayer","UnmutePlayer"]);
@@ -187,23 +269,54 @@ function openActionDialog(target){
     ?"目标玩家 ID":target.kind==="server"?"Dedicated Server ID":"目标房间 ID";
   byId("actionTarget").value=target.targetId;
   byId("actionTicket").value="";byId("actionReason").value="";byId("actionConfirmation").value="";
+  byId("assetCode").value="";byId("assetAmount").value="";byId("rewardGrantId").value="";
+  byId("originalSanctionCommandId").value="";
   byId("confirmationStep").hidden=true;byId("actionSubmit").textContent="创建申请";
   byId("actionMessage").textContent="创建后还需要再次手工输入目标，并由另一名审批人批准。";
+  updateActionParameterFields();
   byId("actionDialog").showModal();
+}
+function updateActionParameterFields(){
+  const actionType=byId("actionType").value;
+  const isGrant=actionType==="GrantPlayerCompensation";
+  const isRevoke=actionType==="RevokeErroneousReward";
+  const isSanctionReversal=actionType==="LiftPlayerBan"||actionType==="UnmutePlayer";
+  byId("assetParameterFields").hidden=!(isGrant||isRevoke);
+  byId("sanctionReferenceFields").hidden=!isSanctionReversal;
+  byId("grantParameterFields").hidden=!isGrant;
+  byId("revokeParameterFields").hidden=!isRevoke;
+  if(isGrant||isRevoke){
+    const cases=state.cases.filter(item=>
+      item.caseType==="CompensationReview"&&item.status==="Open");
+    byId("assetCaseId").innerHTML=cases.length
+      ?cases.map(item=>`<option value="${esc(item.caseId)}">${esc(item.caseId)} · ${esc(item.ticketId)}</option>`).join("")
+      :'<option value="">没有可用的补偿审查案件</option>';
+  }
 }
 async function submitAction(){
   try{
     if(!state.pendingAction){
+      const actionType=byId("actionType").value;
+      const parameters=actionType==="GrantPlayerCompensation"?{
+        caseId:byId("assetCaseId").value,
+        assetCode:byId("assetCode").value,
+        amount:Number(byId("assetAmount").value)
+      }:actionType==="RevokeErroneousReward"?{
+        caseId:byId("assetCaseId").value,
+        rewardGrantId:byId("rewardGrantId").value
+      }:(actionType==="LiftPlayerBan"||actionType==="UnmutePlayer")?{
+        originalCommandId:byId("originalSanctionCommandId").value
+      }:null;
       state.pendingAction=await request("/admin/v1/action-requests",{
-        method:"POST",trace:true,body:JSON.stringify({
-          actionType:byId("actionType").value,targetId:state.currentTarget.targetId,
+        method:"POST",trace:true,idempotent:true,body:JSON.stringify({
+          actionType,targetId:state.currentTarget.targetId,
           reason:byId("actionReason").value,ticketId:byId("actionTicket").value,
-          expectedStateSequence:state.currentTarget.expectedStateSequence
+          expectedStateSequence:state.currentTarget.expectedStateSequence,parameters
         })
       });
       byId("confirmationStep").hidden=false;
       byId("actionSubmit").textContent="再次确认并提交审批";
-      byId("actionMessage").textContent="第一步已完成。请核对并手工输入目标房间 ID。";
+      byId("actionMessage").textContent="第一步已完成。请核对并手工输入目标 ID。";
       return;
     }
     await request(`/admin/v1/action-requests/${encodeURIComponent(state.pendingAction.actionRequestId)}/confirm`,{
@@ -248,6 +361,55 @@ async function showPlayer(playerId){
       `<h2>制裁与风险操作记录</h2><p class="mono">${controls.length?controls.map(x=>
         `${date(x.effectiveAtUtc)} · ${esc(actionNames[x.actionType]||x.actionType)} · ${esc(x.ticketId)} · ${esc(x.requestedBy)} → ${esc(x.approvedBy)} · Trace ${esc(x.traceId)}`
       ).join("<br>"):"暂无记录"}</p>`);
+    const evidenceActions=[];
+    if(["player.operator","sanction.operator","risk.analyst","support.operator",
+      "player.approver","audit.viewer"].some(hasRole))
+      evidenceActions.push(["identity-history","登录 / 设备 / 会话历史"]);
+    if(["player.operator","sanction.operator","risk.analyst","support.operator",
+      "compensation.operator","player.approver","audit.viewer"].some(hasRole))
+      evidenceActions.push(["gm-operations","GM 操作记录"]);
+    if(["risk.analyst","sanction.operator","player.approver","audit.viewer"].some(hasRole))
+      evidenceActions.push(["reports","举报历史"]);
+    if(["compensation.operator","player.approver","audit.viewer"].some(hasRole)){
+      evidenceActions.push(["asset-changes","资产变化"]);
+      evidenceActions.push(["reward-claims","奖励领取"]);
+      evidenceActions.push(["payment-orders","支付订单"]);
+    }
+    if(["support.operator","risk.analyst","player.approver","audit.viewer"].some(hasRole))
+      evidenceActions.push(["replays","回放元数据"]);
+    if(["chat.compliance","audit.viewer"].some(hasRole))
+      evidenceActions.push(["chat-permission","聊天查询权限"]);
+    if(evidenceActions.length){
+      byId("playerDetail").insertAdjacentHTML("beforeend",`
+        <section class="confirmation">
+          <h2>受控证据查询</h2>
+          <p>每次查询都必须填写关联工单；回放查询填写已独立审批的回放审查案件 ID。查询行为会写入审计账本。</p>
+          <label>工单 / 回放审查案件 ID
+            <input id="playerEvidenceTicket" maxlength="128" placeholder="例如 CS-20260727-001">
+          </label>
+          <div class="manage-actions">${evidenceActions.map(([kind,label])=>
+            `<button type="button" class="secondary" data-evidence="${esc(kind)}">${esc(label)}</button>`
+          ).join("")}</div>
+          <pre id="playerEvidenceResult" class="mono">尚未查询</pre>
+        </section>`);
+      byId("playerDetail").querySelectorAll("[data-evidence]").forEach(button=>{
+        button.onclick=async()=>{
+          const reference=byId("playerEvidenceTicket").value.trim();
+          if(!reference){byId("playerEvidenceResult").textContent="请先填写关联工单或审查案件 ID。";return;}
+          const kind=button.dataset.evidence;
+          const parameter=kind==="replays"?"caseId":"ticketId";
+          try{
+            const path=kind==="identity-history"
+              ?`/admin/v1/players/${encodeURIComponent(playerId)}?ticketId=${encodeURIComponent(reference)}`
+              :`/admin/v1/players/${encodeURIComponent(playerId)}/${kind}?${parameter}=${encodeURIComponent(reference)}`;
+            const result=await request(
+              path,
+              {trace:true});
+            byId("playerEvidenceResult").textContent=JSON.stringify(result,null,2);
+          }catch(error){byId("playerEvidenceResult").textContent=error.message;}
+        };
+      });
+    }
     if(canManage)byId("createPlayerAction").onclick=()=>openActionDialog({
       kind:"player",targetId:p.playerId,expectedStateSequence:null
     });
@@ -263,5 +425,6 @@ let playerSearchDelay;byId("playerSearch").oninput=()=>{clearTimeout(playerSearc
 byId("closeRoomDialog").onclick=()=>byId("roomDialog").close();
 byId("closePlayerDialog").onclick=()=>byId("playerDialog").close();
 byId("actionSubmit").onclick=submitAction;
+byId("actionType").onchange=updateActionParameterFields;
 byId("approvalSubmit").onclick=submitApproval;
 state.timer=setInterval(refresh,5000);refresh();

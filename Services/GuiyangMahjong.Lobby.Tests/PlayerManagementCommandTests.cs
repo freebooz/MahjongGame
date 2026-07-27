@@ -77,8 +77,12 @@ public sealed class PlayerManagementCommandTests(LobbyWebApplicationFactory fact
             (await newLoginClient.GetAsync("/v1/lobby/bootstrap")).StatusCode);
     }
 
-    [Fact]
-    public async Task RoomControlIsIdempotentAndProhibitsNewPlayers()
+    [Theory]
+    [InlineData("ProhibitNewPlayers", false)]
+    [InlineData("EnableMaintenanceMode", true)]
+    public async Task RoomControlIsIdempotentAndProhibitsNewPlayers(
+        string actionType,
+        bool maintenanceMode)
     {
         using var client = factory.CreateClient();
         client.DefaultRequestHeaders.Add("X-Request-Id", Guid.NewGuid().ToString());
@@ -110,7 +114,7 @@ public sealed class PlayerManagementCommandTests(LobbyWebApplicationFactory fact
             (await store.TryCreateRoomAsync(room, CancellationToken.None)).Status);
 
         var request = new AdminUpdateRoomControlRequest(
-            "ProhibitNewPlayers",
+            actionType,
             room.StateSequence,
             "Security investigation admission control",
             Guid.NewGuid().ToString());
@@ -123,6 +127,7 @@ public sealed class PlayerManagementCommandTests(LobbyWebApplicationFactory fact
         Assert.Equal(HttpStatusCode.OK, first.StatusCode);
         Assert.NotNull(result);
         Assert.True(result.NewPlayersProhibited);
+        Assert.Equal(maintenanceMode, result.MaintenanceMode);
         Assert.Equal(2, result.StateSequence);
 
         using var duplicate = await client.PostAsJsonAsync(path, request);

@@ -7,4 +7,6 @@
   <Project Path="GuiyangMahjong.Auth/GuiyangMahjong.Auth.csproj" />
   <Project Path="GuiyangMahjong.Lobby.Tests/GuiyangMahjong.Lobby.Tests.csproj" />
   <Project Path="GuiyangMahjong.Lobby/GuiyangMahjong.Lobby.csproj" />
+  <Project Path="GuiyangMahjong.PlayerData/GuiyangMahjong.PlayerData.csproj" />
+  <Project Path="GuiyangMahjong.PlayerData.Tests/GuiyangMahjong.PlayerData.Tests.csproj" />
 </Solution>

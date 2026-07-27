@@ -4,6 +4,7 @@ using System.Text.Json;
 using GuiyangMahjong.Admin.Domain;
 using GuiyangMahjong.Admin.Options;
 using GuiyangMahjong.Admin.Services;
+using GuiyangMahjong.Admin.Storage;
 
 namespace GuiyangMahjong.Admin.Tests;
 
@@ -56,8 +57,12 @@ public sealed class HttpAdminCommandExecutorTests
                 .GetInt32());
     }
 
-    [Fact]
-    public async Task RoomControlCallsLobbyWithApprovedStateSequence()
+    [Theory]
+    [InlineData(AdminManagementActionType.MarkRoomAbnormal)]
+    [InlineData(AdminManagementActionType.ProhibitNewPlayers)]
+    [InlineData(AdminManagementActionType.EnableMaintenanceMode)]
+    public async Task RoomControlCallsLobbyWithApprovedStateSequence(
+        AdminManagementActionType actionType)
     {
         var handler = new RecordingHandler(_ =>
             JsonResponse(
@@ -67,7 +72,7 @@ public sealed class HttpAdminCommandExecutorTests
 
         var result = await executor.ExecuteAsync(
             CreateCommand(
-                AdminManagementActionType.MarkRoomAbnormal,
+                actionType,
                 "Room",
                 "room-command-test",
                 42),
@@ -80,7 +85,7 @@ public sealed class HttpAdminCommandExecutorTests
             request.Token);
         using var body = JsonDocument.Parse(request.Body);
         Assert.Equal(
-            "MarkRoomAbnormal",
+            actionType.ToString(),
             body.RootElement.GetProperty("actionType").GetString());
         Assert.Equal(
             42,
@@ -182,7 +187,145 @@ public sealed class HttpAdminCommandExecutorTests
             body.RootElement.GetProperty("requestedBy").GetString());
     }
 
-    private static HttpAdminCommandExecutor CreateExecutor(HttpMessageHandler handler) =>
+    [Theory]
+    [InlineData(
+        AdminManagementActionType.StartDisputeInvestigation,
+        "Room",
+        AdminCaseType.DisputeInvestigation)]
+    [InlineData(
+        AdminManagementActionType.CreatePlayerSupportTicket,
+        "Player",
+        AdminCaseType.PlayerSupport)]
+    [InlineData(
+        AdminManagementActionType.TriggerCompensation,
+        "Room",
+        AdminCaseType.CompensationReview)]
+    [InlineData(
+        AdminManagementActionType.ViewPlayerReplay,
+        "Player",
+        AdminCaseType.ReplayReview)]
+    [InlineData(
+        AdminManagementActionType.ViewReplay,
+        "Room",
+        AdminCaseType.ReplayReview)]
+    [InlineData(
+        AdminManagementActionType.ExportRoomLogs,
+        "Room",
+        AdminCaseType.RoomLogExport)]
+    public async Task CaseActionsCreateOneIdempotentCaseWithoutDomainMutation(
+        AdminManagementActionType actionType,
+        string targetType,
+        AdminCaseType expectedCaseType)
+    {
+        var cases = new InMemoryAdminCaseStore();
+        var handler = new RecordingHandler(_ =>
+            throw new InvalidOperationException(
+                "Case creation must not call a gameplay domain endpoint."));
+        var executor = CreateExecutor(handler, cases);
+        var command = CreateCommand(
+            actionType,
+            targetType,
+            $"target-{actionType}");
+
+        var first = await executor.ExecuteAsync(command, CancellationToken.None);
+        var duplicate = await executor.ExecuteAsync(command, CancellationToken.None);
+
+        Assert.True(first.Succeeded);
+        Assert.True(duplicate.Succeeded);
+        Assert.Empty(handler.Requests);
+        var created = Assert.Single(await cases.ListAsync(
+            10,
+            CancellationToken.None));
+        Assert.Equal(expectedCaseType, created.CaseType);
+        Assert.Equal(command.OutboxId, created.SourceCommandId);
+        Assert.Equal("Open", created.Status);
+        Assert.Equal("operator", created.RequestedBy);
+        Assert.Equal("player-approver", created.ApprovedBy);
+    }
+
+    [Theory]
+    [InlineData(PlayerAssetOperationType.GrantCompensation)]
+    [InlineData(PlayerAssetOperationType.RevokeReward)]
+    public async Task AssetActionsExecuteOneApprovedWalletOperationIdempotently(
+        PlayerAssetOperationType operationType)
+    {
+        var cases = new InMemoryAdminCaseStore();
+        var assetOperations = new InMemoryPlayerAssetOperationStore();
+        var caseAction = CreateCommand(
+            AdminManagementActionType.TriggerCompensation,
+            "Room",
+            "room-compensation-case").Payload.Deserialize<AdminActionRecord>(
+                new JsonSerializerOptions(JsonSerializerDefaults.Web))!;
+        var compensationCase = (await cases.CreateAsync(
+            Guid.NewGuid().ToString(),
+            AdminCaseType.CompensationReview,
+            caseAction,
+            DateTimeOffset.UtcNow,
+            CancellationToken.None)).Case;
+        var parameters = operationType ==
+            PlayerAssetOperationType.GrantCompensation
+            ? JsonSerializer.SerializeToElement(new
+            {
+                caseId = compensationCase.CaseId,
+                assetCode = "COIN",
+                amount = 2000
+            })
+            : JsonSerializer.SerializeToElement(new
+            {
+                caseId = compensationCase.CaseId,
+                rewardGrantId = "reward-grant-test"
+            });
+        var command = CreateCommand(
+            operationType == PlayerAssetOperationType.GrantCompensation
+                ? AdminManagementActionType.GrantPlayerCompensation
+                : AdminManagementActionType.RevokeErroneousReward,
+            "Player",
+            "player-asset-test",
+            parameters: parameters);
+        var handler = new RecordingHandler(_ =>
+            JsonResponse(
+                HttpStatusCode.OK,
+                """{"status":"Applied","transactionId":"wallet-transaction-test"}"""));
+        var executor = CreateExecutor(
+            handler,
+            cases,
+            assetOperations);
+
+        var first = await executor.ExecuteAsync(command, CancellationToken.None);
+        var duplicate = await executor.ExecuteAsync(
+            command,
+            CancellationToken.None);
+
+        Assert.True(first.Succeeded);
+        Assert.True(duplicate.Succeeded);
+        var walletRequest = Assert.Single(handler.Requests);
+        Assert.Equal(
+            "wallet-command-token-that-is-at-least-32-characters",
+            walletRequest.Token);
+        Assert.Equal(command.OutboxId, walletRequest.IdempotencyKey);
+        Assert.Equal("/internal/admin/wallet-operations", walletRequest.Path);
+        var created = Assert.Single(await assetOperations.ListAsync(
+            10,
+            CancellationToken.None));
+        Assert.Equal(operationType, created.OperationType);
+        Assert.Equal(compensationCase.CaseId, created.CaseId);
+        Assert.Equal("WalletCompleted", created.Status);
+        Assert.Equal(
+            operationType == PlayerAssetOperationType.GrantCompensation
+                ? 2000
+                : null,
+            created.Amount);
+        Assert.Equal(
+            operationType == PlayerAssetOperationType.RevokeReward
+                ? "reward-grant-test"
+                : null,
+            created.RewardGrantId);
+    }
+
+    private static HttpAdminCommandExecutor CreateExecutor(
+        HttpMessageHandler handler,
+        IAdminCaseStore? caseStore = null,
+        IPlayerAssetOperationStore? assetOperationStore = null) =>
         new(
             new TestHttpClientFactory(handler),
             Microsoft.Extensions.Options.Options.Create(new AdminOptions
@@ -208,15 +351,26 @@ public sealed class HttpAdminCommandExecutorTests
                     LobbyCommandToken =
                         "lobby-command-token-that-is-at-least-32-characters",
                     CommandTimeoutSeconds = 5
+                },
+                Wallet = new WalletExecutionOptions
+                {
+                    Enabled = true,
+                    BaseUrl = "http://wallet.test",
+                    CommandToken =
+                        "wallet-command-token-that-is-at-least-32-characters",
+                    TimeoutSeconds = 5
                 }
-            }));
+            }),
+            caseStore ?? new InMemoryAdminCaseStore(),
+            assetOperationStore ?? new InMemoryPlayerAssetOperationStore());
 
     private static AdminCommandOutboxRecord CreateCommand(
         AdminManagementActionType actionType =
             AdminManagementActionType.ForceLogoutPlayer,
         string targetType = "Player",
         string targetId = "player-command-test",
-        long? expectedStateSequence = null)
+        long? expectedStateSequence = null,
+        JsonElement? parameters = null)
     {
         var now = new DateTimeOffset(2026, 7, 27, 8, 0, 0, TimeSpan.Zero);
         var beforeState = targetType == "DedicatedServer"
@@ -254,7 +408,8 @@ public sealed class HttpAdminCommandExecutorTests
                 now,
                 ApprovalDecision.Approve,
                 "Approved for test execution"),
-            2);
+            2,
+            parameters);
         return new AdminCommandOutboxRecord(
             Guid.NewGuid().ToString(),
             action.ActionRequestId,

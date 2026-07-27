@@ -47,7 +47,8 @@ public sealed record CreateAdminActionRequest(
     string TargetId,
     string Reason,
     string TicketId,
-    long? ExpectedStateSequence);
+    long? ExpectedStateSequence,
+    JsonElement? Parameters = null);
 
 public sealed record ConfirmAdminActionRequest(string TargetConfirmation);
 public sealed record ApproveAdminActionRequest(ApprovalDecision Decision, string Comment);
@@ -77,7 +78,8 @@ public sealed record AdminActionRecord(
     JsonElement BeforeState,
     AdminActionStatus Status,
     AdminActionApproval? Approval,
-    int Version);
+    int Version,
+    JsonElement? Parameters = null);
 
 public sealed record AdminAuditRecord(
     string AuditId,

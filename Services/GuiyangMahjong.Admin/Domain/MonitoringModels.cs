@@ -28,6 +28,7 @@ public sealed record RoomMonitorSnapshot
     public required DateTimeOffset CreatedAtUtc { get; init; }
     public required DateTimeOffset UpdatedAtUtc { get; init; }
     public bool NewPlayersProhibited { get; init; }
+    public bool MaintenanceMode { get; init; }
     public bool MarkedAbnormal { get; init; }
 }
 
@@ -122,6 +123,7 @@ public sealed record RoomDetail(
     bool PublicRoom,
     bool AutoStart,
     bool NewPlayersProhibited,
+    bool MaintenanceMode,
     bool MarkedAbnormal,
     MonitoredInstance? DedicatedServer,
     RoomRuntimeTelemetry? Runtime,

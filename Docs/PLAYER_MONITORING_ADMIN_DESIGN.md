@@ -72,13 +72,20 @@ IP 或设备作为主键。
 账号制裁与风险控制账本现已落地到 Auth：账号状态、冻结/禁言到期时间、风险标签、
 控制版本和追加式操作历史可被监控应用读取。冻结与永久封禁会在同一事务中撤销刷新
 会话并阻止新的登录和刷新会话创建；Admin 随后使用同一 OutboxId 触发 Lobby 跨副本
-断线。聊天服务尚未引入，因此禁言状态目前是供下游执行的权威投影，不宣称已完成聊天
-消息拦截。
+断线。独立 PlayerData 服务提供聊天发送前的权威策略网关，使用专用凭证实时读取 Auth
+禁言状态并采用失败关闭；实际聊天传输服务必须在发布每条消息前调用该网关。
 
-房间管理二期已经加入角色化人员凭证、操作申请、手工输入目标的二次确认、异人审批、
+争议调查、玩家客服工单、房间日志导出、回放审查和补偿触发现已使用独立案件账本。案件由审批后的 Outbox
+命令幂等创建，保存申请人、审批人、原因、工单、TraceId 和目标状态快照。补偿案件
+只启动人工审查流程，不直接写资产账本，也不能修改原始对局或结算结果。
+房间日志案件可以下载带操作者、时间、案件号水印的审批时房间快照与事件时间线；房间
+回放案件只返回审批快照中参与玩家且 RoomId 与案件目标一致的回放证据。下载和查看本身
+也会追加审计记录，未关联案件的普通查看者无法访问。
+
+房间管理二期已经加入企业 OIDC/MFA 或开发环境角色化人员凭证、操作申请、手工输入目标的二次确认、异人审批、
 状态序号并发检查和哈希链审计。审批通过后状态为 `ApprovedAwaitingExecution`；在
-PostgreSQL/WORM 持久化、企业 OIDC/MFA 和事务 Outbox 执行器完成前，部署默认关闭管理
-模式，也不会调用 Lobby/Allocator 高权限命令。
+PostgreSQL 中由事务 Outbox 调用 Lobby、Auth、Allocator 和 PlayerData 的幂等高权限接口。
+房间维护模式会立即禁止新玩家加入，并保留已有玩家重连能力。
 
 玩家管理二期复用同一安全工作流，已经覆盖强制下线、异常会话重置、冻结/封禁/解封、
 禁言/解禁、风险标记、补偿、错误奖励撤销、回放和客服工单申请。玩家操作使用脱敏账号、
@@ -88,7 +95,14 @@ PostgreSQL/WORM 持久化、企业 OIDC/MFA 和事务 Outbox 执行器完成前�
 
 管理持久化阶段已将申请状态、审批记录和哈希链审计迁移到 PostgreSQL。审批通过的状态
 更新、审批、审计和唯一命令 Outbox 消息在同一事务内提交，任何一步失败都会整体回滚。
-部署仍默认关闭命令消费者；待 WORM 归档和各领域幂等执行适配器完成后再开放执行。
+审计写入会在同一数据库事务中生成外部不可变归档 Outbox，后台使用 AuditId 作为幂等键
+投递至 HTTPS WORM 接口。生产环境只有在企业 OIDC/MFA、PostgreSQL、WORM 归档、独立命令
+凭证和钱包适配器全部启用时才允许打开命令消费者；部署模板仍默认关闭以防示例配置误执行。
+
+资产、奖励、支付、举报和回放数据由独立 PlayerData 权威服务接收。奖励领取和补偿通过
+追加式钱包交易修改余额，错误奖励撤销引用原奖励发放 ID，拒绝负余额、重复命令和同人审批。
+所有脱敏证据使用事务 Outbox 准实时投影到 Admin，Admin 不直接写权威资产账本，也不存在
+修改对局结果的接口。
 
 ## 5. 权限模型
 
@@ -173,10 +187,13 @@ PostgreSQL/WORM 持久化、企业 OIDC/MFA 和事务 Outbox 执行器完成前�
 
 - `GET /admin/v1/players`
 - `GET /admin/v1/players/{playerId}`
-- `GET /admin/v1/players/{playerId}/assets`
-- `GET /admin/v1/players/{playerId}/orders`
+- `GET /admin/v1/players/{playerId}/asset-changes?ticketId=...`
+- `GET /admin/v1/players/{playerId}/reward-claims?ticketId=...`
+- `GET /admin/v1/players/{playerId}/payment-orders?ticketId=...`
 - `GET /admin/v1/players/{playerId}/reports`
-- `GET /admin/v1/players/{playerId}/replays`
+- `GET /admin/v1/players/{playerId}/replays?caseId=...`
+- `GET /admin/v1/players/{playerId}/chat-permission?ticketId=...`
+- `GET /admin/v1/players/{playerId}/gm-operations?ticketId=...`
 - `GET /admin/v1/audit`
 
 管理接口只创建工作流，不直接执行：

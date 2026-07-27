@@ -94,19 +94,22 @@ public sealed class AdminExternalPersistenceTests
         var audit = await storeB.ListAuditAsync(1000, CancellationToken.None);
         Assert.Equal(2, audit.Count(item => item.TargetId == targetId));
 
-        var claimed = Assert.Single(await storeA.ClaimOutboxAsync(
+        var claimed = Assert.Single(
+            await storeA.ClaimOutboxAsync(
             "external-worker-a",
-            1,
+            500,
             now.AddSeconds(2),
             now.AddSeconds(32),
-            CancellationToken.None));
+            CancellationToken.None),
+            item => item.ActionRequestId == actionId);
         Assert.Equal(command.OutboxId, claimed.OutboxId);
-        Assert.Empty(await storeB.ClaimOutboxAsync(
+        Assert.DoesNotContain(await storeB.ClaimOutboxAsync(
             "external-worker-b",
-            1,
+            500,
             now.AddSeconds(3),
             now.AddSeconds(33),
-            CancellationToken.None));
+            CancellationToken.None),
+            item => item.ActionRequestId == actionId);
         var completed = approved with
         {
             Status = AdminActionStatus.Succeeded,
@@ -137,7 +140,218 @@ public sealed class AdminExternalPersistenceTests
             (await storeB.GetAsync(actionId, CancellationToken.None))?.Status);
         audit = await storeB.ListAuditAsync(1000, CancellationToken.None);
         Assert.Equal(3, audit.Count(item => item.TargetId == targetId));
+        var targetAudit = audit.First(item => item.TargetId == targetId);
+        await using (var immutableDataSource =
+            NpgsqlDataSource.Create(ConnectionString))
+        await using (var forbiddenUpdate = immutableDataSource.CreateCommand(
+            """
+            UPDATE admin_monitor.audit_ledger
+            SET reason='forbidden mutation'
+            WHERE audit_id=$1
+            """))
+        {
+            forbiddenUpdate.Parameters.AddWithValue(
+                Guid.Parse(targetAudit.AuditId));
+            var exception = await Assert.ThrowsAsync<PostgresException>(
+                async () => await forbiddenUpdate.ExecuteNonQueryAsync());
+            Assert.Equal("P0001", exception.SqlState);
+        }
         Assert.True(await storeB.CheckHealthAsync(CancellationToken.None));
+        await using var archive = new PostgresAuditArchiveOutboxStore(
+            NpgsqlDataSource.Create(ConnectionString));
+        var archiveWorker = $"external-archive-{Guid.NewGuid():N}";
+        var archiveBatch = await archive.ClaimAsync(
+            archiveWorker,
+            1000,
+            now.AddMinutes(1),
+            now.AddMinutes(2),
+            CancellationToken.None);
+        Assert.Contains(
+            archiveBatch,
+            item => item.AuditId == targetAudit.AuditId
+                && item.Payload.GetProperty("recordHash").GetString()
+                    == targetAudit.RecordHash);
+        foreach (var item in archiveBatch)
+        {
+            await archive.CompleteAsync(
+                item.AuditId,
+                archiveWorker,
+                now.AddMinutes(1),
+                CancellationToken.None);
+        }
+    }
+
+    [AdminExternalPersistenceFact]
+    [Trait("Category", "ExternalPersistence")]
+    public async Task PostgreSql_CaseCreationIsConcurrentAndIdempotent()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var action = new AdminActionRecord(
+            Guid.NewGuid().ToString(),
+            AdminManagementActionType.StartDisputeInvestigation,
+            "Room",
+            $"room-case-{Guid.NewGuid():N}",
+            "external-room-operator",
+            now,
+            now.AddMinutes(5),
+            now.AddHours(1),
+            now,
+            "Investigate a disputed room event timeline",
+            $"DISPUTE-{Guid.NewGuid():N}",
+            Guid.NewGuid().ToString(),
+            12,
+            new string('b', 64),
+            JsonSerializer.SerializeToElement(new { stateSequence = 12 }),
+            AdminActionStatus.AwaitingConfirmation,
+            null,
+            1);
+        await using var actionStore = CreateStore();
+        await actionStore.InitializeAsync(CancellationToken.None);
+        await actionStore.CreateAsync(
+            action,
+            CreateAudit(
+                action,
+                now,
+                action.RequestedBy,
+                "ActionRequested",
+                null,
+                JsonSerializer.SerializeToElement(action),
+                null),
+            CancellationToken.None);
+        var approved = action with
+        {
+            Approval = new AdminActionApproval(
+                Guid.NewGuid().ToString(),
+                "external-room-approver",
+                now.AddSeconds(1),
+                ApprovalDecision.Approve,
+                "Approved dispute investigation"),
+            Status = AdminActionStatus.ApprovedAwaitingExecution,
+            Version = 2
+        };
+        Assert.True(await actionStore.TryTransitionAsync(
+            1,
+            approved,
+            CreateAudit(
+                approved,
+                now.AddSeconds(1),
+                "external-room-approver",
+                "ActionApprovalRecorded",
+                JsonSerializer.SerializeToElement(action),
+                JsonSerializer.SerializeToElement(approved),
+                JsonSerializer.SerializeToElement(approved.Approval)),
+            CancellationToken.None));
+
+        await using var casesA =
+            new PostgresAdminCaseStore(NpgsqlDataSource.Create(ConnectionString));
+        await using var casesB =
+            new PostgresAdminCaseStore(NpgsqlDataSource.Create(ConnectionString));
+        await casesA.InitializeAsync(CancellationToken.None);
+        var commandId = Guid.NewGuid().ToString();
+        var results = await Task.WhenAll(
+            casesA.CreateAsync(
+                commandId,
+                AdminCaseType.DisputeInvestigation,
+                approved,
+                now.AddSeconds(1),
+                CancellationToken.None),
+            casesB.CreateAsync(
+                commandId,
+                AdminCaseType.DisputeInvestigation,
+                approved,
+                now.AddSeconds(1),
+                CancellationToken.None));
+
+        Assert.Single(results, item => !item.Duplicate);
+        Assert.Single(results, item => item.Duplicate);
+        Assert.Equal(results[0].Case.CaseId, results[1].Case.CaseId);
+        var persisted = Assert.Single(
+            await casesB.ListAsync(500, CancellationToken.None),
+            item => item.SourceCommandId == commandId);
+        Assert.Equal("Open", persisted.Status);
+        Assert.Equal(action.TraceId, persisted.TraceId);
+        Assert.Equal("external-room-approver", persisted.ApprovedBy);
+    }
+
+    [AdminExternalPersistenceFact]
+    [Trait("Category", "ExternalPersistence")]
+    public async Task PostgreSql_PlayerEvidenceIsConcurrentAndIdempotent()
+    {
+        var eventId = Guid.NewGuid().ToString();
+        var now = DateTimeOffset.UtcNow;
+        var request = new IngestPlayerEvidenceRequest(
+            eventId,
+            $"player-evidence-{Guid.NewGuid():N}",
+            PlayerEvidenceType.PaymentOrder,
+            now.AddMinutes(-1),
+            $"payment-{Guid.NewGuid():N}",
+            JsonSerializer.SerializeToElement(new
+            {
+                orderReference = $"masked-{Guid.NewGuid():N}",
+                amountMinor = 8800,
+                currency = "CNY",
+                status = "Paid"
+            }),
+            PlayerEvidenceSensitivity.Financial);
+        await using var storeA = new PostgresPlayerEvidenceStore(
+            NpgsqlDataSource.Create(ConnectionString));
+        await using var storeB = new PostgresPlayerEvidenceStore(
+            NpgsqlDataSource.Create(ConnectionString));
+        await storeA.InitializeAsync(CancellationToken.None);
+
+        var results = await Task.WhenAll(
+            storeA.IngestAsync(
+                request,
+                now,
+                CancellationToken.None),
+            storeB.IngestAsync(
+                request,
+                now,
+                CancellationToken.None));
+
+        Assert.Single(results, item => !item.Duplicate);
+        Assert.Single(results, item => item.Duplicate);
+        var persisted = Assert.Single(
+            await storeB.ListAsync(
+                request.PlayerId,
+                PlayerEvidenceType.PaymentOrder,
+                10,
+                CancellationToken.None));
+        Assert.Equal(eventId, persisted.EventId);
+        Assert.Equal(request.SourceReference, persisted.SourceReference);
+
+        var grantId = Guid.NewGuid().ToString();
+        var grant = new IngestPlayerChatAccessGrantRequest(
+            grantId,
+            request.PlayerId,
+            $"CHAT-{Guid.NewGuid():N}",
+            "external-chat-reviewer",
+            "external-player-approver",
+            "External dispute requires scoped chat review.",
+            $"trace-{Guid.NewGuid():N}",
+            now.AddDays(-1),
+            now,
+            now.AddHours(1),
+            ["metadata"]);
+        var grantResults = await Task.WhenAll(
+            storeA.IngestChatGrantAsync(
+                grant,
+                now,
+                CancellationToken.None),
+            storeB.IngestChatGrantAsync(
+                grant,
+                now,
+                CancellationToken.None));
+        Assert.Single(grantResults, item => !item.Duplicate);
+        Assert.Single(grantResults, item => item.Duplicate);
+        var activeGrant = await storeB.GetActiveChatGrantAsync(
+            grant.PlayerId,
+            grant.TicketId,
+            grant.GrantedTo,
+            now,
+            CancellationToken.None);
+        Assert.NotNull(activeGrant);
+        Assert.Equal(grant.TraceId, activeGrant.TraceId);
     }
 
     private static string ConnectionString =>

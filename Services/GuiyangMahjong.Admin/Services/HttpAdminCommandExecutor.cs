@@ -4,13 +4,16 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using GuiyangMahjong.Admin.Domain;
 using GuiyangMahjong.Admin.Options;
+using GuiyangMahjong.Admin.Storage;
 using Microsoft.Extensions.Options;
 
 namespace GuiyangMahjong.Admin.Services;
 
 public sealed class HttpAdminCommandExecutor(
     IHttpClientFactory httpClientFactory,
-    IOptions<AdminOptions> options) : IAdminCommandExecutor
+    IOptions<AdminOptions> options,
+    IAdminCaseStore caseStore,
+    IPlayerAssetOperationStore assetOperationStore) : IAdminCommandExecutor
 {
     private static readonly JsonSerializerOptions JsonOptions =
         new(JsonSerializerDefaults.Web);
@@ -26,6 +29,7 @@ public sealed class HttpAdminCommandExecutor(
         if (command.ActionType is
             AdminManagementActionType.MarkRoomAbnormal
             or AdminManagementActionType.ProhibitNewPlayers
+            or AdminManagementActionType.EnableMaintenanceMode
             or AdminManagementActionType.ForceDissolveRoom)
         {
             return await ExecuteRoomControlAsync(
@@ -46,6 +50,24 @@ public sealed class HttpAdminCommandExecutor(
             return await ExecutePlayerControlAsync(
                 command,
                 action,
+                cancellationToken);
+        }
+        if (TryGetCaseType(command.ActionType, out var caseType))
+        {
+            return await ExecuteCaseCreationAsync(
+                command,
+                action,
+                caseType,
+                cancellationToken);
+        }
+        if (TryGetAssetOperationType(
+                command.ActionType,
+                out var assetOperationType))
+        {
+            return await ExecuteAssetOperationAsync(
+                command,
+                action,
+                assetOperationType,
                 cancellationToken);
         }
         if (command.ActionType is not (
@@ -144,6 +166,169 @@ public sealed class HttpAdminCommandExecutor(
                 result.Body);
     }
 
+    private async Task<AdminCommandExecutionResult> ExecuteCaseCreationAsync(
+        AdminCommandOutboxRecord command,
+        AdminActionRecord action,
+        AdminCaseType caseType,
+        CancellationToken cancellationToken)
+    {
+        if (action.Approval is null)
+        {
+            return Failure(
+                false,
+                "MissingCaseApproval",
+                "An approved action is required to create a management case.");
+        }
+        try
+        {
+            var result = await caseStore.CreateAsync(
+                command.OutboxId,
+                caseType,
+                action,
+                action.Approval.ApprovedAtUtc,
+                cancellationToken);
+            return new AdminCommandExecutionResult(
+                true,
+                false,
+                JsonSerializer.SerializeToElement(result, JsonOptions),
+                null);
+        }
+        catch (InvalidOperationException exception)
+        {
+            return Failure(
+                false,
+                "CaseCommandConflict",
+                exception.Message);
+        }
+    }
+
+    private async Task<AdminCommandExecutionResult> ExecuteAssetOperationAsync(
+        AdminCommandOutboxRecord command,
+        AdminActionRecord action,
+        PlayerAssetOperationType operationType,
+        CancellationToken cancellationToken)
+    {
+        if (action.Approval is null)
+        {
+            return Failure(
+                false,
+                "MissingAssetOperationApproval",
+                "An approved action is required to queue an asset operation.");
+        }
+        if (!action.Parameters.HasValue
+            || action.Parameters.Value.ValueKind != JsonValueKind.Object
+            || !action.Parameters.Value.TryGetProperty(
+                "caseId",
+                out var caseIdElement)
+            || caseIdElement.ValueKind != JsonValueKind.String)
+        {
+            return Failure(
+                false,
+                "MissingCompensationCase",
+                "An approved compensation review case id is required.");
+        }
+        var compensationCase = await caseStore.GetAsync(
+            caseIdElement.GetString()!,
+            cancellationToken);
+        if (compensationCase is null)
+        {
+            return Failure(
+                false,
+                "CompensationCaseNotFound",
+                "The referenced compensation review case does not exist.");
+        }
+        try
+        {
+            var result = await assetOperationStore.CreateAsync(
+                command.OutboxId,
+                operationType,
+                action,
+                compensationCase,
+                action.Approval.ApprovedAtUtc,
+                cancellationToken);
+            if (result.Operation.Status == "WalletCompleted")
+            {
+                return new AdminCommandExecutionResult(
+                    true,
+                    false,
+                    JsonSerializer.SerializeToElement(result, JsonOptions),
+                    null);
+            }
+            if (result.Operation.Status == "WalletRejected")
+            {
+                return Failure(
+                    false,
+                    "WalletOperationRejected",
+                    "The wallet previously rejected this operation.");
+            }
+            if (!admin.Wallet.Enabled)
+            {
+                return Failure(
+                    false,
+                    "WalletAdapterDisabled",
+                    "The authoritative wallet adapter is disabled.");
+            }
+            var wallet = await SendAsync(
+                admin.Wallet.BaseUrl,
+                "/internal/admin/wallet-operations",
+                admin.Wallet.CommandToken,
+                command.OutboxId,
+                command.TraceId,
+                new
+                {
+                    OperationType = operationType.ToString(),
+                    PlayerId = result.Operation.PlayerId,
+                    CaseId = result.Operation.CaseId,
+                    result.Operation.AssetCode,
+                    result.Operation.Amount,
+                    result.Operation.RewardGrantId,
+                    result.Operation.RequestedBy,
+                    result.Operation.ApprovedBy,
+                    result.Operation.Reason,
+                    result.Operation.TicketId,
+                    result.Operation.TraceId,
+                    ApprovedAtUtc = action.Approval.ApprovedAtUtc
+                },
+                cancellationToken);
+            if (!wallet.Succeeded)
+            {
+                if (!wallet.Retryable)
+                {
+                    _ = await assetOperationStore.SetStatusAsync(
+                        command.OutboxId,
+                        "WalletRejected",
+                        cancellationToken);
+                }
+                return Failure(
+                    wallet.Retryable,
+                    "WalletCommandFailed",
+                    wallet.Error,
+                    wallet.Body);
+            }
+            var completed =
+                await assetOperationStore.SetStatusAsync(
+                    command.OutboxId,
+                    "WalletCompleted",
+                    cancellationToken);
+            return new AdminCommandExecutionResult(
+                true,
+                false,
+                JsonSerializer.SerializeToElement(new
+                {
+                    operation = completed,
+                    wallet = wallet.Body
+                }, JsonOptions),
+                null);
+        }
+        catch (InvalidOperationException exception)
+        {
+            return Failure(
+                false,
+                "AssetOperationConflict",
+                exception.Message);
+        }
+    }
+
     private async Task<AdminCommandExecutionResult> ExecutePlayerControlAsync(
         AdminCommandOutboxRecord command,
         AdminActionRecord action,
@@ -181,6 +366,9 @@ public sealed class HttpAdminCommandExecutor(
             approval.ApprovedBy,
             EffectiveAtUtc = effectiveAtUtc,
             ExpiresAtUtc = expiresAtUtc,
+            OriginalCommandId = GetString(
+                action.Parameters,
+                "originalCommandId"),
             RiskLabel = command.ActionType ==
                 AdminManagementActionType.MarkRiskAccount
                     ? "manual-review"
@@ -410,6 +598,9 @@ public sealed class HttpAdminCommandExecutor(
         return null;
     }
 
+    private static string? GetString(JsonElement? value, string name) =>
+        value.HasValue ? GetString(value.Value, name) : null;
+
     private static long? GetInt64(JsonElement value, string name)
     {
         if (value.ValueKind != JsonValueKind.Object) return null;
@@ -429,6 +620,52 @@ public sealed class HttpAdminCommandExecutor(
             or AdminManagementActionType.MutePlayer
             or AdminManagementActionType.UnmutePlayer
             or AdminManagementActionType.MarkRiskAccount;
+
+    private static bool TryGetCaseType(
+        AdminManagementActionType actionType,
+        out AdminCaseType caseType)
+    {
+        caseType = actionType switch
+        {
+            AdminManagementActionType.StartDisputeInvestigation =>
+                AdminCaseType.DisputeInvestigation,
+            AdminManagementActionType.CreatePlayerSupportTicket =>
+                AdminCaseType.PlayerSupport,
+            AdminManagementActionType.TriggerCompensation =>
+                AdminCaseType.CompensationReview,
+            AdminManagementActionType.ExportRoomLogs =>
+                AdminCaseType.RoomLogExport,
+            AdminManagementActionType.ViewReplay =>
+                AdminCaseType.ReplayReview,
+            AdminManagementActionType.ViewPlayerReplay =>
+                AdminCaseType.ReplayReview,
+            _ => default
+        };
+        return actionType is
+            AdminManagementActionType.StartDisputeInvestigation
+            or AdminManagementActionType.CreatePlayerSupportTicket
+            or AdminManagementActionType.TriggerCompensation
+            or AdminManagementActionType.ExportRoomLogs
+            or AdminManagementActionType.ViewReplay
+            or AdminManagementActionType.ViewPlayerReplay;
+    }
+
+    private static bool TryGetAssetOperationType(
+        AdminManagementActionType actionType,
+        out PlayerAssetOperationType operationType)
+    {
+        operationType = actionType switch
+        {
+            AdminManagementActionType.GrantPlayerCompensation =>
+                PlayerAssetOperationType.GrantCompensation,
+            AdminManagementActionType.RevokeErroneousReward =>
+                PlayerAssetOperationType.RevokeReward,
+            _ => default
+        };
+        return actionType is
+            AdminManagementActionType.GrantPlayerCompensation
+            or AdminManagementActionType.RevokeErroneousReward;
+    }
 
     private sealed record CommandCallResult(
         bool Succeeded,
