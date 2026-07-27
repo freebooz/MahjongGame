@@ -23,6 +23,9 @@ TILE_DEST = f"{DEST_ROOT}/Tiles"
 BASE_MESH_PATH = f"{MESH_DEST}/SM_Mahjong50"
 UNIFIED_MATERIAL_PATH = f"{MATERIAL_DEST}/M_Mahjong50_TileUnified"
 
+DISTANT_GLYPH_LOD_BIAS = -1
+DISTANT_GLYPH_COVERAGE_BOOST = 1.25
+
 
 def log(message: str) -> None:
     unreal.log(f"[Mahjong50Import] {message}")
@@ -153,6 +156,11 @@ def configure_texture(texture, name: str) -> None:
         or name.endswith("_EngraveMask")
     )
     is_face_atlas = "_FaceAtlas_" in name
+    is_visible_face_atlas = is_face_atlas and (
+        name.endswith("_BaseColor")
+        or name.endswith("_GlyphMask")
+        or name.endswith("_EngraveMask")
+    )
     set_prop(texture, "srgb", not (is_normal or is_mask))
     if is_normal:
         set_prop(texture, "compression_settings", unreal.TextureCompressionSettings.TC_NORMALMAP)
@@ -164,16 +172,23 @@ def configure_texture(texture, name: str) -> None:
         unreal.TextureGroup.TEXTUREGROUP_CHARACTER if is_face_atlas else unreal.TextureGroup.TEXTUREGROUP_WORLD,
     )
     if is_face_atlas:
-        # Atlas cells occupy only part of the 8K texture. Preserve thin strokes at oblique angles.
+        # Visible glyph maps use one higher mip and stronger sharpening so
+        # strokes remain readable when a tile covers only a few dozen pixels.
+        # PBR support maps keep neutral LOD to limit mobile streaming cost.
+        sharpen_name = "TMGS_SHARPEN8" if is_visible_face_atlas else "TMGS_SHARPEN6"
         sharpen = getattr(
             unreal.TextureMipGenSettings,
-            "TMGS_SHARPEN6",
+            sharpen_name,
             unreal.TextureMipGenSettings.TMGS_SHARPEN4,
         )
         set_prop(texture, "mip_gen_settings", sharpen)
         # UE 5.8 selects anisotropy through the texture group and r.MaxAnisotropy.
         set_prop(texture, "filter", unreal.TextureFilter.TF_DEFAULT)
-        set_prop(texture, "lod_bias", 0)
+        set_prop(
+            texture,
+            "lod_bias",
+            DISTANT_GLYPH_LOD_BIAS if is_visible_face_atlas else 0,
+        )
         texture_address = getattr(unreal, "TextureAddress", None)
         if texture_address is not None:
             clamp = getattr(texture_address, "TA_CLAMP", None)
@@ -385,10 +400,22 @@ def build_face_material():
     connect(ivory_bc, "", body_base, "A")
     connect(green_bc, "", body_base, "B")
     connect(vertex_color, "R", body_base, "Alpha")
-    glyph_factor = expr(material, unreal.MaterialExpressionMultiply, 430, -420)
-    connect(glyph_mask, "R", glyph_factor, "A")
+    glyph_coverage = scalar_parameter(
+        material,
+        "GlyphCoverageBoost",
+        DISTANT_GLYPH_COVERAGE_BOOST,
+        180,
+        -430,
+    )
+    boosted_glyph = expr(material, unreal.MaterialExpressionMultiply, 400, -430)
+    connect(glyph_mask, "R", boosted_glyph, "A")
+    connect(glyph_coverage, "", boosted_glyph, "B")
+    clamped_glyph = expr(material, unreal.MaterialExpressionSaturate, 570, -430)
+    connect(boosted_glyph, "", clamped_glyph, "")
+    glyph_factor = expr(material, unreal.MaterialExpressionMultiply, 730, -420)
+    connect(clamped_glyph, "", glyph_factor, "A")
     connect(vertex_color, "G", glyph_factor, "B")
-    seamless_base = expr(material, unreal.MaterialExpressionLinearInterpolate, 700, -370)
+    seamless_base = expr(material, unreal.MaterialExpressionLinearInterpolate, 900, -370)
     connect(body_base, "", seamless_base, "A")
     connect(cavity_color, "", seamless_base, "B")
     connect(glyph_factor, "", seamless_base, "Alpha")
@@ -572,6 +599,12 @@ def main() -> None:
 
     validate(base_mesh, tile_specs, imported_textures)
     unreal.EditorAssetLibrary.save_directory(DEST_ROOT, only_if_is_dirty=False, recursive=True)
+    log(
+        "distance readability policy="
+        f"visible_atlas_lod_bias={DISTANT_GLYPH_LOD_BIAS}, "
+        "visible_atlas_mip=Sharpen8, pbr_atlas_lod_bias=0, "
+        f"glyph_coverage_boost={DISTANT_GLYPH_COVERAGE_BOOST:.2f}"
+    )
     log("MAHJONG50_IMPORT_OK")
 
 
