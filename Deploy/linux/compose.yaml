@@ -52,6 +52,7 @@ services:
       Auth__TokenSigningKey: ${PLAYER_TOKEN_SIGNING_KEY:?PLAYER_TOKEN_SIGNING_KEY is required}
       Auth__GuestIdentityPepper: ${GUEST_IDENTITY_PEPPER:?GUEST_IDENTITY_PEPPER is required}
       Auth__MonitoringReadOnlyToken: ${MONITORING_READ_ONLY_TOKEN:?MONITORING_READ_ONLY_TOKEN is required}
+      Auth__ManagementCommandToken: ${AUTH_MANAGEMENT_COMMAND_TOKEN:?AUTH_MANAGEMENT_COMMAND_TOKEN is required}
     depends_on:
       postgres: {condition: service_healthy}
     ports: ["${AUTH_PORT:-18082}:8080"]
@@ -128,6 +129,8 @@ services:
       Lobby__JoinTicketSigningKey: ${JOIN_TICKET_SIGNING_KEY:?JOIN_TICKET_SIGNING_KEY is required}
       Lobby__InternalServiceToken: ${LOBBY_INTERNAL_TOKEN:?LOBBY_INTERNAL_TOKEN is required}
       Lobby__MonitoringReadOnlyToken: ${MONITORING_READ_ONLY_TOKEN:?MONITORING_READ_ONLY_TOKEN is required}
+      Lobby__ManagementCommandToken: ${LOBBY_MANAGEMENT_COMMAND_TOKEN:?LOBBY_MANAGEMENT_COMMAND_TOKEN is required}
+      Lobby__AccessRevocationTtlMinutes: ${LOBBY_ACCESS_REVOCATION_TTL_MINUTES:-120}
       Lobby__Allocator__Enabled: "true"
       Lobby__Allocator__BaseUrl: http://host.docker.internal:${ALLOCATOR_PORT:-18081}
       Lobby__Allocator__ServiceToken: ${ALLOCATOR_SERVICE_TOKEN:?ALLOCATOR_SERVICE_TOKEN is required}
@@ -166,6 +169,9 @@ services:
       Admin__Management__LeaseSeconds: ${ADMIN_COMMAND_LEASE_SECONDS:-30}
       Admin__Management__MaxAttempts: ${ADMIN_COMMAND_MAX_ATTEMPTS:-5}
       Admin__Management__RetryBaseSeconds: ${ADMIN_COMMAND_RETRY_BASE_SECONDS:-5}
+      Admin__Management__AuthCommandToken: ${AUTH_MANAGEMENT_COMMAND_TOKEN:?AUTH_MANAGEMENT_COMMAND_TOKEN is required}
+      Admin__Management__LobbyCommandToken: ${LOBBY_MANAGEMENT_COMMAND_TOKEN:?LOBBY_MANAGEMENT_COMMAND_TOKEN is required}
+      Admin__Management__CommandTimeoutSeconds: ${ADMIN_COMMAND_TIMEOUT_SECONDS:-5}
       Admin__Management__PersistenceMode: Postgres
       Admin__Management__PostgresConnectionString: Host=postgres;Port=5432;Database=mahjong;Username=mahjong;Password=${POSTGRES_PASSWORD}
       Admin__Principals__0__OperatorId: ${ADMIN_ROOM_OPERATOR_ID:-room-operator}

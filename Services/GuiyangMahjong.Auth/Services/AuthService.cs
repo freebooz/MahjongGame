@@ -96,7 +96,7 @@ public sealed partial class AuthService(
             identity.PlayerId,
             identity.DisplayName,
             identity.Provider,
-            accessTokenIssuer.Issue(identity, accessExpiry),
+            accessTokenIssuer.Issue(identity, now, accessExpiry),
             accessExpiry,
             refresh.Plaintext,
             refresh.Session.ExpiresAtUtc);

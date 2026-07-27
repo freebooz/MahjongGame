@@ -11,6 +11,7 @@ public sealed class LobbyWebApplicationFactory : WebApplicationFactory<Program>
 {
     public const string SigningKey = "test-only-guiyang-lobby-signing-key-which-is-long-enough";
     public const string MonitoringToken = "test-only-lobby-monitoring-token-which-is-long-enough";
+    public const string ManagementToken = "test-only-lobby-management-token-which-is-long-enough";
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -23,6 +24,7 @@ public sealed class LobbyWebApplicationFactory : WebApplicationFactory<Program>
                 ["Lobby:JoinTicketSigningKey"] = "test-only-join-ticket-signing-key-which-is-long-enough",
                 ["Lobby:InternalServiceToken"] = "test-only-internal-service-token-which-is-long-enough",
                 ["Lobby:MonitoringReadOnlyToken"] = MonitoringToken,
+                ["Lobby:ManagementCommandToken"] = ManagementToken,
                 ["Lobby:Allocator:Enabled"] = "false",
                 ["Lobby:Persistence:Mode"] = "InMemory",
                 ["Lobby:PasswordFailureLimit"] = "5",
@@ -34,13 +36,15 @@ public sealed class LobbyWebApplicationFactory : WebApplicationFactory<Program>
     public HttpClient CreateAuthenticatedClient(
         string playerId,
         string displayName = "自动化玩家",
-        DateTimeOffset? expiresAtUtc = null)
+        DateTimeOffset? expiresAtUtc = null,
+        DateTimeOffset? issuedAtUtc = null)
     {
         var client = CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
         var token = HmacPlayerTokenValidator.CreateSignedToken(
             SigningKey,
             new PlayerIdentity(playerId, displayName, "Guest"),
-            expiresAtUtc ?? DateTimeOffset.UtcNow.AddMinutes(10));
+            expiresAtUtc ?? DateTimeOffset.UtcNow.AddMinutes(10),
+            issuedAtUtc);
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
         return client;
     }

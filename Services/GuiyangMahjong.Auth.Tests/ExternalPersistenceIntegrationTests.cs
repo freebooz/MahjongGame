@@ -98,6 +98,44 @@ public sealed class ExternalPersistenceIntegrationTests
         Assert.True(await storeB.CheckHealthAsync(CancellationToken.None));
     }
 
+    [AuthExternalPersistenceFact]
+    [Trait("Category", "ExternalPersistence")]
+    public async Task PostgreSql_AdminSessionRevocationIsIdempotentAcrossInstances()
+    {
+        var options = CreateOptions();
+        await using var storeA = CreateStore();
+        await using var storeB = CreateStore();
+        await storeA.InitializeAsync(CancellationToken.None);
+        var service = CreateService(storeA, options);
+        var login = await service.LoginGuestAsync(
+            new GuestLoginRequest(
+                $"external-admin-revoke-{Guid.NewGuid():N}",
+                "External Managed Player"),
+            CancellationToken.None);
+        var commandId = Guid.NewGuid().ToString();
+        var effectiveAtUtc = DateTimeOffset.UtcNow;
+
+        var first = await storeA.RevokePlayerSessionsAsync(
+            commandId,
+            login.PlayerId,
+            effectiveAtUtc,
+            CancellationToken.None);
+        var duplicate = await storeB.RevokePlayerSessionsAsync(
+            commandId,
+            login.PlayerId,
+            effectiveAtUtc,
+            CancellationToken.None);
+
+        Assert.True(first.PlayerFound);
+        Assert.Equal(1, first.RevokedSessionCount);
+        Assert.False(first.Duplicate);
+        Assert.True(duplicate.Duplicate);
+        Assert.Equal(first.RevokedSessionCount, duplicate.RevokedSessionCount);
+        await Assert.ThrowsAsync<AuthOperationException>(() => service.RefreshAsync(
+            new RefreshSessionRequest(login.RefreshToken),
+            CancellationToken.None));
+    }
+
     private static string ConnectionString =>
         Environment.GetEnvironmentVariable("AUTH_TEST_POSTGRES")!;
 

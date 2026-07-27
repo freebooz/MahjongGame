@@ -13,5 +13,6 @@ public sealed class AuthOptions
     [Required] public string PersistenceMode { get; init; } = "InMemory";
     public string PostgresConnectionString { get; init; } = string.Empty;
     public string MonitoringReadOnlyToken { get; init; } = string.Empty;
+    public string ManagementCommandToken { get; init; } = string.Empty;
     public bool EnableHttpsRedirection { get; init; }
 }

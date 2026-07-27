@@ -17,10 +17,11 @@ public static class LobbyEventTypes
     public const string RoomUpdated = "room.updated";
     public const string ServerAssigned = "server.assigned";
     public const string RoomClosed = "room.closed";
+    public const string PlayerSessionRevoked = "player.session.revoked";
 
     public static readonly IReadOnlySet<string> All = new HashSet<string>(StringComparer.Ordinal)
     {
-        LobbyUpdated, RoomUpdated, ServerAssigned, RoomClosed
+        LobbyUpdated, RoomUpdated, ServerAssigned, RoomClosed, PlayerSessionRevoked
     };
 }
 
@@ -146,13 +147,46 @@ public sealed class LobbyEventHub : ILobbyEventPublisher, IHostedService
         }
     }
 
+    public Task DisconnectPlayerAsync(
+        string playerId,
+        CancellationToken cancellationToken) =>
+        PublishAsync(
+            LobbyEventTypes.PlayerSessionRevoked,
+            new PlayerSessionRevokedEvent(playerId),
+            cancellationToken);
+
     private async Task<long> NextSequenceAsync(CancellationToken cancellationToken) => useRedis
         ? await redis!.GetDatabase().StringIncrementAsync(sequenceKey).WaitAsync(cancellationToken)
         : Interlocked.Increment(ref localSequence);
 
     private void Dispatch(LobbyEventEnvelope envelope)
     {
+        if (envelope.Type == LobbyEventTypes.PlayerSessionRevoked
+            && TryGetRevokedPlayerId(envelope.Data, out var playerId))
+        {
+            foreach (var client in clients.Values)
+                if (client.PlayerId == playerId) client.Socket.Abort();
+            return;
+        }
         foreach (var client in clients.Values) Enqueue(client, envelope);
+    }
+
+    private static bool TryGetRevokedPlayerId(object data, out string playerId)
+    {
+        if (data is PlayerSessionRevokedEvent typed)
+        {
+            playerId = typed.PlayerId;
+            return true;
+        }
+        if (data is JsonElement element
+            && element.ValueKind == JsonValueKind.Object
+            && element.TryGetProperty("playerId", out var property))
+        {
+            playerId = property.GetString() ?? string.Empty;
+            return playerId.Length > 0;
+        }
+        playerId = string.Empty;
+        return false;
     }
 
     private static void Enqueue(ClientConnection client, LobbyEventEnvelope envelope)
@@ -185,4 +219,6 @@ public sealed class LobbyEventHub : ILobbyEventPublisher, IHostedService
                 FullMode = BoundedChannelFullMode.Wait
             });
     }
+
+    private sealed record PlayerSessionRevokedEvent(string PlayerId);
 }

@@ -133,6 +133,41 @@ public sealed class ExternalPersistenceIntegrationTests
 
     [ExternalPersistenceFact]
     [Trait("Category", "ExternalPersistence")]
+    public async Task Redis_AccessRevocationIsSharedAndMonotonicAcrossInstances()
+    {
+        var options = CreateOptions();
+        await using var connectionsA = new LobbyPersistenceConnections(options);
+        await using var connectionsB = new LobbyPersistenceConnections(options);
+        var revocationsA = new RedisPlayerAccessRevocationStore(connectionsA, options);
+        var revocationsB = new RedisPlayerAccessRevocationStore(connectionsB, options);
+        var playerId = $"external-revocation-{Guid.NewGuid():N}";
+        var firstCutoff = DateTimeOffset.UtcNow;
+        var laterCutoff = firstCutoff.AddSeconds(1);
+
+        await revocationsA.RevokeBeforeAsync(
+            playerId,
+            laterCutoff,
+            CancellationToken.None);
+        var stored = await revocationsB.RevokeBeforeAsync(
+            playerId,
+            firstCutoff,
+            CancellationToken.None);
+
+        Assert.Equal(
+            laterCutoff.ToUnixTimeMilliseconds(),
+            stored.ToUnixTimeMilliseconds());
+        Assert.True(await revocationsB.IsRevokedAsync(
+            playerId,
+            firstCutoff,
+            CancellationToken.None));
+        Assert.False(await revocationsB.IsRevokedAsync(
+            playerId,
+            laterCutoff.AddMilliseconds(1),
+            CancellationToken.None));
+    }
+
+    [ExternalPersistenceFact]
+    [Trait("Category", "ExternalPersistence")]
     public async Task Redis_EventPublishedByOneHubReachesAnotherHubClient()
     {
         var options = CreateOptions();

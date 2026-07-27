@@ -28,6 +28,15 @@ builder.Services.AddOptions<AuthOptions>()
     .Validate(options => string.IsNullOrEmpty(options.MonitoringReadOnlyToken)
                          || options.MonitoringReadOnlyToken.Length >= 32,
         "Auth:MonitoringReadOnlyToken must be empty or contain at least 32 characters.")
+    .Validate(options => string.IsNullOrEmpty(options.ManagementCommandToken)
+                         || options.ManagementCommandToken.Length >= 32,
+        "Auth:ManagementCommandToken must be empty or contain at least 32 characters.")
+    .Validate(options => string.IsNullOrEmpty(options.ManagementCommandToken)
+                         || !string.Equals(
+                             options.ManagementCommandToken,
+                             options.MonitoringReadOnlyToken,
+                             StringComparison.Ordinal),
+        "Auth management and monitoring credentials must be different.")
     .Validate(options => !builder.Environment.IsProduction()
                          || (!options.TokenSigningKey.StartsWith(
                                  "development-only", StringComparison.OrdinalIgnoreCase)
@@ -104,6 +113,39 @@ app.MapPost("/v1/auth/logout", async (
     await service.LogoutAsync(request, cancellationToken);
     return Results.NoContent();
 }).RequireRateLimiting("auth");
+
+app.MapPost("/internal/admin/players/{playerId}/sessions/revoke", async (
+    string playerId,
+    AdminRevokePlayerSessionsRequest request,
+    HttpContext context,
+    IAuthStore store,
+    IOptions<AuthOptions> options,
+    TimeProvider timeProvider,
+    CancellationToken cancellationToken) =>
+{
+    if (!HasMonitoringCredential(context, options.Value.ManagementCommandToken))
+        return Results.Unauthorized();
+    var commandId = context.Request.Headers["Idempotency-Key"].ToString().Trim();
+    var now = timeProvider.GetUtcNow();
+    if (commandId.Length is < 16 or > 128
+        || playerId.Length is < 1 or > 80
+        || (request.Reason ?? string.Empty).Trim().Length is < 5 or > 500
+        || (request.TraceId ?? string.Empty).Trim().Length is < 8 or > 64
+        || request.EffectiveAtUtc < now.AddHours(-24)
+        || request.EffectiveAtUtc > now.AddMinutes(1))
+    {
+        return Results.BadRequest(new
+        {
+            code = "INVALID_ADMIN_COMMAND",
+            message = "Management command validation failed."
+        });
+    }
+    return Results.Ok(await store.RevokePlayerSessionsAsync(
+        commandId,
+        playerId,
+        request.EffectiveAtUtc,
+        cancellationToken));
+});
 
 app.MapGet("/internal/monitoring/players", async (
     HttpContext context,

@@ -21,6 +21,8 @@ public sealed class LobbyOptions
     [MinLength(32)] public string JoinTicketSigningKey { get; init; } = string.Empty;
     [MinLength(32)] public string InternalServiceToken { get; init; } = string.Empty;
     public string MonitoringReadOnlyToken { get; init; } = string.Empty;
+    public string ManagementCommandToken { get; init; } = string.Empty;
+    [Range(15, 1440)] public int AccessRevocationTtlMinutes { get; init; } = 120;
     public bool EnableHttpsRedirection { get; init; }
     public string[] Announcements { get; init; } = [];
     [Required] public LobbyPersistenceOptions Persistence { get; init; } = new();

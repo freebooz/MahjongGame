@@ -26,6 +26,19 @@ builder.Services
     .Validate(options => string.IsNullOrEmpty(options.MonitoringReadOnlyToken)
                          || options.MonitoringReadOnlyToken.Length >= 32,
         "Lobby:MonitoringReadOnlyToken must be empty or contain at least 32 characters.")
+    .Validate(options => string.IsNullOrEmpty(options.ManagementCommandToken)
+                         || options.ManagementCommandToken.Length >= 32,
+        "Lobby:ManagementCommandToken must be empty or contain at least 32 characters.")
+    .Validate(options => string.IsNullOrEmpty(options.ManagementCommandToken)
+                         || (!string.Equals(
+                                 options.ManagementCommandToken,
+                                 options.MonitoringReadOnlyToken,
+                                 StringComparison.Ordinal)
+                             && !string.Equals(
+                                 options.ManagementCommandToken,
+                                 options.InternalServiceToken,
+                                 StringComparison.Ordinal)),
+        "Lobby management credential must be dedicated.")
     .Validate(options => !options.Allocator.Enabled || options.Allocator.ServiceToken.Length >= 32,
         "Lobby:Allocator:ServiceToken must contain at least 32 characters when enabled.")
     .Validate(options => options.TokenSigningKey.Length >= 32, "Lobby:TokenSigningKey 至少需要 32 个字符")
@@ -55,6 +68,11 @@ builder.Services.AddSingleton<IOnlinePresenceService>(provider =>
         .Equals("RedisPostgres", StringComparison.OrdinalIgnoreCase)
         ? ActivatorUtilities.CreateInstance<RedisOnlinePresenceService>(provider)
         : ActivatorUtilities.CreateInstance<InMemoryOnlinePresenceService>(provider));
+builder.Services.AddSingleton<IPlayerAccessRevocationStore>(provider =>
+    provider.GetRequiredService<IOptions<LobbyOptions>>().Value.Persistence.Mode
+        .Equals("RedisPostgres", StringComparison.OrdinalIgnoreCase)
+        ? ActivatorUtilities.CreateInstance<RedisPlayerAccessRevocationStore>(provider)
+        : ActivatorUtilities.CreateInstance<InMemoryPlayerAccessRevocationStore>(provider));
 builder.Services.AddSingleton<IIdempotencyStore>(provider =>
     provider.GetRequiredService<IOptions<LobbyOptions>>().Value.Persistence.Mode
         .Equals("RedisPostgres", StringComparison.OrdinalIgnoreCase)

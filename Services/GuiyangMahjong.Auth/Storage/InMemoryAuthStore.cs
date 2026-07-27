@@ -8,6 +8,8 @@ public sealed class InMemoryAuthStore : IAuthStore
     private readonly Dictionary<string, AuthIdentity> identitiesByInstallation = new(StringComparer.Ordinal);
     private readonly Dictionary<string, AuthIdentity> identitiesByPlayer = new(StringComparer.Ordinal);
     private readonly Dictionary<string, RefreshSession> sessions = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, AdminRevokePlayerSessionsResult> adminCommands =
+        new(StringComparer.Ordinal);
     private readonly List<AuthLoginEvent> loginEvents = [];
     private readonly object gate = new();
 
@@ -78,6 +80,43 @@ public sealed class InMemoryAuthStore : IAuthStore
                 || !FixedTimeEquals(session.TokenHash, tokenHash)) return Task.FromResult(false);
             sessions[sessionId] = session with { RevokedAtUtc = now };
             return Task.FromResult(true);
+        }
+    }
+
+    public Task<AdminRevokePlayerSessionsResult> RevokePlayerSessionsAsync(
+        string commandId,
+        string playerId,
+        DateTimeOffset effectiveAtUtc,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        lock (gate)
+        {
+            if (adminCommands.TryGetValue(commandId, out var existing))
+                return Task.FromResult(existing with { Duplicate = true });
+            var found = identitiesByPlayer.ContainsKey(playerId);
+            var revoked = 0;
+            foreach (var session in sessions.Values
+                         .Where(item => item.PlayerId == playerId
+                             && item.RevokedAtUtc is null
+                             && item.ExpiresAtUtc > effectiveAtUtc)
+                         .ToArray())
+            {
+                sessions[session.SessionId] = session with
+                {
+                    RevokedAtUtc = effectiveAtUtc
+                };
+                revoked++;
+            }
+            var result = new AdminRevokePlayerSessionsResult(
+                commandId,
+                playerId,
+                found,
+                revoked,
+                effectiveAtUtc,
+                false);
+            adminCommands[commandId] = result;
+            return Task.FromResult(result);
         }
     }
 

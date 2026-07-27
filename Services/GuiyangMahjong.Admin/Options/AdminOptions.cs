@@ -31,6 +31,9 @@ public sealed class AdminManagementOptions
     [Range(5, 300)] public int LeaseSeconds { get; init; } = 30;
     [Range(1, 20)] public int MaxAttempts { get; init; } = 5;
     [Range(1, 300)] public int RetryBaseSeconds { get; init; } = 5;
+    public string AuthCommandToken { get; init; } = string.Empty;
+    public string LobbyCommandToken { get; init; } = string.Empty;
+    [Range(1, 30)] public int CommandTimeoutSeconds { get; init; } = 5;
     [Range(1, 15)] public int ConfirmationTtlMinutes { get; init; } = 5;
     [Range(5, 1440)] public int ApprovalTtlMinutes { get; init; } = 60;
 }

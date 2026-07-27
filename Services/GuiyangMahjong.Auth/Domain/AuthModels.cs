@@ -4,6 +4,17 @@ public sealed record GuestLoginRequest(string InstallationId, string? DisplayNam
 public sealed record RefreshSessionRequest(string RefreshToken);
 public sealed record LogoutRequest(string RefreshToken);
 public sealed record LoginObservation(string MaskedIp, string ClientSummary);
+public sealed record AdminRevokePlayerSessionsRequest(
+    string Reason,
+    string TraceId,
+    DateTimeOffset EffectiveAtUtc);
+public sealed record AdminRevokePlayerSessionsResult(
+    string CommandId,
+    string PlayerId,
+    bool PlayerFound,
+    int RevokedSessionCount,
+    DateTimeOffset EffectiveAtUtc,
+    bool Duplicate);
 
 public sealed record AuthSessionResponse(
     string PlayerId,

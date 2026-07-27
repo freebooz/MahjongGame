@@ -34,3 +34,13 @@ CREATE INDEX IF NOT EXISTS ix_auth_login_player_time
 
 CREATE INDEX IF NOT EXISTS ix_auth_login_device_time
     ON auth_login_events(device_id, occurred_at_utc DESC);
+
+CREATE TABLE IF NOT EXISTS auth_admin_commands (
+    command_id VARCHAR(128) PRIMARY KEY,
+    command_type VARCHAR(64) NOT NULL,
+    target_id VARCHAR(80) NOT NULL,
+    effective_at_utc TIMESTAMPTZ NOT NULL,
+    processed_at_utc TIMESTAMPTZ NOT NULL,
+    player_found BOOLEAN NOT NULL,
+    affected_count INTEGER NOT NULL
+);

@@ -12,10 +12,18 @@ public interface IPlayerTokenValidator
     PlayerTokenValidationResult Validate(string token);
 }
 
-public sealed record PlayerTokenValidationResult(bool IsValid, PlayerIdentity? Player, string ChineseReason)
+public sealed record PlayerTokenValidationResult(
+    bool IsValid,
+    PlayerIdentity? Player,
+    DateTimeOffset IssuedAtUtc,
+    string ChineseReason)
 {
-    public static PlayerTokenValidationResult Success(PlayerIdentity player) => new(true, player, string.Empty);
-    public static PlayerTokenValidationResult Failure(string reason) => new(false, null, reason);
+    public static PlayerTokenValidationResult Success(
+        PlayerIdentity player,
+        DateTimeOffset issuedAtUtc) =>
+        new(true, player, issuedAtUtc, string.Empty);
+    public static PlayerTokenValidationResult Failure(string reason) =>
+        new(false, null, DateTimeOffset.MinValue, reason);
 }
 
 /// <summary>
@@ -64,12 +72,24 @@ public sealed class HmacPlayerTokenValidator : IPlayerTokenValidator
                 return PlayerTokenValidationResult.Failure("登录会话已过期，请重新登录");
             }
 
+            var issuedAt = payload.Iat <= 0
+                ? DateTimeOffset.UnixEpoch
+                : DateTimeOffset.FromUnixTimeMilliseconds(payload.Iat);
+            var expiresAt = DateTimeOffset.FromUnixTimeSeconds(payload.Exp);
+            if (issuedAt >= expiresAt
+                || issuedAt > timeProvider.GetUtcNow().AddMinutes(1))
+            {
+                return PlayerTokenValidationResult.Failure("登录凭据签发时间无效");
+            }
+
             if (payload.Sub.Length > 80 || payload.Name.Length > 24 || payload.Provider.Length > 32)
             {
                 return PlayerTokenValidationResult.Failure("登录身份字段超出限制");
             }
 
-            return PlayerTokenValidationResult.Success(new PlayerIdentity(payload.Sub, payload.Name, payload.Provider));
+            return PlayerTokenValidationResult.Success(
+                new PlayerIdentity(payload.Sub, payload.Name, payload.Provider),
+                issuedAt);
         }
         catch (JsonException)
         {
@@ -79,12 +99,17 @@ public sealed class HmacPlayerTokenValidator : IPlayerTokenValidator
 
     /// <summary>供受信 Auth 适配器和自动化测试签发；不得暴露为客户端 HTTP API。</summary>
     public static string CreateSignedToken(
-        string signingKey, PlayerIdentity player, DateTimeOffset expiresAtUtc)
+        string signingKey,
+        PlayerIdentity player,
+        DateTimeOffset expiresAtUtc,
+        DateTimeOffset? issuedAtUtc = null)
     {
+        var issuedAt = issuedAtUtc ?? expiresAtUtc.AddMinutes(-15);
         var payload = new PlayerTokenPayload(
             player.PlayerId,
             player.DisplayName,
             player.Provider,
+            issuedAt.ToUnixTimeMilliseconds(),
             expiresAtUtc.ToUnixTimeSeconds());
         var payloadBytes = JsonSerializer.SerializeToUtf8Bytes(payload);
         var encodedPayload = Base64UrlEncode(payloadBytes);
@@ -116,6 +141,6 @@ public sealed class HmacPlayerTokenValidator : IPlayerTokenValidator
         string Sub,
         string Name,
         string Provider,
+        long Iat,
         long Exp);
 }
-

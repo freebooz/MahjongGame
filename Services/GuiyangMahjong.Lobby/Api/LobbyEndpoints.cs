@@ -100,6 +100,54 @@ public static class LobbyEndpoints
                 RequestIdMiddleware.GetRequestId(context), matchId, report, cancellationToken));
         });
 
+        app.MapPost("/internal/admin/players/{playerId}/disconnect", async (
+            string playerId,
+            AdminDisconnectPlayerRequest request,
+            HttpContext context,
+            IPlayerAccessRevocationStore revocations,
+            IOnlinePresenceService presence,
+            IIdempotencyStore idempotency,
+            LobbyEventHub eventHub,
+            IOptions<LobbyOptions> options,
+            TimeProvider timeProvider,
+            CancellationToken cancellationToken) =>
+        {
+            if (!HasInternalCredential(context, options.Value.ManagementCommandToken))
+                return Results.Unauthorized();
+            var key = RequireIdempotencyKey(context);
+            var now = timeProvider.GetUtcNow();
+            if (playerId.Length is < 1 or > 80
+                || (request.Reason ?? string.Empty).Trim().Length is < 5 or > 500
+                || (request.TraceId ?? string.Empty).Trim().Length is < 8 or > 64
+                || request.EffectiveAtUtc < now.AddHours(-24)
+                || request.EffectiveAtUtc > now.AddMinutes(1))
+            {
+                return Results.BadRequest();
+            }
+            var response = await idempotency.ExecuteAsync(
+                $"admin-disconnect:{playerId}:{key}",
+                async () =>
+                {
+                    var revokedBefore = await revocations.RevokeBeforeAsync(
+                        playerId,
+                        request.EffectiveAtUtc,
+                        cancellationToken);
+                    await presence.RemoveAsync(playerId, cancellationToken);
+                    await eventHub.DisconnectPlayerAsync(playerId, cancellationToken);
+                    return new IdempotentHttpResponse(
+                        StatusCodes.Status200OK,
+                        System.Text.Json.JsonSerializer.SerializeToElement(
+                            new AdminDisconnectPlayerResult(
+                                playerId,
+                                revokedBefore,
+                                false),
+                            new System.Text.Json.JsonSerializerOptions(
+                                System.Text.Json.JsonSerializerDefaults.Web)));
+                },
+                cancellationToken);
+            return Results.Json(response.Body, statusCode: response.StatusCode);
+        });
+
         app.MapGet("/internal/monitoring/rooms", async (
             HttpContext context,
             ILobbyStore store,

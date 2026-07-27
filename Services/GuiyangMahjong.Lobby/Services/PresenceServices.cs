@@ -10,6 +10,7 @@ namespace GuiyangMahjong.Lobby.Services;
 public interface IOnlinePresenceService
 {
     Task TouchAsync(string playerId, CancellationToken cancellationToken);
+    Task RemoveAsync(string playerId, CancellationToken cancellationToken);
     Task<long> GetOnlineCountAsync(CancellationToken cancellationToken);
     Task<IReadOnlyList<PlayerPresenceSnapshot>> GetPlayersAsync(
         IReadOnlyCollection<string> playerIds, CancellationToken cancellationToken);
@@ -26,6 +27,13 @@ public sealed class InMemoryOnlinePresenceService(
     {
         cancellationToken.ThrowIfCancellationRequested();
         lastSeen[playerId] = timeProvider.GetUtcNow();
+        return Task.CompletedTask;
+    }
+
+    public Task RemoveAsync(string playerId, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        lastSeen.TryRemove(playerId, out _);
         return Task.CompletedTask;
     }
 
@@ -82,6 +90,9 @@ public sealed class RedisOnlinePresenceService : IOnlinePresenceService
         var score = timeProvider.GetUtcNow().ToUnixTimeMilliseconds();
         await database.SortedSetAddAsync(presenceKey, playerId, score).WaitAsync(cancellationToken);
     }
+
+    public async Task RemoveAsync(string playerId, CancellationToken cancellationToken) =>
+        await database.SortedSetRemoveAsync(presenceKey, playerId).WaitAsync(cancellationToken);
 
     public async Task<long> GetOnlineCountAsync(CancellationToken cancellationToken)
     {

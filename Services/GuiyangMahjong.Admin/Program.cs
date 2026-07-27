@@ -69,6 +69,28 @@ builder.Services
     .Validate(options => !options.Management.ExecutionEnabled
         || options.Management.Enabled,
         "Admin command execution requires management to be enabled.")
+    .Validate(options => !options.Management.ExecutionEnabled
+        || (options.Management.AuthCommandToken.Length >= 32
+            && options.Management.LobbyCommandToken.Length >= 32),
+        "Admin command execution requires dedicated Auth and Lobby command credentials.")
+    .Validate(options =>
+        (string.IsNullOrEmpty(options.Management.AuthCommandToken)
+            || !string.Equals(
+                options.Management.AuthCommandToken,
+                options.Auth.MonitoringToken,
+                StringComparison.Ordinal))
+        && (string.IsNullOrEmpty(options.Management.LobbyCommandToken)
+            || !string.Equals(
+                options.Management.LobbyCommandToken,
+                options.Lobby.MonitoringToken,
+                StringComparison.Ordinal))
+        && (string.IsNullOrEmpty(options.Management.AuthCommandToken)
+            || string.IsNullOrEmpty(options.Management.LobbyCommandToken)
+            || !string.Equals(
+                options.Management.AuthCommandToken,
+                options.Management.LobbyCommandToken,
+                StringComparison.Ordinal)),
+        "Admin management credentials must differ from monitoring credentials.")
     .Validate(options => !builder.Environment.IsProduction()
         || !options.Management.ExecutionEnabled,
         "Production command execution is blocked until real command adapters are configured.")
@@ -100,7 +122,7 @@ builder.Services.AddSingleton<IAdminActionStore>(provider =>
 });
 builder.Services.AddHostedService<AdminActionStoreInitializer>();
 builder.Services.AddSingleton<AdminActionWorkflow>();
-builder.Services.AddSingleton<IAdminCommandExecutor, UnsupportedAdminCommandExecutor>();
+builder.Services.AddSingleton<IAdminCommandExecutor, HttpAdminCommandExecutor>();
 builder.Services.AddSingleton<AdminCommandDispatcher>();
 builder.Services.AddHostedService<AdminCommandDispatcherService>();
 

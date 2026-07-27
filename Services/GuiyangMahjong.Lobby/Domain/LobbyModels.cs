@@ -192,6 +192,16 @@ public sealed record PlayerPresenceSnapshot(
     DateTimeOffset? LastSeenAtUtc,
     string LobbyId);
 
+public sealed record AdminDisconnectPlayerRequest(
+    string Reason,
+    string TraceId,
+    DateTimeOffset EffectiveAtUtc);
+
+public sealed record AdminDisconnectPlayerResult(
+    string PlayerId,
+    DateTimeOffset RevokedBeforeUtc,
+    bool Duplicate);
+
 public sealed record GameServerFailure(
     string ServerInstanceId,
     string RoomId,

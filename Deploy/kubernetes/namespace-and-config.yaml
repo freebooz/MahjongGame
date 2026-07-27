@@ -26,6 +26,7 @@ data:
   Admin__Management__LeaseSeconds: "30"
   Admin__Management__MaxAttempts: "5"
   Admin__Management__RetryBaseSeconds: "5"
+  Admin__Management__CommandTimeoutSeconds: "5"
   Admin__Management__PersistenceMode: Postgres
   Admin__Principals__0__OperatorId: room-operator
   Admin__Principals__0__Roles__0: room.viewer
@@ -46,6 +47,7 @@ data:
   Admin__Allocators__0__ClusterId: production
   Admin__Allocators__0__NodeId: agones
   Admin__Allocators__0__BaseUrl: http://mahjong-allocator:8080
+  Lobby__AccessRevocationTtlMinutes: "120"
   Allocator__Backend: Agones
   Allocator__LobbyInternalUrl: http://mahjong-lobby:8080
   Allocator__Agones__Namespace: guiyang-mahjong

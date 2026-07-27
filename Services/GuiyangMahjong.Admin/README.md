@@ -32,8 +32,13 @@ documented in `../../Docs/PLAYER_MONITORING_ADMIN_DESIGN.md`.
 - A lease-based dispatcher supports competing consumers, expired-lease
   recovery, bounded exponential retry, terminal failure, and atomic final
   action/Outbox/audit updates.
-- No high-privilege Lobby/Auth/Allocator command adapter is configured by this
-  delivery stage, so production command execution remains hard-blocked.
+- `ForceLogoutPlayer` and `ResetAbnormalPlayerSession` now have idempotent Auth
+  and Lobby adapters. Auth revokes refresh sessions, while Lobby rejects access
+  tokens issued before the command and disconnects matching WebSockets across
+  replicas.
+- Other high-privilege Lobby/Auth/Allocator command adapters are not configured
+  yet, so production command execution remains hard-blocked during staged
+  rollout.
 - Match-result mutation is absent from the action type model and rejected by API binding.
 
 ## Local configuration
@@ -48,6 +53,9 @@ Admin__Management__PollIntervalMilliseconds=1000
 Admin__Management__LeaseSeconds=30
 Admin__Management__MaxAttempts=5
 Admin__Management__RetryBaseSeconds=5
+Admin__Management__AuthCommandToken=<dedicated 32+ Auth command token>
+Admin__Management__LobbyCommandToken=<different dedicated 32+ Lobby command token>
+Admin__Management__CommandTimeoutSeconds=5
 Admin__Management__PersistenceMode=Postgres
 Admin__Management__PostgresConnectionString=<secret PostgreSQL connection string>
 Admin__Principals__0__OperatorId=<stable enterprise operator id>
@@ -85,8 +93,9 @@ endpoints; attempts to use them for mutation operations are rejected.
 
 Account state is currently reported as `Active` because the production account
 sanction ledger has not been introduced yet. Payment, assets, rewards, chat
-content, reports, risk labels, bans, GM actions, and management commands are
-intentionally outside this read-only delivery stage.
+content, reports, risk labels, bans, and GM actions remain outside this delivery
+stage. Player-session termination is the only live domain-command adapter
+implemented so far.
 
 The deployment configuration keeps management disabled by default. PostgreSQL
 mode transactionally persists the request transition, separate approval,
@@ -99,6 +108,13 @@ reclaims expired work, and records each retry or terminal outcome in the audit
 chain. Every domain adapter must use `OutboxId` as its idempotency key and
 re-check the room sequence or player state fingerprint before changing domain
 state.
+
+The player-session adapter sends the same `OutboxId` to Auth and Lobby. Auth
+stores a durable command receipt in PostgreSQL in the same transaction that
+revokes refresh sessions. Lobby stores a monotonic access-token revocation
+cutoff in Redis, removes online presence, and broadcasts a targeted disconnect
+to every Lobby replica. Tokens issued after that cutoff remain valid so the
+player can authenticate again unless a separate account sanction applies.
 
 Before enabling command execution, replace development tokens with enterprise
 OIDC/MFA identities, replicate the audit chain to WORM storage, and attach

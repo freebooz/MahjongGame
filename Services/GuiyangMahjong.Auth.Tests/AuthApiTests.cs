@@ -142,6 +142,49 @@ public sealed class AuthApiTests(AuthWebApplicationFactory factory)
         Assert.DoesNotContain(login.RefreshToken, body, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task AdminSessionRevocationRequiresDedicatedCredentialAndIsIdempotent()
+    {
+        using var client = factory.CreateClient();
+        var login = await LoginAsync(client, $"admin-revoke-{Guid.NewGuid():N}");
+        var path =
+            $"/internal/admin/players/{Uri.EscapeDataString(login.PlayerId)}/sessions/revoke";
+        var body = new AdminRevokePlayerSessionsRequest(
+            "Security investigation forced logout",
+            Guid.NewGuid().ToString(),
+            DateTimeOffset.UtcNow);
+        using var unauthorized = await client.PostAsJsonAsync(path, body);
+        Assert.Equal(HttpStatusCode.Unauthorized, unauthorized.StatusCode);
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer", AuthWebApplicationFactory.ManagementToken);
+        var commandId = Guid.NewGuid().ToString();
+        client.DefaultRequestHeaders.Add("Idempotency-Key", commandId);
+        using var first = await client.PostAsJsonAsync(path, body);
+        var firstResult =
+            await first.Content.ReadFromJsonAsync<AdminRevokePlayerSessionsResult>();
+        Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+        Assert.NotNull(firstResult);
+        Assert.True(firstResult.PlayerFound);
+        Assert.Equal(1, firstResult.RevokedSessionCount);
+        Assert.False(firstResult.Duplicate);
+
+        using var duplicate = await client.PostAsJsonAsync(path, body);
+        var duplicateResult =
+            await duplicate.Content.ReadFromJsonAsync<AdminRevokePlayerSessionsResult>();
+        Assert.Equal(HttpStatusCode.OK, duplicate.StatusCode);
+        Assert.NotNull(duplicateResult);
+        Assert.True(duplicateResult.Duplicate);
+        Assert.Equal(firstResult.RevokedSessionCount, duplicateResult.RevokedSessionCount);
+
+        client.DefaultRequestHeaders.Remove("Idempotency-Key");
+        client.DefaultRequestHeaders.Authorization = null;
+        using var refresh = await client.PostAsJsonAsync(
+            "/v1/auth/refresh",
+            new RefreshSessionRequest(login.RefreshToken));
+        Assert.Equal(HttpStatusCode.Unauthorized, refresh.StatusCode);
+    }
+
     private static async Task<AuthSessionResponse> LoginAsync(HttpClient client, string installationId)
     {
         var response = await client.PostAsJsonAsync(
@@ -156,6 +199,7 @@ public sealed class AuthWebApplicationFactory : WebApplicationFactory<Program>
 {
     public const string SigningKey = "test-only-auth-token-signing-key-which-is-long-enough";
     public const string MonitoringToken = "test-only-auth-monitoring-token-that-is-long-enough";
+    public const string ManagementToken = "test-only-auth-management-token-that-is-long-enough";
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -166,6 +210,7 @@ public sealed class AuthWebApplicationFactory : WebApplicationFactory<Program>
                 ["Auth:TokenSigningKey"] = SigningKey,
                 ["Auth:GuestIdentityPepper"] = "test-only-guest-identity-pepper-which-is-long-enough",
                 ["Auth:MonitoringReadOnlyToken"] = MonitoringToken,
+                ["Auth:ManagementCommandToken"] = ManagementToken,
                 ["Auth:PersistenceMode"] = "InMemory"
             }));
     }

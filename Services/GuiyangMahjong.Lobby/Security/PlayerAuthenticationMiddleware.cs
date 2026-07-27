@@ -10,7 +10,8 @@ public sealed class PlayerAuthenticationMiddleware(RequestDelegate next)
     public async Task InvokeAsync(
         HttpContext context,
         IPlayerTokenValidator tokenValidator,
-        IOnlinePresenceService presence)
+        IOnlinePresenceService presence,
+        IPlayerAccessRevocationStore revocations)
     {
         if (!context.Request.Path.StartsWithSegments("/v1"))
         {
@@ -29,6 +30,14 @@ public sealed class PlayerAuthenticationMiddleware(RequestDelegate next)
         if (!result.IsValid || result.Player is null)
         {
             await WriteUnauthorized(context, result.ChineseReason);
+            return;
+        }
+        if (await revocations.IsRevokedAsync(
+                result.Player.PlayerId,
+                result.IssuedAtUtc,
+                context.RequestAborted))
+        {
+            await WriteUnauthorized(context, "登录会话已由管理员终止，请重新登录");
             return;
         }
 

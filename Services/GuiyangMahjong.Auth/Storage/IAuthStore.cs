@@ -22,6 +22,11 @@ public interface IAuthStore
         byte[] tokenHash,
         DateTimeOffset now,
         CancellationToken cancellationToken);
+    Task<AdminRevokePlayerSessionsResult> RevokePlayerSessionsAsync(
+        string commandId,
+        string playerId,
+        DateTimeOffset effectiveAtUtc,
+        CancellationToken cancellationToken);
     Task RecordLoginAsync(AuthLoginEvent loginEvent, CancellationToken cancellationToken);
     Task<IReadOnlyList<PlayerDirectoryItem>> ListPlayersAsync(
         string? search, int limit, DateTimeOffset now, CancellationToken cancellationToken);

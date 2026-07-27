@@ -171,6 +171,107 @@ public sealed class PostgresAuthStore(NpgsqlDataSource postgres) : IAuthStore, I
         return true;
     }
 
+    public async Task<AdminRevokePlayerSessionsResult> RevokePlayerSessionsAsync(
+        string commandId,
+        string playerId,
+        DateTimeOffset effectiveAtUtc,
+        CancellationToken cancellationToken)
+    {
+        await using var connection = await postgres.OpenConnectionAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        var playerFound = false;
+        await using (var exists = new NpgsqlCommand(
+            "SELECT EXISTS(SELECT 1 FROM auth_identities WHERE player_id=$1)",
+            connection,
+            transaction))
+        {
+            exists.Parameters.AddWithValue(playerId);
+            playerFound = (bool)(await exists.ExecuteScalarAsync(cancellationToken) ?? false);
+        }
+
+        await using var receipt = new NpgsqlCommand(
+            """
+            INSERT INTO auth_admin_commands(
+                command_id, command_type, target_id, effective_at_utc,
+                processed_at_utc, player_found, affected_count)
+            VALUES ($1,'RevokePlayerSessions',$2,$3,$3,$4,0)
+            ON CONFLICT (command_id) DO NOTHING
+            RETURNING command_id
+            """,
+            connection,
+            transaction);
+        receipt.Parameters.AddWithValue(commandId);
+        receipt.Parameters.AddWithValue(playerId);
+        receipt.Parameters.AddWithValue(effectiveAtUtc);
+        receipt.Parameters.AddWithValue(playerFound);
+        var inserted = await receipt.ExecuteScalarAsync(cancellationToken) is not null;
+        if (!inserted)
+        {
+            await using var existing = new NpgsqlCommand(
+                """
+                SELECT target_id, player_found, affected_count, effective_at_utc
+                FROM auth_admin_commands
+                WHERE command_id=$1 AND command_type='RevokePlayerSessions'
+                """,
+                connection,
+                transaction);
+            existing.Parameters.AddWithValue(commandId);
+            await using var reader = await existing.ExecuteReaderAsync(cancellationToken);
+            if (!await reader.ReadAsync(cancellationToken))
+                throw new InvalidOperationException(
+                    "Admin command id was reused for a different command type.");
+            var storedPlayerId = reader.GetString(0);
+            var storedEffectiveAtUtc = reader.GetFieldValue<DateTimeOffset>(3);
+            if (!string.Equals(storedPlayerId, playerId, StringComparison.Ordinal)
+                || (storedEffectiveAtUtc - effectiveAtUtc).Duration()
+                    > TimeSpan.FromMilliseconds(1))
+            {
+                throw new InvalidOperationException(
+                    "Admin command id was reused with different command parameters.");
+            }
+            var result = new AdminRevokePlayerSessionsResult(
+                commandId,
+                storedPlayerId,
+                reader.GetBoolean(1),
+                reader.GetInt32(2),
+                storedEffectiveAtUtc,
+                true);
+            await reader.DisposeAsync();
+            await transaction.CommitAsync(cancellationToken);
+            return result;
+        }
+
+        await using var revoke = new NpgsqlCommand(
+            """
+            UPDATE auth_refresh_sessions
+            SET revoked_at_utc=$1
+            WHERE player_id=$2
+              AND created_at_utc <= $1
+              AND expires_at_utc > $1
+              AND revoked_at_utc IS NULL
+            """,
+            connection,
+            transaction);
+        revoke.Parameters.AddWithValue(effectiveAtUtc);
+        revoke.Parameters.AddWithValue(playerId);
+        var revoked = await revoke.ExecuteNonQueryAsync(cancellationToken);
+        await using var updateReceipt = new NpgsqlCommand(
+            "UPDATE auth_admin_commands SET affected_count=$1 WHERE command_id=$2",
+            connection,
+            transaction);
+        updateReceipt.Parameters.AddWithValue(revoked);
+        updateReceipt.Parameters.AddWithValue(commandId);
+        await updateReceipt.ExecuteNonQueryAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return new AdminRevokePlayerSessionsResult(
+            commandId,
+            playerId,
+            playerFound,
+            revoked,
+            effectiveAtUtc,
+            false);
+    }
+
     public async Task RecordLoginAsync(
         AuthLoginEvent loginEvent, CancellationToken cancellationToken)
     {
