@@ -1,6 +1,7 @@
 extern alias lobby;
 
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using GuiyangMahjong.Auth.Domain;
 using GuiyangMahjong.Auth.Services;
@@ -100,6 +101,47 @@ public sealed class AuthApiTests(AuthWebApplicationFactory factory)
                 "/v1/auth/refresh", new RefreshSessionRequest(login.RefreshToken))).StatusCode);
     }
 
+    [Fact]
+    public async Task PlayerMonitoring_RequiresDedicatedReadOnlyCredential()
+    {
+        using var client = factory.CreateClient();
+        using var response = await client.GetAsync("/internal/monitoring/players");
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task PlayerMonitoring_ReturnsMaskedLoginAndNeverReturnsCredentials()
+    {
+        const string installationId = "monitoring-installation-0001";
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.UserAgent.ParseAdd("MahjongClient/1.2");
+        var login = await LoginAsync(client, installationId);
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer", AuthWebApplicationFactory.MonitoringToken);
+
+        var players = await client.GetFromJsonAsync<PlayerDirectoryItem[]>(
+            $"/internal/monitoring/players?search={Uri.EscapeDataString(login.PlayerId)}");
+        Assert.NotNull(players);
+        var player = Assert.Single(players);
+        Assert.StartsWith("device-", player.CurrentDeviceId, StringComparison.Ordinal);
+        Assert.DoesNotContain(installationId, player.CurrentDeviceId, StringComparison.Ordinal);
+
+        using var response = await client.GetAsync(
+            $"/internal/monitoring/players/{Uri.EscapeDataString(login.PlayerId)}");
+        response.EnsureSuccessStatusCode();
+        var body = await response.Content.ReadAsStringAsync();
+        var detail = await response.Content.ReadFromJsonAsync<PlayerDirectoryDetail>();
+        Assert.NotNull(detail);
+        Assert.NotEmpty(detail.Sessions);
+        Assert.All(detail.Sessions, session =>
+            Assert.EndsWith("…", session.SessionReference, StringComparison.Ordinal));
+        Assert.Contains(detail.LoginHistory,
+            item => item.ClientSummary == "MahjongClient/1.2");
+        Assert.DoesNotContain(installationId, body, StringComparison.Ordinal);
+        Assert.DoesNotContain(login.AccessToken, body, StringComparison.Ordinal);
+        Assert.DoesNotContain(login.RefreshToken, body, StringComparison.Ordinal);
+    }
+
     private static async Task<AuthSessionResponse> LoginAsync(HttpClient client, string installationId)
     {
         var response = await client.PostAsJsonAsync(
@@ -113,6 +155,7 @@ public sealed class AuthApiTests(AuthWebApplicationFactory factory)
 public sealed class AuthWebApplicationFactory : WebApplicationFactory<Program>
 {
     public const string SigningKey = "test-only-auth-token-signing-key-which-is-long-enough";
+    public const string MonitoringToken = "test-only-auth-monitoring-token-that-is-long-enough";
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -122,6 +165,7 @@ public sealed class AuthWebApplicationFactory : WebApplicationFactory<Program>
             {
                 ["Auth:TokenSigningKey"] = SigningKey,
                 ["Auth:GuestIdentityPepper"] = "test-only-guest-identity-pepper-which-is-long-enough",
+                ["Auth:MonitoringReadOnlyToken"] = MonitoringToken,
                 ["Auth:PersistenceMode"] = "InMemory"
             }));
     }

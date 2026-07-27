@@ -10,6 +10,8 @@ public sealed class AllocatorServiceAuthenticationMiddleware(
     IOptions<AllocatorOptions> options)
 {
     private readonly byte[] expected = Encoding.UTF8.GetBytes(options.Value.ServiceToken);
+    private readonly byte[] monitoringExpected =
+        Encoding.UTF8.GetBytes(options.Value.MonitoringReadOnlyToken);
 
     public async Task InvokeAsync(HttpContext context)
     {
@@ -25,6 +27,13 @@ public sealed class AllocatorServiceAuthenticationMiddleware(
             : [];
         var authenticated = supplied.Length == expected.Length
             && CryptographicOperations.FixedTimeEquals(supplied, expected);
+        var isReadOnlyInstancesRequest = HttpMethods.IsGet(context.Request.Method)
+            && context.Request.Path.StartsWithSegments("/internal/instances");
+        if (!authenticated && isReadOnlyInstancesRequest && monitoringExpected.Length >= 32)
+        {
+            authenticated = supplied.Length == monitoringExpected.Length
+                && CryptographicOperations.FixedTimeEquals(supplied, monitoringExpected);
+        }
         CryptographicOperations.ZeroMemory(supplied);
         if (!authenticated)
         {

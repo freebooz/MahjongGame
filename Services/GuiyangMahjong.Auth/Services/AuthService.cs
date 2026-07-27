@@ -20,6 +20,13 @@ public sealed partial class AuthService(
 
     public async Task<AuthSessionResponse> LoginGuestAsync(
         GuestLoginRequest request,
+        CancellationToken cancellationToken) =>
+        await LoginGuestAsync(
+            request, new LoginObservation("Unknown", "Unknown"), cancellationToken);
+
+    public async Task<AuthSessionResponse> LoginGuestAsync(
+        GuestLoginRequest request,
+        LoginObservation observation,
         CancellationToken cancellationToken)
     {
         var installationId = request.InstallationId?.Trim() ?? string.Empty;
@@ -39,6 +46,16 @@ public sealed partial class AuthService(
             cancellationToken);
         var refresh = CreateRefreshSession(identity.PlayerId, now);
         await store.CreateRefreshSessionAsync(refresh.Session, cancellationToken);
+        await store.RecordLoginAsync(
+            new AuthLoginEvent(
+                Guid.NewGuid().ToString(),
+                identity.PlayerId,
+                $"device-{installationHash[..20]}",
+                NormalizeObservation(observation.MaskedIp, 64, "Unknown"),
+                NormalizeObservation(observation.ClientSummary, 160, "Unknown"),
+                "Success",
+                now),
+            cancellationToken);
         return CreateResponse(identity, refresh, now);
     }
 
@@ -139,6 +156,17 @@ public sealed partial class AuthService(
 
     private static string Base64UrlEncode(ReadOnlySpan<byte> bytes) =>
         Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');
+
+    private static string NormalizeObservation(
+        string? value, int maximumLength, string fallback)
+    {
+        var normalized = new string((value ?? string.Empty)
+            .Where(character => !char.IsControl(character))
+            .Take(maximumLength)
+            .ToArray())
+            .Trim();
+        return normalized.Length == 0 ? fallback : normalized;
+    }
 
     [GeneratedRegex("^[A-Za-z0-9._-]{16,128}$", RegexOptions.CultureInvariant)]
     private static partial Regex InstallationIdPattern();

@@ -11,6 +11,8 @@
 #include "Misc/Parse.h"
 #include "TimerManager.h"
 
+TAtomic<uint64> AGuiyangMahjongPlayerController::ServerRpcReceivedCount(0);
+
 AGuiyangMahjongPlayerController::AGuiyangMahjongPlayerController()
 {
     // ClientRestart and replicated Pawn state can run after the room camera is selected.
@@ -122,55 +124,66 @@ void AGuiyangMahjongPlayerController::Server_AuthenticateSession_Implementation(
     const FString& PlayerId, const FString& DisplayName, const EGuiyangLoginProvider Provider,
     const FString& SessionToken)
 {
+    ++ServerRpcReceivedCount;
     if (IGuiyangServerRequestHandler* Handler = GetServerRequestHandler())
         Handler->HandleAuthenticateSession(this, PlayerId, DisplayName, Provider, SessionToken);
 }
 
 void AGuiyangMahjongPlayerController::Server_RequestCreateRoom_Implementation()
 {
-    Server_RequestCreateRoomWithConfig_Implementation(FMahjongCreateRoomRequest());
+    ++ServerRpcReceivedCount;
+    if (IGuiyangServerRequestHandler* Handler = GetServerRequestHandler())
+        Handler->HandleCreateRoom(this, FMahjongCreateRoomRequest());
 }
 
 void AGuiyangMahjongPlayerController::Server_RequestQuickStart_Implementation()
 {
+    ++ServerRpcReceivedCount;
     if (IGuiyangServerRequestHandler* Handler = GetServerRequestHandler()) Handler->HandleQuickStart(this);
 }
 
 void AGuiyangMahjongPlayerController::Server_RequestCreateRoomWithConfig_Implementation(
     const FMahjongCreateRoomRequest& Request)
 {
+    ++ServerRpcReceivedCount;
     if (IGuiyangServerRequestHandler* Handler = GetServerRequestHandler()) Handler->HandleCreateRoom(this, Request);
 }
 
 void AGuiyangMahjongPlayerController::Server_RequestJoinRoom_Implementation(const FString& PlayerName)
 {
+    ++ServerRpcReceivedCount;
     UE_LOG(LogMahjongServer, Verbose, TEXT("Legacy join request from %s as %s"), *GetName(), *PlayerName);
-    Server_RequestQuickStart_Implementation();
+    if (IGuiyangServerRequestHandler* Handler = GetServerRequestHandler()) Handler->HandleQuickStart(this);
 }
 
 void AGuiyangMahjongPlayerController::Server_RequestJoinRoomByCode_Implementation(
     const FMahjongJoinRoomRequest& Request)
 {
+    ++ServerRpcReceivedCount;
     if (IGuiyangServerRequestHandler* Handler = GetServerRequestHandler()) Handler->HandleJoinRoom(this, Request);
 }
 
 void AGuiyangMahjongPlayerController::Server_RequestReady_Implementation()
 {
+    ++ServerRpcReceivedCount;
     if (IGuiyangServerRequestHandler* Handler = GetServerRequestHandler()) Handler->HandleToggleReady(this);
 }
 
 void AGuiyangMahjongPlayerController::Server_RequestLeaveRoom_Implementation()
 {
+    ++ServerRpcReceivedCount;
     if (IGuiyangServerRequestHandler* Handler = GetServerRequestHandler()) Handler->HandleLeaveRoom(this);
 }
 
 void AGuiyangMahjongPlayerController::Server_RequestNextRound_Implementation()
 {
+    ++ServerRpcReceivedCount;
     if (IGuiyangServerRequestHandler* Handler = GetServerRequestHandler()) Handler->HandleNextRound(this);
 }
 
 void AGuiyangMahjongPlayerController::Server_RequestPlayTile_Implementation(const FMahjongTile Tile)
 {
+    ++ServerRpcReceivedCount;
     if (!Tile.IsValid())
     {
         Client_ShowErrorMessage(TEXT("出牌请求无效"));
@@ -182,6 +195,7 @@ void AGuiyangMahjongPlayerController::Server_RequestPlayTile_Implementation(cons
 
 void AGuiyangMahjongPlayerController::Server_RequestAction_Implementation(const FMahjongActionRequest Request)
 {
+    ++ServerRpcReceivedCount;
     if (Request.ClientSequence <= LastClientActionSequence || Request.Type == EMahjongActionType::Draw)
     {
         Client_ShowErrorMessage(TEXT("操作已过期或不允许由客户端发起"));
@@ -193,6 +207,7 @@ void AGuiyangMahjongPlayerController::Server_RequestAction_Implementation(const 
 
 void AGuiyangMahjongPlayerController::Server_RequestIntegrationDisconnect_Implementation()
 {
+    ++ServerRpcReceivedCount;
 #if !UE_BUILD_SHIPPING
     const AGuiyangMahjongPlayerState* MahjongPlayer = GetPlayerState<AGuiyangMahjongPlayerState>();
     if (!FParse::Param(FCommandLine::Get(), TEXT("MahjongEnableIntegrationHooks"))

@@ -16,6 +16,7 @@ public sealed class LobbyService
     private readonly ILobbyEventPublisher events;
     private readonly IAllocatorClient allocator;
     private readonly IJoinTicketIssuer joinTicketIssuer;
+    private readonly IRoomMonitoringStore monitoringStore;
     private readonly LobbyOptions options;
     private readonly TimeProvider timeProvider;
     private readonly ILogger<LobbyService> logger;
@@ -26,6 +27,7 @@ public sealed class LobbyService
         ILobbyEventPublisher events,
         IAllocatorClient allocator,
         IJoinTicketIssuer joinTicketIssuer,
+        IRoomMonitoringStore monitoringStore,
         IOptions<LobbyOptions> options,
         TimeProvider timeProvider,
         ILogger<LobbyService> logger)
@@ -35,6 +37,7 @@ public sealed class LobbyService
         this.events = events;
         this.allocator = allocator;
         this.joinTicketIssuer = joinTicketIssuer;
+        this.monitoringStore = monitoringStore;
         this.options = options.Value;
         this.timeProvider = timeProvider;
         this.logger = logger;
@@ -454,6 +457,9 @@ public sealed class LobbyService
                 room.RoomId, distinctPlayerIds, now, cancellationToken);
         }
 
+        await RecordRuntimeTelemetryAsync(
+            requestId, serverInstanceId, room, heartbeat, now, cancellationToken);
+
         var reported = heartbeat.RoomLifecycle switch
         {
             "Playing" => RoomLifecycle.Playing,
@@ -538,6 +544,155 @@ public sealed class LobbyService
                 serverInstanceId);
         }
     }
+
+    private async Task RecordRuntimeTelemetryAsync(
+        string requestId,
+        string serverInstanceId,
+        LobbyRoom room,
+        GameServerHeartbeat heartbeat,
+        DateTimeOffset observedAtUtc,
+        CancellationToken cancellationToken)
+    {
+        ValidateRuntimeMetric(heartbeat.ServerTickMilliseconds, 0, 10_000, "server tick");
+        ValidateRuntimeMetric(heartbeat.ServerFramesPerSecond, 0, 1_000, "server FPS");
+        ValidateRuntimeMetric(heartbeat.ProcessCpuPercent, 0, 10_000, "process CPU");
+        if (heartbeat.RpcReceivedCount is < 0
+            || heartbeat.ProcessMemoryBytes is < 0
+            || heartbeat.NetworkIngressBytes is < 0
+            || heartbeat.NetworkEgressBytes is < 0)
+        {
+            throw Invalid("GameServer heartbeat cumulative metric is invalid.");
+        }
+
+        var players = heartbeat.Players
+            ?? (heartbeat.ConnectedPlayerIds ?? [])
+                .Select(playerId => new PlayerRuntimeTelemetry(
+                    playerId, -1, "Connected", null, null, null))
+                .ToArray();
+        var distinctPlayers = players
+            .Select(player => player.PlayerId)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        if (distinctPlayers.Length != players.Length
+            || players.Length > room.MaximumPlayers
+            || players.Any(player =>
+                string.IsNullOrWhiteSpace(player.PlayerId)
+                || player.PlayerId.Length > 80
+                || player.SeatIndex is < -1 or > 3
+                || player.LatencyMilliseconds is < 0 or > 120_000
+                || !IsFinite(player.LatencyMilliseconds)
+                || player.ConnectionState is not ("Connected" or "Disconnected" or "Reconnecting")))
+        {
+            throw Invalid("GameServer heartbeat player telemetry is invalid.");
+        }
+
+        var previous = await monitoringStore.GetRuntimeAsync(room.RoomId, cancellationToken);
+        var runtime = new RoomRuntimeTelemetry(
+            room.RoomId,
+            serverInstanceId,
+            observedAtUtc,
+            heartbeat.GameStartedAtUtc ?? previous?.GameStartedAtUtc,
+            heartbeat.RoomLifecycle,
+            heartbeat.RoundId,
+            heartbeat.ConnectedPlayers,
+            heartbeat.ServerTickMilliseconds,
+            heartbeat.ServerFramesPerSecond,
+            heartbeat.RpcReceivedCount,
+            heartbeat.ProcessMemoryBytes,
+            heartbeat.ProcessCpuPercent,
+            heartbeat.NetworkIngressBytes,
+            heartbeat.NetworkEgressBytes,
+            heartbeat.BuildVersion,
+            players);
+        await monitoringStore.SetRuntimeAsync(runtime, cancellationToken);
+
+        if (previous is null)
+        {
+            await AppendRuntimeEventAsync(
+                room,
+                requestId,
+                "ServerTelemetryStarted",
+                new Dictionary<string, object?>
+                {
+                    ["serverInstanceId"] = serverInstanceId,
+                    ["buildVersion"] = heartbeat.BuildVersion
+                },
+                observedAtUtc,
+                cancellationToken);
+            return;
+        }
+
+        if (!previous.Lifecycle.Equals(runtime.Lifecycle, StringComparison.Ordinal))
+        {
+            await AppendRuntimeEventAsync(
+                room,
+                requestId,
+                "RoomLifecycleChanged",
+                new Dictionary<string, object?>
+                {
+                    ["from"] = previous.Lifecycle,
+                    ["to"] = runtime.Lifecycle,
+                    ["roundId"] = runtime.CurrentRound
+                },
+                observedAtUtc,
+                cancellationToken);
+        }
+
+        var previousConnections = previous.Players.ToDictionary(
+            player => player.PlayerId, player => player.ConnectionState, StringComparer.Ordinal);
+        foreach (var player in runtime.Players)
+        {
+            if (!previousConnections.TryGetValue(player.PlayerId, out var oldState)
+                || oldState.Equals(player.ConnectionState, StringComparison.Ordinal))
+            {
+                continue;
+            }
+            await AppendRuntimeEventAsync(
+                room,
+                requestId,
+                "PlayerConnectionChanged",
+                new Dictionary<string, object?>
+                {
+                    ["playerId"] = player.PlayerId,
+                    ["from"] = oldState,
+                    ["to"] = player.ConnectionState,
+                    ["latencyMilliseconds"] = player.LatencyMilliseconds
+                },
+                observedAtUtc,
+                cancellationToken);
+        }
+    }
+
+    private Task AppendRuntimeEventAsync(
+        LobbyRoom room,
+        string traceId,
+        string eventType,
+        Dictionary<string, object?> data,
+        DateTimeOffset occurredAtUtc,
+        CancellationToken cancellationToken) =>
+        monitoringStore.AppendEventAsync(
+            room.RoomId,
+            new RoomTimelineEvent(
+                Guid.NewGuid().ToString(),
+                eventType,
+                occurredAtUtc,
+                room.StateSequence,
+                traceId,
+                data),
+            cancellationToken);
+
+    private static void ValidateRuntimeMetric(
+        double? value, double minimum, double maximum, string name)
+    {
+        if (value.HasValue
+            && (!double.IsFinite(value.Value) || value < minimum || value > maximum))
+        {
+            throw Invalid($"GameServer heartbeat {name} metric is invalid.");
+        }
+    }
+
+    private static bool IsFinite(double? value) =>
+        !value.HasValue || double.IsFinite(value.Value);
 
     public async Task<MatchResultAck> SubmitMatchResultAsync(
         string requestId,

@@ -171,6 +171,7 @@ public sealed class RoomDomainTests
             new NoOpEventPublisher(),
             new DisabledAllocatorClient(),
             new HmacJoinTicketIssuer(options, TimeProvider.System),
+            new InMemoryRoomMonitoringStore(),
             options,
             TimeProvider.System,
             NullLogger<LobbyService>.Instance);

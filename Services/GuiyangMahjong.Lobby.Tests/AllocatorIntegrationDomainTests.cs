@@ -370,6 +370,7 @@ public sealed class AllocatorIntegrationDomainTests
             new NoOpEventPublisher(),
             allocator,
             new HmacJoinTicketIssuer(options, time),
+            new InMemoryRoomMonitoringStore(),
             options,
             time,
             NullLogger<LobbyService>.Instance);

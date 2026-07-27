@@ -84,6 +84,17 @@ public sealed class InMemoryLobbyStore : ILobbyStore
         return Task.FromResult(rooms);
     }
 
+    public Task<IReadOnlyList<LobbyRoom>> ListRoomsForMonitoringAsync(
+        int limit, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        IReadOnlyList<LobbyRoom> rooms = roomsByCode.Values
+            .OrderByDescending(room => room.UpdatedAtUtc)
+            .Take(limit)
+            .ToArray();
+        return Task.FromResult(rooms);
+    }
+
     public Task<LobbyRoom?> ReconcileWaitingRoomMembersAsync(
         string roomCode,
         string prospectivePlayerId,

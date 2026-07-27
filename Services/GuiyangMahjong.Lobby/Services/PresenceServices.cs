@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using GuiyangMahjong.Lobby.Domain;
 using GuiyangMahjong.Lobby.Options;
 using GuiyangMahjong.Lobby.Storage;
 using Microsoft.Extensions.Options;
@@ -10,6 +11,8 @@ public interface IOnlinePresenceService
 {
     Task TouchAsync(string playerId, CancellationToken cancellationToken);
     Task<long> GetOnlineCountAsync(CancellationToken cancellationToken);
+    Task<IReadOnlyList<PlayerPresenceSnapshot>> GetPlayersAsync(
+        IReadOnlyCollection<string> playerIds, CancellationToken cancellationToken);
 }
 
 public sealed class InMemoryOnlinePresenceService(
@@ -33,6 +36,26 @@ public sealed class InMemoryOnlinePresenceService(
         foreach (var pair in lastSeen)
             if (pair.Value < cutoff) lastSeen.TryRemove(pair.Key, out _);
         return Task.FromResult((long)lastSeen.Count);
+    }
+
+    public Task<IReadOnlyList<PlayerPresenceSnapshot>> GetPlayersAsync(
+        IReadOnlyCollection<string> playerIds, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var cutoff = timeProvider.GetUtcNow() - timeout;
+        IReadOnlyList<PlayerPresenceSnapshot> result = playerIds
+            .Distinct(StringComparer.Ordinal)
+            .Select(playerId =>
+            {
+                var found = lastSeen.TryGetValue(playerId, out var observedAt);
+                return new PlayerPresenceSnapshot(
+                    playerId,
+                    found && observedAt >= cutoff,
+                    found ? observedAt : null,
+                    "primary");
+            })
+            .ToArray();
+        return Task.FromResult(result);
     }
 }
 
@@ -66,5 +89,26 @@ public sealed class RedisOnlinePresenceService : IOnlinePresenceService
         await database.SortedSetRemoveRangeByScoreAsync(
             presenceKey, double.NegativeInfinity, cutoff).WaitAsync(cancellationToken);
         return await database.SortedSetLengthAsync(presenceKey).WaitAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<PlayerPresenceSnapshot>> GetPlayersAsync(
+        IReadOnlyCollection<string> playerIds, CancellationToken cancellationToken)
+    {
+        var now = timeProvider.GetUtcNow();
+        var cutoff = now - timeout;
+        var distinct = playerIds.Distinct(StringComparer.Ordinal).ToArray();
+        var scores = await Task.WhenAll(distinct.Select(playerId =>
+            database.SortedSetScoreAsync(presenceKey, playerId).WaitAsync(cancellationToken)));
+        return distinct.Select((playerId, index) =>
+        {
+            var observedAt = scores[index].HasValue
+                ? DateTimeOffset.FromUnixTimeMilliseconds((long)scores[index]!.Value)
+                : (DateTimeOffset?)null;
+            return new PlayerPresenceSnapshot(
+                playerId,
+                observedAt >= cutoff,
+                observedAt,
+                "primary");
+        }).ToArray();
     }
 }

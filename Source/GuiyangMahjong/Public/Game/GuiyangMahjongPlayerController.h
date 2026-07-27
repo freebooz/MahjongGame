@@ -87,6 +87,8 @@ public:
     UFUNCTION(BlueprintPure, Category="Mahjong|Network")
     const FString& GetPendingPlayerName() const { return PendingPlayerName; }
     void SetPendingPlayerName(const FString& PlayerName) { PendingPlayerName = PlayerName; }
+    /** Dedicated Server 进程自启动以来已进入的服务端 RPC 处理器次数。 */
+    static uint64 GetServerRpcReceivedCount() { return ServerRpcReceivedCount.Load(); }
 
 protected:
     /** 客户端启动时创建桥接对象；服务端则保持纯网络控制器。 */
@@ -99,6 +101,7 @@ private:
     UPROPERTY() FString PendingPlayerName;
     /** 最近一次动作序号，用于服务端幂等和乱序检查。 */
     int32 LastClientActionSequence = -1;
+    static TAtomic<uint64> ServerRpcReceivedCount;
 
     /** 取得客户端或服务端目标模块提供的接口实现。 */
     IGuiyangClientControllerBridge* GetClientBridge() const;

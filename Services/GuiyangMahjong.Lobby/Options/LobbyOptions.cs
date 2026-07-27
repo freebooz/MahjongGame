@@ -20,6 +20,7 @@ public sealed class LobbyOptions
     [MinLength(32)] public string TokenSigningKey { get; init; } = string.Empty;
     [MinLength(32)] public string JoinTicketSigningKey { get; init; } = string.Empty;
     [MinLength(32)] public string InternalServiceToken { get; init; } = string.Empty;
+    public string MonitoringReadOnlyToken { get; init; } = string.Empty;
     public bool EnableHttpsRedirection { get; init; }
     public string[] Announcements { get; init; } = [];
     [Required] public LobbyPersistenceOptions Persistence { get; init; } = new();

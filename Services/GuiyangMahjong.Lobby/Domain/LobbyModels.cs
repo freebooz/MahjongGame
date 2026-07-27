@@ -141,7 +141,56 @@ public sealed record GameServerHeartbeat(
     int RoundId,
     string BuildVersion,
     DateTimeOffset SentAtUtc,
-    string[]? ConnectedPlayerIds = null);
+    string[]? ConnectedPlayerIds = null,
+    DateTimeOffset? GameStartedAtUtc = null,
+    double? ServerTickMilliseconds = null,
+    double? ServerFramesPerSecond = null,
+    long? RpcReceivedCount = null,
+    long? ProcessMemoryBytes = null,
+    double? ProcessCpuPercent = null,
+    long? NetworkIngressBytes = null,
+    long? NetworkEgressBytes = null,
+    PlayerRuntimeTelemetry[]? Players = null);
+
+public sealed record PlayerRuntimeTelemetry(
+    string PlayerId,
+    int SeatIndex,
+    string ConnectionState,
+    double? LatencyMilliseconds,
+    DateTimeOffset? DisconnectedAtUtc,
+    bool? Trustee);
+
+public sealed record RoomRuntimeTelemetry(
+    string RoomId,
+    string ServerInstanceId,
+    DateTimeOffset ObservedAtUtc,
+    DateTimeOffset? GameStartedAtUtc,
+    string Lifecycle,
+    int CurrentRound,
+    int ConnectedPlayers,
+    double? ServerTickMilliseconds,
+    double? ServerFramesPerSecond,
+    long? RpcReceivedCount,
+    long? ProcessMemoryBytes,
+    double? ProcessCpuPercent,
+    long? NetworkIngressBytes,
+    long? NetworkEgressBytes,
+    string BuildVersion,
+    PlayerRuntimeTelemetry[] Players);
+
+public sealed record RoomTimelineEvent(
+    string EventId,
+    string EventType,
+    DateTimeOffset OccurredAtUtc,
+    long StateSequence,
+    string TraceId,
+    Dictionary<string, object?> Data);
+
+public sealed record PlayerPresenceSnapshot(
+    string PlayerId,
+    bool Online,
+    DateTimeOffset? LastSeenAtUtc,
+    string LobbyId);
 
 public sealed record GameServerFailure(
     string ServerInstanceId,

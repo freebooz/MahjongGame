@@ -8,6 +8,7 @@ public sealed class InMemoryAuthStore : IAuthStore
     private readonly Dictionary<string, AuthIdentity> identitiesByInstallation = new(StringComparer.Ordinal);
     private readonly Dictionary<string, AuthIdentity> identitiesByPlayer = new(StringComparer.Ordinal);
     private readonly Dictionary<string, RefreshSession> sessions = new(StringComparer.Ordinal);
+    private readonly List<AuthLoginEvent> loginEvents = [];
     private readonly object gate = new();
 
     public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
@@ -79,6 +80,98 @@ public sealed class InMemoryAuthStore : IAuthStore
             return Task.FromResult(true);
         }
     }
+
+    public Task RecordLoginAsync(AuthLoginEvent loginEvent, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        lock (gate)
+        {
+            loginEvents.Add(loginEvent);
+            if (loginEvents.Count > 10_000) loginEvents.RemoveRange(0, loginEvents.Count - 10_000);
+        }
+        return Task.CompletedTask;
+    }
+
+    public Task<IReadOnlyList<PlayerDirectoryItem>> ListPlayersAsync(
+        string? search,
+        int limit,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        lock (gate)
+        {
+            var normalized = search?.Trim() ?? string.Empty;
+            IReadOnlyList<PlayerDirectoryItem> result = identitiesByPlayer.Values
+                .Where(identity => normalized.Length == 0
+                    || identity.PlayerId.Contains(normalized, StringComparison.OrdinalIgnoreCase)
+                    || identity.DisplayName.Contains(normalized, StringComparison.OrdinalIgnoreCase))
+                .OrderByDescending(identity => identity.UpdatedAtUtc)
+                .Take(limit)
+                .Select(identity => BuildDirectoryItem(identity, now))
+                .ToArray();
+            return Task.FromResult(result);
+        }
+    }
+
+    public Task<PlayerDirectoryDetail?> GetPlayerDetailAsync(
+        string playerId,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        lock (gate)
+        {
+            if (!identitiesByPlayer.TryGetValue(playerId, out var identity))
+                return Task.FromResult<PlayerDirectoryDetail?>(null);
+            var history = loginEvents
+                .Where(item => item.PlayerId == playerId)
+                .OrderByDescending(item => item.OccurredAtUtc)
+                .Take(200)
+                .ToArray();
+            var monitoredSessions = sessions.Values
+                .Where(item => item.PlayerId == playerId)
+                .OrderByDescending(item => item.CreatedAtUtc)
+                .Take(100)
+                .Select(item => MapSession(item, now))
+                .ToArray();
+            return Task.FromResult<PlayerDirectoryDetail?>(new PlayerDirectoryDetail(
+                BuildDirectoryItem(identity, now),
+                monitoredSessions,
+                history,
+                history.Select(item => item.DeviceId).Distinct(StringComparer.Ordinal).ToArray()));
+        }
+    }
+
+    private PlayerDirectoryItem BuildDirectoryItem(AuthIdentity identity, DateTimeOffset now)
+    {
+        var lastLogin = loginEvents
+            .Where(item => item.PlayerId == identity.PlayerId && item.Outcome == "Success")
+            .MaxBy(item => item.OccurredAtUtc);
+        var activeSessions = sessions.Values.Count(item =>
+            item.PlayerId == identity.PlayerId
+            && item.RevokedAtUtc is null
+            && item.ExpiresAtUtc > now);
+        return new PlayerDirectoryItem(
+            identity.PlayerId,
+            identity.DisplayName,
+            identity.Provider,
+            "Active",
+            identity.CreatedAtUtc,
+            identity.UpdatedAtUtc,
+            lastLogin?.OccurredAtUtc,
+            lastLogin?.DeviceId,
+            lastLogin?.MaskedIp,
+            activeSessions);
+    }
+
+    private static AuthSessionMonitor MapSession(RefreshSession session, DateTimeOffset now) =>
+        new(
+            $"{session.SessionId[..8]}…",
+            session.CreatedAtUtc,
+            session.ExpiresAtUtc,
+            session.RevokedAtUtc,
+            session.RevokedAtUtc is null && session.ExpiresAtUtc > now);
 
     private static bool FixedTimeEquals(byte[] left, byte[] right) =>
         left.Length == right.Length && CryptographicOperations.FixedTimeEquals(left, right);

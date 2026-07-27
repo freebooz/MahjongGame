@@ -23,6 +23,9 @@ builder.Services
         "Lobby:JoinTicketSigningKey must contain at least 32 characters.")
     .Validate(options => options.InternalServiceToken.Length >= 32,
         "Lobby:InternalServiceToken must contain at least 32 characters.")
+    .Validate(options => string.IsNullOrEmpty(options.MonitoringReadOnlyToken)
+                         || options.MonitoringReadOnlyToken.Length >= 32,
+        "Lobby:MonitoringReadOnlyToken must be empty or contain at least 32 characters.")
     .Validate(options => !options.Allocator.Enabled || options.Allocator.ServiceToken.Length >= 32,
         "Lobby:Allocator:ServiceToken must contain at least 32 characters when enabled.")
     .Validate(options => options.TokenSigningKey.Length >= 32, "Lobby:TokenSigningKey 至少需要 32 个字符")
@@ -72,6 +75,11 @@ builder.Services.AddSingleton<ILobbyStore>(provider =>
 
     return ActivatorUtilities.CreateInstance<RedisPostgresLobbyStore>(provider);
 });
+builder.Services.AddSingleton<IRoomMonitoringStore>(provider =>
+    provider.GetRequiredService<IOptions<LobbyOptions>>().Value.Persistence.Mode
+        .Equals("RedisPostgres", StringComparison.OrdinalIgnoreCase)
+        ? ActivatorUtilities.CreateInstance<RedisRoomMonitoringStore>(provider)
+        : new InMemoryRoomMonitoringStore());
 builder.Services.AddHostedService<LobbyStoreInitializer>();
 
 var app = builder.Build();

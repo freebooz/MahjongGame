@@ -100,6 +100,77 @@ public static class LobbyEndpoints
                 RequestIdMiddleware.GetRequestId(context), matchId, report, cancellationToken));
         });
 
+        app.MapGet("/internal/monitoring/rooms", async (
+            HttpContext context,
+            ILobbyStore store,
+            IOptions<LobbyOptions> options,
+            int? limit,
+            CancellationToken cancellationToken) =>
+        {
+            var monitoringToken = options.Value.MonitoringReadOnlyToken;
+            if (monitoringToken.Length < 32 || !HasInternalCredential(context, monitoringToken))
+            {
+                return Results.Unauthorized();
+            }
+
+            var safeLimit = Math.Clamp(limit ?? 1000, 1, 5000);
+            return Results.Ok(await store.ListRoomsForMonitoringAsync(safeLimit, cancellationToken));
+        });
+        app.MapGet("/internal/monitoring/rooms/{roomId}/runtime", async (
+            string roomId,
+            HttpContext context,
+            IRoomMonitoringStore monitoring,
+            IOptions<LobbyOptions> options,
+            CancellationToken cancellationToken) =>
+        {
+            var monitoringToken = options.Value.MonitoringReadOnlyToken;
+            if (monitoringToken.Length < 32 || !HasInternalCredential(context, monitoringToken))
+            {
+                return Results.Unauthorized();
+            }
+            var runtime = await monitoring.GetRuntimeAsync(roomId, cancellationToken);
+            return runtime is null ? Results.NotFound() : Results.Ok(runtime);
+        });
+        app.MapGet("/internal/monitoring/rooms/{roomId}/events", async (
+            string roomId,
+            HttpContext context,
+            IRoomMonitoringStore monitoring,
+            IOptions<LobbyOptions> options,
+            int? limit,
+            CancellationToken cancellationToken) =>
+        {
+            var monitoringToken = options.Value.MonitoringReadOnlyToken;
+            if (monitoringToken.Length < 32 || !HasInternalCredential(context, monitoringToken))
+            {
+                return Results.Unauthorized();
+            }
+            return Results.Ok(await monitoring.ListEventsAsync(
+                roomId, Math.Clamp(limit ?? 200, 1, 500), cancellationToken));
+        });
+        app.MapGet("/internal/monitoring/player-presence", async (
+            HttpContext context,
+            IOnlinePresenceService presence,
+            IOptions<LobbyOptions> options,
+            string? playerIds,
+            CancellationToken cancellationToken) =>
+        {
+            var monitoringToken = options.Value.MonitoringReadOnlyToken;
+            if (monitoringToken.Length < 32 || !HasInternalCredential(context, monitoringToken))
+            {
+                return Results.Unauthorized();
+            }
+            var ids = (playerIds ?? string.Empty)
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Distinct(StringComparer.Ordinal)
+                .Take(500)
+                .ToArray();
+            if (ids.Any(playerId => playerId.Length is < 1 or > 80))
+            {
+                return Results.BadRequest();
+            }
+            return Results.Ok(await presence.GetPlayersAsync(ids, cancellationToken));
+        });
+
         app.MapGet("/openapi/v1.yaml", async (HttpContext context) =>
         {
             var path = Path.Combine(AppContext.BaseDirectory, "OpenAPI", "lobby-v1.openapi.yaml");

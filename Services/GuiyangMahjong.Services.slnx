@@ -1,6 +1,8 @@
 <Solution>
+  <Project Path="GuiyangMahjong.Admin.Tests/GuiyangMahjong.Admin.Tests.csproj" />
   <Project Path="GuiyangMahjong.Allocator.Tests/GuiyangMahjong.Allocator.Tests.csproj" />
   <Project Path="GuiyangMahjong.Allocator/GuiyangMahjong.Allocator.csproj" />
+  <Project Path="GuiyangMahjong.Admin/GuiyangMahjong.Admin.csproj" />
   <Project Path="GuiyangMahjong.Auth.Tests/GuiyangMahjong.Auth.Tests.csproj" />
   <Project Path="GuiyangMahjong.Auth/GuiyangMahjong.Auth.csproj" />
   <Project Path="GuiyangMahjong.Lobby.Tests/GuiyangMahjong.Lobby.Tests.csproj" />

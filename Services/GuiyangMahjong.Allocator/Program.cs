@@ -32,6 +32,9 @@ builder.Services
                              && !string.IsNullOrWhiteSpace(options.Agones.FleetName)
                              && Uri.TryCreate(options.Agones.ApiServer, UriKind.Absolute, out _)),
         "Allocator Agones namespace, fleet, and API server are required in Agones mode.")
+    .Validate(options => string.IsNullOrEmpty(options.MonitoringReadOnlyToken)
+                         || options.MonitoringReadOnlyToken.Length >= 32,
+        "Allocator:MonitoringReadOnlyToken must be empty or contain at least 32 characters.")
     .ValidateOnStart();
 
 builder.Services.AddSingleton(TimeProvider.System);

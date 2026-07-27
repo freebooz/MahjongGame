@@ -4,11 +4,13 @@
 #include "Engine/World.h"
 #include "Game/GuiyangMahjongGameMode.h"
 #include "Game/GuiyangMahjongGameState.h"
+#include "Game/GuiyangMahjongPlayerController.h"
 #include "Game/GuiyangMahjongPlayerState.h"
 #include "GameFramework/PlayerController.h"
 #include "GuiyangMahjong.h"
 #include "HttpModule.h"
 #include "HAL/PlatformFileManager.h"
+#include "HAL/PlatformMemory.h"
 #include "Misc/DateTime.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Guid.h"
@@ -328,6 +330,50 @@ void UGuiyangGameServerBridge::SendHeartbeat()
     Body->SetArrayField(TEXT("connectedPlayerIds"), ConnectedPlayerIds);
     Body->SetStringField(TEXT("roomLifecycle"), Lifecycle);
     Body->SetNumberField(TEXT("roundId"), RoundId);
+    if (Lifecycle == TEXT("Playing") && GameStartedAtUtc.GetTicks() == 0)
+    {
+        GameStartedAtUtc = FDateTime::UtcNow();
+    }
+    if (GameStartedAtUtc.GetTicks() > 0)
+    {
+        Body->SetStringField(TEXT("gameStartedAtUtc"), GameStartedAtUtc.ToIso8601());
+    }
+
+    const float DeltaSeconds = World->GetDeltaSeconds();
+    if (DeltaSeconds > SMALL_NUMBER)
+    {
+        Body->SetNumberField(TEXT("serverTickMilliseconds"), DeltaSeconds * 1000.0f);
+        Body->SetNumberField(TEXT("serverFramesPerSecond"), 1.0f / DeltaSeconds);
+    }
+    Body->SetNumberField(
+        TEXT("rpcReceivedCount"),
+        static_cast<double>(AGuiyangMahjongPlayerController::GetServerRpcReceivedCount()));
+    const FPlatformMemoryStats MemoryStats = FPlatformMemory::GetStats();
+    Body->SetNumberField(
+        TEXT("processMemoryBytes"),
+        static_cast<double>(MemoryStats.UsedPhysical));
+
+    TArray<TSharedPtr<FJsonValue>> Players;
+    const AGuiyangMahjongGameState* GameState =
+        World->GetGameState<AGuiyangMahjongGameState>();
+    if (GameState)
+    {
+        for (const FMahjongSeatInfo& Seat : GameState->RoomState.Seats)
+        {
+            if (!Seat.bOccupied || Seat.PlayerId.IsEmpty()) continue;
+            const TSharedRef<FJsonObject> Player = MakeShared<FJsonObject>();
+            Player->SetStringField(TEXT("playerId"), Seat.PlayerId);
+            Player->SetNumberField(TEXT("seatIndex"), Seat.SeatIndex);
+            Player->SetStringField(
+                TEXT("connectionState"),
+                Seat.bOnline ? TEXT("Connected") : TEXT("Disconnected"));
+            Player->SetNumberField(
+                TEXT("latencyMilliseconds"),
+                FMath::Max(0, Seat.PingMilliseconds));
+            Players.Add(MakeShared<FJsonValueObject>(Player));
+        }
+    }
+    Body->SetArrayField(TEXT("players"), Players);
     Body->SetStringField(TEXT("buildVersion"), Config.BuildVersion);
     Body->SetStringField(TEXT("sentAtUtc"), FDateTime::UtcNow().ToIso8601());
 

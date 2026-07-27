@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>麻将玩家与房间实时监控</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header>
+    <div>
+      <p class="eyebrow">GUIYANG MAHJONG · READ ONLY</p>
+      <h1>玩家与房间实时监控</h1>
+    </div>
+    <div class="header-actions">
+      <span id="connection" class="status offline">未连接</span>
+      <span id="identity" class="status">未认证</span>
+      <button id="credentialButton" class="secondary">设置只读凭证</button>
+      <button id="refreshButton">立即刷新</button>
+    </div>
+  </header>
+
+  <main>
+    <section id="notice" class="notice">
+      高风险操作必须经过“申请、再次输入目标确认、异人审批”。当前审批通过后仅进入待执行队列，
+      不会直接修改对局结果或调用高权限服务命令。
+    </section>
+
+    <section id="actionsPanel" class="panel" hidden>
+      <div class="panel-heading">
+        <div><p class="eyebrow">CONTROLLED ACTIONS</p><h2>管理申请与审批</h2></div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th>申请</th><th>操作</th><th>目标</th><th>申请人</th><th>状态</th>
+            <th>工单</th><th>发起时间</th><th>审批</th>
+          </tr></thead>
+          <tbody id="actionsBody"><tr><td colspan="8" class="empty">暂无管理申请</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="outboxPanel" class="panel" hidden>
+      <div class="panel-heading">
+        <div><p class="eyebrow">TRANSACTIONAL OUTBOX</p><h2>命令 Outbox</h2></div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th>Outbox</th><th>操作</th><th>目标</th><th>状态</th>
+            <th>尝试次数</th><th>可执行时间</th><th>TraceId</th>
+          </tr></thead>
+          <tbody id="outboxBody"><tr><td colspan="7" class="empty">暂无待执行命令</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="cards" aria-label="运行概览">
+      <article><span>当前房间</span><strong id="totalRooms">—</strong></article>
+      <article><span>活跃房间</span><strong id="activeRooms">—</strong></article>
+      <article><span>异常项</span><strong id="abnormalRooms">—</strong></article>
+      <article><span>房间内玩家</span><strong id="connectedPlayers">—</strong></article>
+      <article><span>Dedicated Server</span><strong id="serverInstances">—</strong></article>
+      <article><span>玩家账号</span><strong id="totalPlayers">—</strong></article>
+      <article><span>待执行命令</span><strong id="pendingCommands">—</strong></article>
+    </section>
+
+    <section class="panel">
+      <div class="panel-heading">
+        <div><p class="eyebrow">PLAYERS</p><h2>玩家实时监控</h2></div>
+        <div class="filters"><input id="playerSearch" type="search" placeholder="玩家 ID 或昵称"></div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th>玩家</th><th>账号</th><th>在线</th><th>设备</th><th>IP 网段</th>
+            <th>当前大厅</th><th>当前房间</th><th>延迟</th><th>最近登录</th>
+          </tr></thead>
+          <tbody id="playersBody"><tr><td colspan="9" class="empty">等待连接</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-heading">
+        <div><p class="eyebrow">ROOMS</p><h2>房间列表</h2></div>
+        <div class="filters">
+          <input id="search" type="search" placeholder="房间号、MatchId、玩家 ID">
+          <select id="lifecycle">
+            <option value="">全部状态</option>
+            <option>Creating</option><option>Allocating</option><option>Waiting</option>
+            <option>Playing</option><option>Settling</option><option>Closed</option>
+            <option>Failed</option>
+          </select>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th>房间</th><th>玩法</th><th>状态</th><th>玩家</th><th>当前局</th>
+            <th>集群 / 节点</th><th>服务实例</th><th>最后更新</th>
+          </tr></thead>
+          <tbody id="roomsBody"><tr><td colspan="8" class="empty">等待连接</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-heading"><div><p class="eyebrow">SERVERS</p><h2>服务器实例</h2></div></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th>集群</th><th>节点</th><th>实例</th><th>房间</th><th>状态</th>
+            <th>进程</th><th>端点</th><th>最近心跳</th>
+          </tr></thead>
+          <tbody id="instancesBody"><tr><td colspan="8" class="empty">等待连接</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <dialog id="credentialDialog">
+    <form method="dialog">
+      <h2>设置只读访问凭证</h2>
+      <p>凭证仅保存在当前浏览器标签页，关闭标签页后自动清除。</p>
+      <label>Bearer Token<input id="credential" type="password" autocomplete="off"></label>
+      <div class="dialog-actions"><button value="cancel" class="secondary">取消</button><button id="saveCredential" value="default">连接</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="roomDialog"><article id="roomDetail"></article><button id="closeRoomDialog">关闭</button></dialog>
+  <dialog id="playerDialog"><article id="playerDetail"></article><button id="closePlayerDialog">关闭</button></dialog>
+  <dialog id="actionDialog">
+    <form method="dialog" id="actionForm">
+      <p class="eyebrow">TWO-STEP CONFIRMATION</p><h2 id="actionDialogTitle">创建管理申请</h2>
+      <label>操作类型
+        <select id="actionType"></select>
+      </label>
+      <label><span id="actionTargetLabel">目标 ID</span><input id="actionTarget" readonly></label>
+      <label>关联工单<input id="actionTicket" placeholder="例如 INC-20260727-001"></label>
+      <label>操作原因<textarea id="actionReason" rows="4" placeholder="至少 10 个字符"></textarea></label>
+      <section id="confirmationStep" class="confirmation" hidden>
+        <strong>第一步申请已创建。请再次手工输入目标 ID：</strong>
+        <input id="actionConfirmation" autocomplete="off">
+      </section>
+      <p id="actionMessage" class="muted"></p>
+      <div class="dialog-actions">
+        <button value="cancel" class="secondary">取消</button>
+        <button id="actionSubmit" type="button">创建申请</button>
+      </div>
+    </form>
+  </dialog>
+  <dialog id="approvalDialog">
+    <form method="dialog">
+      <p class="eyebrow">SEPARATE APPROVAL</p><h2>审批管理申请</h2>
+      <p id="approvalTarget" class="mono"></p>
+      <label>审批决定<select id="approvalDecision"><option value="Approve">批准</option><option value="Reject">拒绝</option></select></label>
+      <label>审批意见<textarea id="approvalComment" rows="4" placeholder="至少 3 个字符"></textarea></label>
+      <div class="dialog-actions">
+        <button value="cancel" class="secondary">取消</button>
+        <button id="approvalSubmit" type="button">提交审批</button>
+      </div>
+    </form>
+  </dialog>
+  <script src="/app.js"></script>
+</body>
+</html>

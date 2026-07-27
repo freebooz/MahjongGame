@@ -103,6 +103,8 @@ private:
     int64 PendingResultSequence = 0;
     /** 当前结果上报重试次数。 */
     int32 MatchResultAttempt = 0;
+    /** 首次进入 Playing 的 UTC 时间，仅用于监控，不参与权威规则计算。 */
+    FDateTime GameStartedAtUtc;
     /** 网络流程状态位，避免关闭过程中继续发送或重复并发。 */
     bool bRegistered = false;
     bool bShuttingDown = false;

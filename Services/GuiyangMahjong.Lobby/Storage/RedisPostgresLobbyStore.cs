@@ -150,6 +150,25 @@ public sealed class RedisPostgresLobbyStore : ILobbyStore
         return result;
     }
 
+    public async Task<IReadOnlyList<LobbyRoom>> ListRoomsForMonitoringAsync(
+        int limit, CancellationToken cancellationToken)
+    {
+        await using var command = postgres.CreateCommand(
+            """
+            SELECT payload::text FROM lobby_rooms
+            ORDER BY updated_at_utc DESC LIMIT $1
+            """);
+        command.Parameters.AddWithValue(limit);
+        var result = new List<LobbyRoom>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            var room = JsonSerializer.Deserialize<LobbyRoom>(reader.GetString(0), JsonOptions);
+            if (room is not null) result.Add(room);
+        }
+        return result;
+    }
+
     public async Task<LobbyRoom?> ReconcileWaitingRoomMembersAsync(
         string roomCode,
         string prospectivePlayerId,

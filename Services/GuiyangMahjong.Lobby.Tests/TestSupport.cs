@@ -10,6 +10,7 @@ namespace GuiyangMahjong.Lobby.Tests;
 public sealed class LobbyWebApplicationFactory : WebApplicationFactory<Program>
 {
     public const string SigningKey = "test-only-guiyang-lobby-signing-key-which-is-long-enough";
+    public const string MonitoringToken = "test-only-lobby-monitoring-token-which-is-long-enough";
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -21,6 +22,7 @@ public sealed class LobbyWebApplicationFactory : WebApplicationFactory<Program>
                 ["Lobby:TokenSigningKey"] = SigningKey,
                 ["Lobby:JoinTicketSigningKey"] = "test-only-join-ticket-signing-key-which-is-long-enough",
                 ["Lobby:InternalServiceToken"] = "test-only-internal-service-token-which-is-long-enough",
+                ["Lobby:MonitoringReadOnlyToken"] = MonitoringToken,
                 ["Lobby:Allocator:Enabled"] = "false",
                 ["Lobby:Persistence:Mode"] = "InMemory",
                 ["Lobby:PasswordFailureLimit"] = "5",

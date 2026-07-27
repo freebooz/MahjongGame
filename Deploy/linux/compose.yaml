@@ -51,6 +51,7 @@ services:
       Auth__PostgresConnectionString: Host=postgres;Port=5432;Database=mahjong;Username=mahjong;Password=${POSTGRES_PASSWORD}
       Auth__TokenSigningKey: ${PLAYER_TOKEN_SIGNING_KEY:?PLAYER_TOKEN_SIGNING_KEY is required}
       Auth__GuestIdentityPepper: ${GUEST_IDENTITY_PEPPER:?GUEST_IDENTITY_PEPPER is required}
+      Auth__MonitoringReadOnlyToken: ${MONITORING_READ_ONLY_TOKEN:?MONITORING_READ_ONLY_TOKEN is required}
     depends_on:
       postgres: {condition: service_healthy}
     ports: ["${AUTH_PORT:-18082}:8080"]
@@ -89,6 +90,7 @@ services:
       # WSL mirrored-network address on the same machine.
       Allocator__LobbyInternalUrl: http://127.0.0.1:${LOBBY_PORT:-18080}
       Allocator__ServiceToken: ${ALLOCATOR_SERVICE_TOKEN:?ALLOCATOR_SERVICE_TOKEN is required}
+      Allocator__MonitoringReadOnlyToken: ${MONITORING_READ_ONLY_TOKEN:?MONITORING_READ_ONLY_TOKEN is required}
       Allocator__LobbyCallbackToken: ${LOBBY_INTERNAL_TOKEN:?LOBBY_INTERNAL_TOKEN is required}
       Allocator__JoinTicketSigningKey: ${JOIN_TICKET_SIGNING_KEY:?JOIN_TICKET_SIGNING_KEY is required}
     volumes:
@@ -125,6 +127,7 @@ services:
       Lobby__TokenSigningKey: ${PLAYER_TOKEN_SIGNING_KEY:?PLAYER_TOKEN_SIGNING_KEY is required}
       Lobby__JoinTicketSigningKey: ${JOIN_TICKET_SIGNING_KEY:?JOIN_TICKET_SIGNING_KEY is required}
       Lobby__InternalServiceToken: ${LOBBY_INTERNAL_TOKEN:?LOBBY_INTERNAL_TOKEN is required}
+      Lobby__MonitoringReadOnlyToken: ${MONITORING_READ_ONLY_TOKEN:?MONITORING_READ_ONLY_TOKEN is required}
       Lobby__Allocator__Enabled: "true"
       Lobby__Allocator__BaseUrl: http://host.docker.internal:${ALLOCATOR_PORT:-18081}
       Lobby__Allocator__ServiceToken: ${ALLOCATOR_SERVICE_TOKEN:?ALLOCATOR_SERVICE_TOKEN is required}
@@ -144,6 +147,73 @@ services:
     cpus: ${LOBBY_CPUS:-2.0}
     mem_limit: ${LOBBY_MEMORY:-1g}
     pids_limit: 512
+    read_only: true
+    tmpfs: ["/tmp:rw,noexec,nosuid,size=64m"]
+    security_opt: ["no-new-privileges:true"]
+    logging: *logging
+
+  admin:
+    image: ${IMAGE_REGISTRY:-local}/guiyang-mahjong-admin:${MAHJONG_VERSION:-dev}
+    build:
+      context: ../..
+      dockerfile: Services/GuiyangMahjong.Admin/Dockerfile
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      Admin__ReadOnlyAccessToken: ${ADMIN_READ_ONLY_TOKEN:?ADMIN_READ_ONLY_TOKEN is required}
+      Admin__Management__Enabled: ${ADMIN_MANAGEMENT_ENABLED:-false}
+      Admin__Management__ExecutionEnabled: ${ADMIN_COMMAND_EXECUTION_ENABLED:-false}
+      Admin__Management__PollIntervalMilliseconds: ${ADMIN_COMMAND_POLL_INTERVAL_MS:-1000}
+      Admin__Management__LeaseSeconds: ${ADMIN_COMMAND_LEASE_SECONDS:-30}
+      Admin__Management__MaxAttempts: ${ADMIN_COMMAND_MAX_ATTEMPTS:-5}
+      Admin__Management__RetryBaseSeconds: ${ADMIN_COMMAND_RETRY_BASE_SECONDS:-5}
+      Admin__Management__PersistenceMode: Postgres
+      Admin__Management__PostgresConnectionString: Host=postgres;Port=5432;Database=mahjong;Username=mahjong;Password=${POSTGRES_PASSWORD}
+      Admin__Principals__0__OperatorId: ${ADMIN_ROOM_OPERATOR_ID:-room-operator}
+      Admin__Principals__0__AccessToken: ${ADMIN_ROOM_OPERATOR_TOKEN:?ADMIN_ROOM_OPERATOR_TOKEN is required}
+      Admin__Principals__0__Roles__0: room.viewer
+      Admin__Principals__0__Roles__1: player.viewer
+      Admin__Principals__0__Roles__2: room.operator
+      Admin__Principals__1__OperatorId: ${ADMIN_ROOM_APPROVER_ID:-room-approver}
+      Admin__Principals__1__AccessToken: ${ADMIN_ROOM_APPROVER_TOKEN:?ADMIN_ROOM_APPROVER_TOKEN is required}
+      Admin__Principals__1__Roles__0: room.viewer
+      Admin__Principals__1__Roles__1: room.approver
+      Admin__Principals__1__Roles__2: audit.viewer
+      Admin__Principals__2__OperatorId: ${ADMIN_PLAYER_OPERATOR_ID:-player-operator}
+      Admin__Principals__2__AccessToken: ${ADMIN_PLAYER_OPERATOR_TOKEN:?ADMIN_PLAYER_OPERATOR_TOKEN is required}
+      Admin__Principals__2__Roles__0: player.viewer
+      Admin__Principals__2__Roles__1: player.operator
+      Admin__Principals__3__OperatorId: ${ADMIN_PLAYER_APPROVER_ID:-player-approver}
+      Admin__Principals__3__AccessToken: ${ADMIN_PLAYER_APPROVER_TOKEN:?ADMIN_PLAYER_APPROVER_TOKEN is required}
+      Admin__Principals__3__Roles__0: player.viewer
+      Admin__Principals__3__Roles__1: player.approver
+      Admin__Principals__3__Roles__2: audit.viewer
+      Admin__Auth__Enabled: "true"
+      Admin__Auth__BaseUrl: http://auth:8080
+      Admin__Auth__MonitoringToken: ${MONITORING_READ_ONLY_TOKEN:?MONITORING_READ_ONLY_TOKEN is required}
+      Admin__Lobby__Enabled: "true"
+      Admin__Lobby__BaseUrl: http://lobby:8080
+      Admin__Lobby__MonitoringToken: ${MONITORING_READ_ONLY_TOKEN:?MONITORING_READ_ONLY_TOKEN is required}
+      Admin__Allocators__0__Enabled: "true"
+      Admin__Allocators__0__ClusterId: ${MAHJONG_CLUSTER_ID:-local-linux}
+      Admin__Allocators__0__NodeId: ${MAHJONG_NODE_ID:-game-node}
+      Admin__Allocators__0__BaseUrl: http://host.docker.internal:${ALLOCATOR_PORT:-18081}
+      Admin__Allocators__0__MonitoringToken: ${MONITORING_READ_ONLY_TOKEN:?MONITORING_READ_ONLY_TOKEN is required}
+    depends_on:
+      auth: {condition: service_healthy}
+      lobby: {condition: service_healthy}
+      game-node: {condition: service_healthy}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports: ["${ADMIN_PORT:-18083}:8080"]
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "--show-error", "http://127.0.0.1:8080/health/ready"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+    cpus: ${ADMIN_CPUS:-1.0}
+    mem_limit: ${ADMIN_MEMORY:-512m}
+    pids_limit: 256
     read_only: true
     tmpfs: ["/tmp:rw,noexec,nosuid,size=64m"]
     security_opt: ["no-new-privileges:true"]

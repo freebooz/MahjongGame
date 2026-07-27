@@ -16,6 +16,36 @@ data:
   Lobby__Persistence__PostgresConnectionString: Host=postgres.database.svc;Port=5432;Database=mahjong;Username=mahjong
   Lobby__Allocator__Enabled: "true"
   Lobby__Allocator__BaseUrl: http://mahjong-allocator:8080
+  Admin__Lobby__Enabled: "true"
+  Admin__Lobby__BaseUrl: http://mahjong-lobby:8080
+  Admin__Auth__Enabled: "true"
+  Admin__Auth__BaseUrl: http://mahjong-auth:8080
+  Admin__Management__Enabled: "false"
+  Admin__Management__ExecutionEnabled: "false"
+  Admin__Management__PollIntervalMilliseconds: "1000"
+  Admin__Management__LeaseSeconds: "30"
+  Admin__Management__MaxAttempts: "5"
+  Admin__Management__RetryBaseSeconds: "5"
+  Admin__Management__PersistenceMode: Postgres
+  Admin__Principals__0__OperatorId: room-operator
+  Admin__Principals__0__Roles__0: room.viewer
+  Admin__Principals__0__Roles__1: player.viewer
+  Admin__Principals__0__Roles__2: room.operator
+  Admin__Principals__1__OperatorId: room-approver
+  Admin__Principals__1__Roles__0: room.viewer
+  Admin__Principals__1__Roles__1: room.approver
+  Admin__Principals__1__Roles__2: audit.viewer
+  Admin__Principals__2__OperatorId: player-operator
+  Admin__Principals__2__Roles__0: player.viewer
+  Admin__Principals__2__Roles__1: player.operator
+  Admin__Principals__3__OperatorId: player-approver
+  Admin__Principals__3__Roles__0: player.viewer
+  Admin__Principals__3__Roles__1: player.approver
+  Admin__Principals__3__Roles__2: audit.viewer
+  Admin__Allocators__0__Enabled: "true"
+  Admin__Allocators__0__ClusterId: production
+  Admin__Allocators__0__NodeId: agones
+  Admin__Allocators__0__BaseUrl: http://mahjong-allocator:8080
   Allocator__Backend: Agones
   Allocator__LobbyInternalUrl: http://mahjong-lobby:8080
   Allocator__Agones__Namespace: guiyang-mahjong
