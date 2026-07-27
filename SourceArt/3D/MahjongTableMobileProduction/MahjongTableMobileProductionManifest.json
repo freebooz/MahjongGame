@@ -30,13 +30,13 @@
   "files": [
     {
       "name": "SM_StandardMahjongTable.blend",
-      "bytes": 120835,
-      "sha256": "b8aeb64133e91832025f919a0582b0e63a0450c0c3f3ad9c9a976715f3177b5d"
+      "bytes": 120834,
+      "sha256": "e0255dc32ca076ce834835610a542c0474925fcd0fa3a49d378ba776a5d75317"
     },
     {
       "name": "SM_StandardMahjongTable.fbx",
       "bytes": 64620,
-      "sha256": "75da62156ac7c0386f4cc445367df30da6795d9fce07329b5f0f01400ce0e137"
+      "sha256": "13b2244d244bd6b39eca2a46bc5286917aaf8b29e426cde01d8eccb29e8ca280"
     },
     {
       "name": "SM_StandardMahjongTable.glb",

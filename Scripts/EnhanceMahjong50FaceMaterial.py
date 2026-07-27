@@ -18,9 +18,9 @@ from ImportMahjong50Assets import (  # noqa: E402
 
 FACE_TEXTURES = (
     "T_Mahjong50_FaceAtlas_BaseColor",
+    "T_Mahjong50_FaceAtlas_GlyphMask",
+    "T_Mahjong50_FaceAtlas_EngraveMask",
     "T_Mahjong50_FaceAtlas_Normal",
-    "T_Mahjong50_FaceAtlas_Roughness",
-    "T_Mahjong50_FaceAtlas_AO",
     "T_Mahjong50_FaceAtlas_Height",
     "T_Mahjong50_FaceAtlas_ORM",
 )

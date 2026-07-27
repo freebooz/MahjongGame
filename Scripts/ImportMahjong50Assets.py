@@ -25,6 +25,10 @@ UNIFIED_MATERIAL_PATH = f"{MATERIAL_DEST}/M_Mahjong50_TileUnified"
 
 DISTANT_GLYPH_LOD_BIAS = -1
 DISTANT_GLYPH_COVERAGE_BOOST = 1.25
+AUTHORING_ONLY_TEXTURE_STEMS = {
+    "T_Mahjong50_FaceAtlas_AO",
+    "T_Mahjong50_FaceAtlas_Roughness",
+}
 
 
 def log(message: str) -> None:
@@ -46,14 +50,25 @@ def set_prop(obj, name: str, value) -> bool:
 
 def ensure_sources() -> list[Path]:
     required = [MODEL_FILE, INDEX_FILE]
-    texture_files = sorted(TEXTURE_SOURCE.glob("T_Mahjong50_*.png"))
-    required.extend(texture_files)
+    source_texture_files = sorted(TEXTURE_SOURCE.glob("T_Mahjong50_*.png"))
+    required.extend(source_texture_files)
     missing = [str(path) for path in required if not path.is_file()]
     if missing:
         raise RuntimeError("Missing source files: " + ", ".join(missing))
-    if len(texture_files) != 14:
-        raise RuntimeError(f"Expected 14 PNG textures, found {len(texture_files)}")
-    return texture_files
+    if len(source_texture_files) != 14:
+        raise RuntimeError(
+            f"Expected 14 authoring PNG textures, found {len(source_texture_files)}"
+        )
+    runtime_texture_files = [
+        path
+        for path in source_texture_files
+        if path.stem not in AUTHORING_ONLY_TEXTURE_STEMS
+    ]
+    if len(runtime_texture_files) != 12:
+        raise RuntimeError(
+            f"Expected 12 runtime PNG textures, found {len(runtime_texture_files)}"
+        )
+    return runtime_texture_files
 
 
 def delete_old_asset_set() -> None:
@@ -539,8 +554,8 @@ def validate(base_mesh, tile_specs: list[dict], textures: list) -> None:
     active_tiles = [tile for tile in tile_specs if not tile.get("reserved", False)]
     if len(active_tiles) != 34:
         raise RuntimeError(f"Expected 34 active tile definitions, found {len(active_tiles)}")
-    if len(textures) != 14:
-        raise RuntimeError(f"Expected 14 textures, found {len(textures)}")
+    if len(textures) != 12:
+        raise RuntimeError(f"Expected 12 runtime textures, found {len(textures)}")
     slots = material_slot_names(base_mesh)
     if len(slots) != 1 or "unified" not in slots[0].lower():
         raise RuntimeError(f"Expected one unified material slot on base mesh, found {slots}")
@@ -559,7 +574,7 @@ def validate(base_mesh, tile_specs: list[dict], textures: list) -> None:
             raise RuntimeError(f"Missing face material instance {mi_path}")
     log(
         f"validated mesh dimensions=({size.x:.3f}, {size.y:.3f}, {size.z:.3f}) cm, "
-        f"slots={slots}, textures=14, tile variants=34"
+        f"slots={slots}, textures=12, tile variants=34"
     )
 
 

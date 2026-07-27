@@ -27,6 +27,9 @@ MESH_DEST = f"{DEST_ROOT}/Meshes"
 TEXTURE_DEST = f"{DEST_ROOT}/Textures"
 MATERIAL_DEST = f"{DEST_ROOT}/Materials"
 MESH_PATH = f"{MESH_DEST}/SM_StandardMahjongTable"
+PRESENTATION_BLUEPRINT_PATH = (
+    "/Game/Client/Room/Presentation/BP_MahjongRoomPresentation"
+)
 REPORT_PATH = (
     PROJECT_ROOT / "Saved" / "Reports" / "MobileMahjongTableImportReport.json"
 )
@@ -407,6 +410,42 @@ def assign_materials(mesh, materials: dict[str, object]) -> list[str]:
     return slots
 
 
+def configure_runtime_reference(mesh) -> list[float]:
+    blueprint = unreal.EditorAssetLibrary.load_asset(
+        PRESENTATION_BLUEPRINT_PATH
+    )
+    if not blueprint:
+        raise RuntimeError(
+            f"Missing presentation Blueprint {PRESENTATION_BLUEPRINT_PATH}"
+        )
+    subsystem = unreal.get_engine_subsystem(unreal.SubobjectDataSubsystem)
+    table_component = None
+    for handle in subsystem.k2_gather_subobject_data_for_blueprint(blueprint):
+        data = unreal.SubobjectDataBlueprintFunctionLibrary.get_data(handle)
+        name = unreal.SubobjectDataBlueprintFunctionLibrary.get_variable_name(
+            data
+        )
+        if str(name) != "MahjongTableMesh":
+            continue
+        table_component = (
+            unreal.SubobjectDataBlueprintFunctionLibrary
+            .get_object_for_blueprint(data, blueprint)
+        )
+        break
+    if not table_component:
+        raise RuntimeError(
+            "Presentation Blueprint is missing MahjongTableMesh"
+        )
+    table_component.set_editor_property("static_mesh", mesh)
+    runtime_scale = unreal.Vector(1.0, 1.0, 1.0)
+    table_component.set_editor_property("relative_scale3d", runtime_scale)
+    unreal.BlueprintEditorLibrary.compile_blueprint(blueprint)
+    unreal.EditorAssetLibrary.save_loaded_asset(
+        blueprint, only_if_is_dirty=False
+    )
+    return [runtime_scale.x, runtime_scale.y, runtime_scale.z]
+
+
 def validate(mesh, slots: list[str]) -> tuple[list[float], int, list[str]]:
     size = mesh.get_bounds().box_extent * 2.0
     dimensions = [float(size.x), float(size.y), float(size.z)]
@@ -453,6 +492,7 @@ def main() -> None:
     materials = build_materials(texture_manifest)
     slots = assign_materials(mesh, materials)
     dimensions, triangles, assets = validate(mesh, slots)
+    runtime_scale = configure_runtime_reference(mesh)
     unreal.EditorAssetLibrary.save_directory(
         DEST_ROOT,
         only_if_is_dirty=False,
@@ -480,6 +520,13 @@ def main() -> None:
             "controller_texture_max_size": 512,
         },
         "source_triangle_count": model_manifest["triangle_count"],
+        "runtime_integration": {
+            "presentation_blueprint": PRESENTATION_BLUEPRINT_PATH,
+            "component": "MahjongTableMesh",
+            "mesh": MESH_PATH,
+            "relative_scale": runtime_scale,
+            "runtime_dimensions_cm": dimensions,
+        },
     }
     REPORT_PATH.parent.mkdir(parents=True, exist_ok=True)
     REPORT_PATH.write_text(
