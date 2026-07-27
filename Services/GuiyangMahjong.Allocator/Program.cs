@@ -35,6 +35,19 @@ builder.Services
     .Validate(options => string.IsNullOrEmpty(options.MonitoringReadOnlyToken)
                          || options.MonitoringReadOnlyToken.Length >= 32,
         "Allocator:MonitoringReadOnlyToken must be empty or contain at least 32 characters.")
+    .Validate(options => string.IsNullOrEmpty(options.ManagementCommandToken)
+                         || options.ManagementCommandToken.Length >= 32,
+        "Allocator:ManagementCommandToken must be empty or contain at least 32 characters.")
+    .Validate(options => string.IsNullOrEmpty(options.ManagementCommandToken)
+                         || (!string.Equals(
+                                 options.ManagementCommandToken,
+                                 options.MonitoringReadOnlyToken,
+                                 StringComparison.Ordinal)
+                             && !string.Equals(
+                                 options.ManagementCommandToken,
+                                 options.ServiceToken,
+                                 StringComparison.Ordinal)),
+        "Allocator management credential must be dedicated.")
     .ValidateOnStart();
 
 builder.Services.AddSingleton(TimeProvider.System);

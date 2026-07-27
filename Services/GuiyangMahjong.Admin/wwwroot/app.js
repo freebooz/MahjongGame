@@ -98,12 +98,17 @@ function renderRooms(rooms){
   byId("roomsBody").querySelectorAll("[data-room]").forEach(row=>row.onclick=()=>showRoom(row.dataset.room));
 }
 function renderInstances(items){
+  const canTerminate=state.me?.managementEnabled&&hasRole("infrastructure.operator");
   byId("instancesBody").innerHTML=items.length?items.map(({clusterId,nodeId,instance})=>`<tr>
     <td>${esc(clusterId)}</td><td>${esc(nodeId)}</td><td class="mono">${esc(instance.serverInstanceId)}</td>
     <td>${esc(instance.roomId)}</td><td><span class="pill ${esc(instance.state)}">${esc(instance.state)}</span></td>
     <td>${esc(instance.processId||"—")}</td><td>${esc(instance.advertisedIp)}:${instance.port}</td>
-    <td>${date(instance.lastHeartbeatAtUtc)}</td></tr>`).join("")
-    :'<tr><td colspan="8" class="empty">当前没有 Dedicated Server 实例</td></tr>';
+    <td>${date(instance.lastHeartbeatAtUtc)}</td>
+    <td>${canTerminate?`<button class="table-action" data-server="${esc(instance.serverInstanceId)}">${esc(actionNames.TerminateAbnormalServer)}</button>`:"—"}</td></tr>`).join("")
+    :'<tr><td colspan="9" class="empty">当前没有 Dedicated Server 实例</td></tr>';
+  byId("instancesBody").querySelectorAll("[data-server]").forEach(button=>button.onclick=()=>openActionDialog({
+    kind:"server",targetId:button.dataset.server,expectedStateSequence:null
+  }));
 }
 function renderActions(actions){
   byId("actionsBody").innerHTML=actions.length?actions.map(action=>`<tr>
@@ -161,12 +166,14 @@ function availableActions(kind){
   if(kind==="room"){
     add("room.operator",["MarkRoomAbnormal","ProhibitNewPlayers","EnableMaintenanceMode",
       "ForceDissolveRoom","ExportRoomLogs","ViewReplay","StartDisputeInvestigation"]);
-  }else{
+  }else if(kind==="player"){
     add("player.operator",["ForceLogoutPlayer","ResetAbnormalPlayerSession"]);
     add("sanction.operator",["TemporaryFreezePlayer","PermanentBanPlayer","LiftPlayerBan","MutePlayer","UnmutePlayer"]);
     add("risk.analyst",["MarkRiskAccount"]);
     add("compensation.operator",["GrantPlayerCompensation","RevokeErroneousReward"]);
     add("support.operator",["ViewPlayerReplay","CreatePlayerSupportTicket"]);
+  }else if(kind==="server"){
+    add("infrastructure.operator",["TerminateAbnormalServer"]);
   }
   return [...new Set(values)];
 }
@@ -174,8 +181,10 @@ function openActionDialog(target){
   state.pendingAction=null;state.currentTarget=target;
   const types=availableActions(target.kind);
   byId("actionType").innerHTML=types.map(type=>`<option value="${esc(type)}">${esc(actionNames[type])}</option>`).join("");
-  byId("actionDialogTitle").textContent=target.kind==="player"?"创建玩家管理申请":"创建房间管理申请";
-  byId("actionTargetLabel").textContent=target.kind==="player"?"目标玩家 ID":"目标房间 ID";
+  byId("actionDialogTitle").textContent=target.kind==="player"
+    ?"创建玩家管理申请":target.kind==="server"?"创建服务器管理申请":"创建房间管理申请";
+  byId("actionTargetLabel").textContent=target.kind==="player"
+    ?"目标玩家 ID":target.kind==="server"?"Dedicated Server ID":"目标房间 ID";
   byId("actionTarget").value=target.targetId;
   byId("actionTicket").value="";byId("actionReason").value="";byId("actionConfirmation").value="";
   byId("confirmationStep").hidden=true;byId("actionSubmit").textContent="创建申请";
@@ -218,6 +227,7 @@ async function showPlayer(playerId){
   try{
     const detail=await request(`/admin/v1/players/${encodeURIComponent(playerId)}`),p=detail.summary;
     const sessions=detail.sessions||[],logins=detail.loginHistory||[],rooms=detail.roomHistory||[],disconnects=detail.disconnectHistory||[];
+    const controls=detail.controlHistory||[],riskLabels=p.riskLabels||[];
     const canManage=state.me?.managementEnabled&&availableActions("player").length>0;
     byId("playerDetail").innerHTML=`<p class="eyebrow">PLAYER 360 · MASKED</p><h2>${esc(p.displayName)}</h2>
       <div class="detail-grid">
@@ -226,12 +236,18 @@ async function showPlayer(playerId){
       <div><span>当前设备</span><b class="mono">${esc(p.currentDeviceId||"—")}</b></div><div><span>IP 网段</span>${esc(p.currentMaskedIp||"—")}</div>
       <div><span>当前大厅</span>${esc(p.lobbyId||"—")}</div><div><span>当前房间 / 实例</span>${esc(p.roomCode||"—")} / <b class="mono">${esc(p.serverInstanceId||"—")}</b></div>
       <div><span>延迟</span>${p.latencyMilliseconds!=null?`${p.latencyMilliseconds.toFixed(0)} ms`:"—"}</div><div><span>活跃会话</span>${p.activeSessionCount}</div>
+      <div><span>控制版本</span>${p.controlVersion}</div><div><span>冻结到期</span>${date(p.frozenUntilUtc)}</div>
+      <div><span>禁言到期</span>${date(p.mutedUntilUtc)}</div><div><span>风险标签</span>${riskLabels.length?riskLabels.map(esc).join(" / "):"—"}</div>
       </div>
       ${canManage?'<div class="manage-actions"><button id="createPlayerAction">创建玩家管理申请</button></div>':""}
       <h2>登录历史</h2><p class="mono">${logins.length?logins.map(x=>`${date(x.occurredAtUtc)} · ${esc(x.deviceId)} · ${esc(x.maskedIp)} · ${esc(x.clientSummary)}`).join("<br>"):"暂无记录"}</p>
       <h2>会话</h2><p class="mono">${sessions.length?sessions.map(x=>`${esc(x.sessionReference)} · ${x.active?"有效":"失效"} · ${date(x.createdAtUtc)} → ${date(x.expiresAtUtc)}`).join("<br>"):"暂无记录"}</p>
       <h2>房间历史</h2><p class="mono">${rooms.length?rooms.map(x=>`${date(x.createdAtUtc)} · ${esc(x.roomCode)} · ${esc(x.lifecycle)} · ${esc(x.matchId)}`).join("<br>"):"暂无记录"}</p>
       <h2>掉线历史</h2><p class="mono">${disconnects.length?disconnects.map(x=>`${date(x.occurredAtUtc)} · ${esc(JSON.stringify(x.data))}`).join("<br>"):"暂无记录"}</p>`;
+    byId("playerDetail").insertAdjacentHTML("beforeend",
+      `<h2>制裁与风险操作记录</h2><p class="mono">${controls.length?controls.map(x=>
+        `${date(x.effectiveAtUtc)} · ${esc(actionNames[x.actionType]||x.actionType)} · ${esc(x.ticketId)} · ${esc(x.requestedBy)} → ${esc(x.approvedBy)} · Trace ${esc(x.traceId)}`
+      ).join("<br>"):"暂无记录"}</p>`);
     if(canManage)byId("createPlayerAction").onclick=()=>openActionDialog({
       kind:"player",targetId:p.playerId,expectedStateSequence:null
     });

@@ -328,6 +328,11 @@ public sealed class RedisPostgresLobbyStore : ILobbyStore
             await transaction.CommitAsync(cancellationToken);
             return new AddPlayerResult(AddPlayerStatus.RoomClosed, room);
         }
+        if (room.NewPlayersProhibited)
+        {
+            await transaction.CommitAsync(cancellationToken);
+            return new AddPlayerResult(AddPlayerStatus.AdmissionProhibited, room);
+        }
         if (room.PlayerIds.Length >= room.MaximumPlayers)
         {
             await transaction.CommitAsync(cancellationToken);

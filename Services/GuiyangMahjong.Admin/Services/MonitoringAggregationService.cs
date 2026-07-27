@@ -15,7 +15,8 @@ public sealed class MonitoringAggregationService(
             item => item.Instance.ServerInstanceId, StringComparer.Ordinal);
         var active = rooms.Count(room =>
             room.Lifecycle is "Allocating" or "Waiting" or "Playing" or "Settling");
-        var abnormal = rooms.Count(room => room.Lifecycle == "Failed")
+        var abnormal = rooms.Count(room =>
+                room.Lifecycle == "Failed" || room.MarkedAbnormal)
             + instances.Count(item => item.Instance.State == "Failed");
         return new MonitoringOverview(
             timeProvider.GetUtcNow(),
@@ -86,6 +87,8 @@ public sealed class MonitoringAggregationService(
             room.PlayerIds,
             room.PublicRoom,
             room.AutoStart,
+            room.NewPlayersProhibited,
+            room.MarkedAbnormal,
             server,
             runtime,
             await timelineTask,

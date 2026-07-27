@@ -90,7 +90,20 @@ public static class AdminEndpoints
         {
             RequireRole(context, AdminRoles.PlayerViewer);
             var player = await monitoring.GetPlayerAsync(playerId, cancellationToken);
-            return player is null ? Results.NotFound() : Results.Ok(player);
+            if (player is null) return Results.NotFound();
+            var principal = AdminPrincipalContext.Get(context);
+            var canViewControlHistory =
+                principal.HasRole(AdminRoles.SanctionOperator)
+                || principal.HasRole(AdminRoles.RiskAnalyst)
+                || principal.HasRole(AdminRoles.PlayerApprover)
+                || principal.HasRole(AdminRoles.AuditViewer);
+            return Results.Ok(canViewControlHistory
+                ? player
+                : player with
+                {
+                    ControlHistory = [],
+                    DataScope = "ReadOnlyMaskedControlHistoryRedacted"
+                });
         });
 
         api.MapGet("/action-requests", async (

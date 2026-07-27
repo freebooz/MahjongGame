@@ -122,6 +122,33 @@ public sealed class AdminApiTests(AdminWebApplicationFactory factory)
     }
 
     [Fact]
+    public async Task PlayerControlHistoryRequiresSanctionRiskApprovalOrAuditRole()
+    {
+        using var viewer = factory.CreateClient();
+        viewer.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue(
+                "Bearer",
+                AdminWebApplicationFactory.OperatorToken);
+        var redacted = await viewer.GetFromJsonAsync<PlayerMonitorDetail>(
+            $"/admin/v1/players/{AdminTestPlayerDirectoryClient.PlayerId}");
+        Assert.NotNull(redacted);
+        Assert.Empty(redacted.ControlHistory);
+        Assert.Equal(
+            "ReadOnlyMaskedControlHistoryRedacted",
+            redacted.DataScope);
+
+        using var sanctionOperator = factory.CreateClient();
+        sanctionOperator.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue(
+                "Bearer",
+                AdminWebApplicationFactory.PlayerOperatorToken);
+        var permitted = await sanctionOperator.GetFromJsonAsync<PlayerMonitorDetail>(
+            $"/admin/v1/players/{AdminTestPlayerDirectoryClient.PlayerId}");
+        Assert.NotNull(permitted);
+        Assert.Single(permitted.ControlHistory);
+    }
+
+    [Fact]
     public async Task RoomManagementRequiresConfirmationSeparateApprovalAndCreatesHashChainedAudit()
     {
         using var operatorClient = factory.CreateClient();
@@ -437,7 +464,38 @@ public sealed class AdminTestPlayerDirectoryClient : IPlayerDirectoryClient
                     "Success",
                     DateTimeOffset.Parse("2026-07-27T01:00:00Z"))
             ],
-            ["device-derived-123"]));
+            ["device-derived-123"],
+            [
+                new PlayerControlEvent(
+                    "command-control-history",
+                    PlayerId,
+                    "MarkRiskAccount",
+                    "Confirmed manual risk review",
+                    "trace-control-history",
+                    "RISK-HISTORY-001",
+                    "risk-analyst",
+                    "player-approver",
+                    DateTimeOffset.Parse("2026-07-27T01:05:00Z"),
+                    DateTimeOffset.Parse("2026-08-26T01:05:00Z"),
+                    "manual-review",
+                    0,
+                    new PlayerControlState(
+                        0,
+                        "Active",
+                        null,
+                        null,
+                        [],
+                        null,
+                        DateTimeOffset.UnixEpoch),
+                    new PlayerControlState(
+                        1,
+                        "Active",
+                        null,
+                        null,
+                        ["manual-review"],
+                        DateTimeOffset.Parse("2026-08-26T01:05:00Z"),
+                        DateTimeOffset.Parse("2026-07-27T01:05:00Z")))
+            ]));
     }
 
     private AuthPlayerDirectoryItem CreatePlayer() =>
@@ -451,5 +509,9 @@ public sealed class AdminTestPlayerDirectoryClient : IPlayerDirectoryClient
             DateTimeOffset.Parse("2026-07-27T01:00:00Z"),
             "device-derived-123",
             "10.20.30.*",
-            ActiveSessionCount);
+            ActiveSessionCount,
+            0,
+            null,
+            null,
+            []);
 }

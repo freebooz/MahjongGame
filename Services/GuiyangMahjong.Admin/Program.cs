@@ -71,8 +71,11 @@ builder.Services
         "Admin command execution requires management to be enabled.")
     .Validate(options => !options.Management.ExecutionEnabled
         || (options.Management.AuthCommandToken.Length >= 32
-            && options.Management.LobbyCommandToken.Length >= 32),
-        "Admin command execution requires dedicated Auth and Lobby command credentials.")
+            && options.Management.LobbyCommandToken.Length >= 32
+            && options.Allocators
+                .Where(source => source.Enabled)
+                .All(source => source.ManagementCommandToken.Length >= 32)),
+        "Admin command execution requires dedicated Auth, Lobby, and Allocator command credentials.")
     .Validate(options =>
         (string.IsNullOrEmpty(options.Management.AuthCommandToken)
             || !string.Equals(
@@ -91,6 +94,13 @@ builder.Services
                 options.Management.LobbyCommandToken,
                 StringComparison.Ordinal)),
         "Admin management credentials must differ from monitoring credentials.")
+    .Validate(options => options.Allocators.All(source =>
+            string.IsNullOrEmpty(source.ManagementCommandToken)
+            || !string.Equals(
+                source.ManagementCommandToken,
+                source.MonitoringToken,
+                StringComparison.Ordinal)),
+        "Allocator management credentials must differ from monitoring credentials.")
     .Validate(options => !builder.Environment.IsProduction()
         || !options.Management.ExecutionEnabled,
         "Production command execution is blocked until real command adapters are configured.")

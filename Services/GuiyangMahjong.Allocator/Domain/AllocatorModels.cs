@@ -64,6 +64,16 @@ public sealed record InstanceFailureNotification(
     string RoomId,
     string Reason);
 
+public sealed record AdminTerminateInstanceRequest(
+    string ExpectedState,
+    string Reason,
+    string TraceId);
+
+public sealed record AdminTerminateInstanceResult(
+    string CommandId,
+    GameServerInstanceSnapshot Instance,
+    bool AlreadyStopped);
+
 internal sealed class GameServerInstance
 {
     public required string ServerInstanceId { get; init; }

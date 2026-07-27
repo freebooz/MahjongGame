@@ -317,53 +317,120 @@ public sealed class GameServerInstanceManager
         await gate.WaitAsync(cancellationToken);
         try
         {
-            // Once a drain owns the instance lock it must finish even if the HTTP caller
-            // times out. Otherwise a successfully terminated process can remain persisted
-            // as Draining forever and prevent deterministic port reuse.
-            var cleanupToken = CancellationToken.None;
-            if (!instances.TryGetValue(serverInstanceId, out var instance))
-                throw new AllocatorOperationException("GameServer instance was not found.", 404);
-            if (instance.State == GameServerInstanceState.Stopped) return instance.Snapshot();
-            if (instance.State == GameServerInstanceState.Failed)
-            {
-                InstanceStateMachine.Transition(instance, GameServerInstanceState.Stopped);
-                ReleasePort(instance);
-                await PersistAsync(cleanupToken);
-                return instance.Snapshot();
-            }
-            if (instance.State == GameServerInstanceState.Allocated)
-            {
-                InstanceStateMachine.Transition(instance, GameServerInstanceState.Draining);
-                await PersistAsync(cleanupToken);
-            }
-            else if (instance.State != GameServerInstanceState.Draining)
-            {
-                throw new AllocatorOperationException(
-                    "Only allocated or already draining instances can drain.", 409);
-            }
-            if (instance.Process is not null)
-            {
-                await instance.Process.StopAsync(
-                    TimeSpan.FromSeconds(options.DrainGraceSeconds), cleanupToken);
-            }
-            else if (options.Backend == AllocatorBackendMode.Agones
-                     && !string.IsNullOrWhiteSpace(instance.OrchestratorResourceName))
-            {
-                await agones.ShutdownAsync(instance.OrchestratorResourceName, cleanupToken);
-            }
-            InstanceStateMachine.Transition(instance, GameServerInstanceState.Stopped);
-            ReleasePort(instance);
-            await PersistAsync(cleanupToken);
-            logger.LogInformation(
-                "GameServer stopped and port returned InstanceId={InstanceId} Port={Port}",
-                instance.ServerInstanceId,
-                instance.Port);
-            return instance.Snapshot();
+            return await DrainLockedAsync(
+                serverInstanceId,
+                null,
+                CancellationToken.None);
         }
         finally
         {
             gate.Release();
         }
+    }
+
+    public async Task<(GameServerInstanceSnapshot Instance, bool AlreadyStopped)>
+        TerminateAbnormalAsync(
+            string serverInstanceId,
+            GameServerInstanceState expectedState,
+            CancellationToken cancellationToken)
+    {
+        await gate.WaitAsync(cancellationToken);
+        try
+        {
+            if (!instances.TryGetValue(serverInstanceId, out var instance))
+                throw new AllocatorOperationException(
+                    "GameServer instance was not found.",
+                    404);
+            var alreadyStopped = instance.State == GameServerInstanceState.Stopped;
+            var snapshot = await DrainLockedAsync(
+                serverInstanceId,
+                expectedState,
+                CancellationToken.None);
+            return (snapshot, alreadyStopped);
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
+    private async Task<GameServerInstanceSnapshot> DrainLockedAsync(
+        string serverInstanceId,
+        GameServerInstanceState? expectedState,
+        CancellationToken cleanupToken)
+    {
+        // Once termination owns the instance lock it must finish even if the HTTP
+        // caller times out. Otherwise a terminated process can remain persisted as
+        // Draining forever and prevent deterministic port reuse.
+        if (!instances.TryGetValue(serverInstanceId, out var instance))
+            throw new AllocatorOperationException("GameServer instance was not found.", 404);
+        if (instance.State == GameServerInstanceState.Stopped) return instance.Snapshot();
+        if (expectedState.HasValue && instance.State != expectedState.Value)
+        {
+            throw new AllocatorOperationException(
+                $"GameServer state changed from {expectedState.Value} to {instance.State}.",
+                409);
+        }
+        if (instance.State == GameServerInstanceState.Failed)
+        {
+            InstanceStateMachine.Transition(instance, GameServerInstanceState.Stopped);
+            ReleasePort(instance);
+            await PersistAsync(cleanupToken);
+            return instance.Snapshot();
+        }
+        if (expectedState.HasValue
+            && instance.State is
+                GameServerInstanceState.Starting or GameServerInstanceState.Ready)
+        {
+            if (instance.Process is not null)
+                await instance.Process.StopAsync(TimeSpan.Zero, cleanupToken);
+            else if (options.Backend == AllocatorBackendMode.Agones
+                     && !string.IsNullOrWhiteSpace(instance.OrchestratorResourceName))
+                await agones.ShutdownAsync(
+                    instance.OrchestratorResourceName,
+                    cleanupToken);
+            InstanceStateMachine.Transition(
+                instance,
+                GameServerInstanceState.Failed);
+            InstanceStateMachine.Transition(
+                instance,
+                GameServerInstanceState.Stopped);
+            ReleasePort(instance);
+            await PersistAsync(cleanupToken);
+            return instance.Snapshot();
+        }
+        if (instance.State == GameServerInstanceState.Allocated)
+        {
+            InstanceStateMachine.Transition(instance, GameServerInstanceState.Draining);
+            await PersistAsync(cleanupToken);
+        }
+        else if (instance.State != GameServerInstanceState.Draining)
+        {
+            throw new AllocatorOperationException(
+                "Only allocated, failed, or already draining instances can terminate.",
+                409);
+        }
+        if (instance.Process is not null)
+        {
+            await instance.Process.StopAsync(
+                TimeSpan.FromSeconds(options.DrainGraceSeconds),
+                cleanupToken);
+        }
+        else if (options.Backend == AllocatorBackendMode.Agones
+                 && !string.IsNullOrWhiteSpace(instance.OrchestratorResourceName))
+        {
+            await agones.ShutdownAsync(
+                instance.OrchestratorResourceName,
+                cleanupToken);
+        }
+        InstanceStateMachine.Transition(instance, GameServerInstanceState.Stopped);
+        ReleasePort(instance);
+        await PersistAsync(cleanupToken);
+        logger.LogInformation(
+            "GameServer stopped and port returned InstanceId={InstanceId} Port={Port}",
+            instance.ServerInstanceId,
+            instance.Port);
+        return instance.Snapshot();
     }
 
     public GameServerInstanceSnapshot? Get(string serverInstanceId) =>

@@ -71,6 +71,8 @@ public sealed record LobbyRoom
     public DateTimeOffset CreatedAtUtc { get; init; }
     public DateTimeOffset UpdatedAtUtc { get; init; }
     public DateTimeOffset? EmptySinceUtc { get; init; }
+    public bool NewPlayersProhibited { get; init; }
+    public bool MarkedAbnormal { get; init; }
 }
 
 public sealed record CreateRoomRequest(
@@ -201,6 +203,22 @@ public sealed record AdminDisconnectPlayerResult(
     string PlayerId,
     DateTimeOffset RevokedBeforeUtc,
     bool Duplicate);
+
+public sealed record AdminUpdateRoomControlRequest(
+    string ActionType,
+    long ExpectedStateSequence,
+    string Reason,
+    string TraceId);
+
+public sealed record AdminUpdateRoomControlResult(
+    string RoomId,
+    string ActionType,
+    long StateSequence,
+    bool NewPlayersProhibited,
+    bool MarkedAbnormal,
+    RoomLifecycle Lifecycle,
+    string? ServerInstanceId,
+    bool AlreadyTerminal);
 
 public sealed record GameServerFailure(
     string ServerInstanceId,

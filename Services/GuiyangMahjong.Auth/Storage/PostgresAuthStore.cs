@@ -1,11 +1,16 @@
 using System.Security.Cryptography;
+using System.Text.Json;
 using GuiyangMahjong.Auth.Domain;
 using Npgsql;
+using NpgsqlTypes;
 
 namespace GuiyangMahjong.Auth.Storage;
 
 public sealed class PostgresAuthStore(NpgsqlDataSource postgres) : IAuthStore, IAsyncDisposable
 {
+    private static readonly JsonSerializerOptions JsonOptions =
+        new(JsonSerializerDefaults.Web);
+
     public async Task InitializeAsync(CancellationToken cancellationToken)
     {
         var path = Path.Combine(AppContext.BaseDirectory, "Storage", "schema.sql");
@@ -53,16 +58,57 @@ public sealed class PostgresAuthStore(NpgsqlDataSource postgres) : IAuthStore, I
         return ReadIdentity(reader);
     }
 
-    public async Task CreateRefreshSessionAsync(RefreshSession session, CancellationToken cancellationToken)
+    public async Task<SessionCreationStatus> CreateRefreshSessionAsync(
+        RefreshSession session,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
     {
-        await using var command = postgres.CreateCommand(
+        await using var connection = await postgres.OpenConnectionAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        await using var control = new NpgsqlCommand(
+            """
+            SELECT control.account_status, control.frozen_until_utc
+            FROM auth_identities AS identity
+            LEFT JOIN auth_player_controls AS control
+                ON control.player_id=identity.player_id
+            WHERE identity.player_id=$1
+            FOR UPDATE OF identity
+            """,
+            connection,
+            transaction);
+        control.Parameters.AddWithValue(session.PlayerId);
+        await using var controlReader = await control.ExecuteReaderAsync(cancellationToken);
+        if (!await controlReader.ReadAsync(cancellationToken))
+            throw new InvalidDataException("Auth identity was not found for session creation.");
+        var accountStatus = controlReader.IsDBNull(0)
+            ? "Active"
+            : controlReader.GetString(0);
+        DateTimeOffset? frozenUntil = controlReader.IsDBNull(1)
+            ? null
+            : controlReader.GetFieldValue<DateTimeOffset>(1);
+        await controlReader.DisposeAsync();
+        var creationStatus = accountStatus == "Banned"
+            ? SessionCreationStatus.Banned
+            : accountStatus == "Frozen" && frozenUntil > now
+                ? SessionCreationStatus.Frozen
+                : SessionCreationStatus.Created;
+        if (creationStatus != SessionCreationStatus.Created)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return creationStatus;
+        }
+        await using var command = new NpgsqlCommand(
             """
             INSERT INTO auth_refresh_sessions(
                 session_id, player_id, token_hash, expires_at_utc, created_at_utc, revoked_at_utc)
             VALUES ($1, $2, $3, $4, $5, $6)
-            """);
+            """,
+            connection,
+            transaction);
         AddSessionParameters(command, session);
         await command.ExecuteNonQueryAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return SessionCreationStatus.Created;
     }
 
     public async Task<RefreshRotationResult> RotateRefreshSessionAsync(
@@ -77,11 +123,13 @@ public sealed class PostgresAuthStore(NpgsqlDataSource postgres) : IAuthStore, I
         await using var select = new NpgsqlCommand(
             """
             SELECT session.player_id, session.token_hash, session.expires_at_utc, session.revoked_at_utc,
-                   identity.display_name, identity.provider, identity.created_at_utc, identity.updated_at_utc
+                   identity.display_name, identity.provider, identity.created_at_utc, identity.updated_at_utc,
+                   control.account_status, control.frozen_until_utc
             FROM auth_refresh_sessions AS session
             JOIN auth_identities AS identity ON identity.player_id = session.player_id
+            LEFT JOIN auth_player_controls AS control ON control.player_id=identity.player_id
             WHERE session.session_id = $1
-            FOR UPDATE OF session
+            FOR UPDATE OF session, identity
             """, connection, transaction);
         select.Parameters.AddWithValue(currentSessionId);
         await using var reader = await select.ExecuteReaderAsync(cancellationToken);
@@ -101,6 +149,10 @@ public sealed class PostgresAuthStore(NpgsqlDataSource postgres) : IAuthStore, I
             reader.GetString(5),
             reader.GetFieldValue<DateTimeOffset>(6),
             reader.GetFieldValue<DateTimeOffset>(7));
+        var accountStatus = reader.IsDBNull(8) ? "Active" : reader.GetString(8);
+        DateTimeOffset? frozenUntil = reader.IsDBNull(9)
+            ? null
+            : reader.GetFieldValue<DateTimeOffset>(9);
         await reader.DisposeAsync();
 
         var status = !FixedTimeEquals(storedHash, currentTokenHash)
@@ -109,6 +161,10 @@ public sealed class PostgresAuthStore(NpgsqlDataSource postgres) : IAuthStore, I
                 ? RefreshRotationStatus.Revoked
                 : expiresAt <= now
                     ? RefreshRotationStatus.Expired
+                    : accountStatus == "Banned"
+                        ? RefreshRotationStatus.Banned
+                        : accountStatus == "Frozen" && frozenUntil > now
+                            ? RefreshRotationStatus.Frozen
                     : RefreshRotationStatus.Rotated;
         if (status != RefreshRotationStatus.Rotated)
         {
@@ -272,6 +328,204 @@ public sealed class PostgresAuthStore(NpgsqlDataSource postgres) : IAuthStore, I
             false);
     }
 
+    public async Task<AdminPlayerControlStoreResult> ApplyPlayerControlAsync(
+        string commandId,
+        string playerId,
+        AdminPlayerControlAction action,
+        long expectedVersion,
+        string reason,
+        string traceId,
+        string ticketId,
+        string requestedBy,
+        string approvedBy,
+        DateTimeOffset effectiveAtUtc,
+        DateTimeOffset? expiresAtUtc,
+        string? riskLabel,
+        CancellationToken cancellationToken)
+    {
+        await using var connection = await postgres.OpenConnectionAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        await using (var commandLock = new NpgsqlCommand(
+            "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
+            connection,
+            transaction))
+        {
+            commandLock.Parameters.AddWithValue(commandId);
+            await commandLock.ExecuteNonQueryAsync(cancellationToken);
+        }
+        var duplicate = await ReadControlEventAsync(
+            connection,
+            transaction,
+            commandId,
+            cancellationToken);
+        if (duplicate is not null)
+        {
+            EnsureSameControlCommand(
+                duplicate,
+                playerId,
+                action,
+                expectedVersion,
+                reason,
+                traceId,
+                ticketId,
+                requestedBy,
+                approvedBy,
+                effectiveAtUtc,
+                expiresAtUtc,
+                riskLabel);
+            await transaction.CommitAsync(cancellationToken);
+            return new AdminPlayerControlStoreResult(
+                AdminPlayerControlStatus.Duplicate,
+                ToControlResult(duplicate, true),
+                duplicate.AfterState,
+                null);
+        }
+
+        await using (var identityLock = new NpgsqlCommand(
+            """
+            SELECT player_id
+            FROM auth_identities
+            WHERE player_id=$1
+            FOR UPDATE
+            """,
+            connection,
+            transaction))
+        {
+            identityLock.Parameters.AddWithValue(playerId);
+            if (await identityLock.ExecuteScalarAsync(cancellationToken) is null)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                return new AdminPlayerControlStoreResult(
+                    AdminPlayerControlStatus.PlayerNotFound,
+                    null,
+                    null,
+                    "Player was not found.");
+            }
+        }
+
+        PlayerControlState before;
+        await using (var select = new NpgsqlCommand(
+            """
+            SELECT version, account_status, frozen_until_utc, muted_until_utc,
+                   risk_labels, risk_labels_expire_at_utc, updated_at_utc
+            FROM auth_player_controls
+            WHERE player_id=$1
+            """,
+            connection,
+            transaction))
+        {
+            select.Parameters.AddWithValue(playerId);
+            await using var reader = await select.ExecuteReaderAsync(cancellationToken);
+            before = await reader.ReadAsync(cancellationToken)
+                ? ReadControlState(reader)
+                : PlayerControlPolicy.Empty;
+        }
+        before = PlayerControlPolicy.Normalize(before, effectiveAtUtc);
+        if (before.Version != expectedVersion)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return new AdminPlayerControlStoreResult(
+                AdminPlayerControlStatus.VersionConflict,
+                null,
+                before,
+                "Player control state changed.");
+        }
+        var transition = PlayerControlPolicy.Apply(
+            before,
+            action,
+            effectiveAtUtc,
+            expiresAtUtc,
+            riskLabel);
+        if (transition.State is null)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return new AdminPlayerControlStoreResult(
+                AdminPlayerControlStatus.InvalidTransition,
+                null,
+                before,
+                transition.Error);
+        }
+        var after = transition.State;
+        await using (var upsert = new NpgsqlCommand(
+            """
+            INSERT INTO auth_player_controls(
+                player_id, version, account_status, frozen_until_utc,
+                muted_until_utc, risk_labels, risk_labels_expire_at_utc,
+                updated_at_utc)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+            ON CONFLICT (player_id) DO UPDATE SET
+                version=EXCLUDED.version,
+                account_status=EXCLUDED.account_status,
+                frozen_until_utc=EXCLUDED.frozen_until_utc,
+                muted_until_utc=EXCLUDED.muted_until_utc,
+                risk_labels=EXCLUDED.risk_labels,
+                risk_labels_expire_at_utc=EXCLUDED.risk_labels_expire_at_utc,
+                updated_at_utc=EXCLUDED.updated_at_utc
+            """,
+            connection,
+            transaction))
+        {
+            AddControlStateParameters(upsert, playerId, after);
+            await upsert.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        var revoked = 0;
+        if (action is AdminPlayerControlAction.TemporaryFreezePlayer
+            or AdminPlayerControlAction.PermanentBanPlayer)
+        {
+            await using var revoke = new NpgsqlCommand(
+                """
+                UPDATE auth_refresh_sessions
+                SET revoked_at_utc=$1
+                WHERE player_id=$2
+                  AND expires_at_utc > $1
+                  AND revoked_at_utc IS NULL
+                """,
+                connection,
+                transaction);
+            revoke.Parameters.AddWithValue(effectiveAtUtc);
+            revoke.Parameters.AddWithValue(playerId);
+            revoked = await revoke.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        var controlEvent = new PlayerControlEvent(
+            commandId,
+            playerId,
+            action.ToString(),
+            reason,
+            traceId,
+            ticketId,
+            requestedBy,
+            approvedBy,
+            effectiveAtUtc,
+            expiresAtUtc,
+            riskLabel,
+            revoked,
+            before,
+            after);
+        await using (var insertEvent = new NpgsqlCommand(
+            """
+            INSERT INTO auth_player_control_events(
+                command_id, player_id, action_type, reason, trace_id, ticket_id,
+                requested_by, approved_by, effective_at_utc, expires_at_utc,
+                risk_label, expected_version, revoked_session_count,
+                before_state, after_state)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+            """,
+            connection,
+            transaction))
+        {
+            AddControlEventParameters(insertEvent, controlEvent);
+            await insertEvent.ExecuteNonQueryAsync(cancellationToken);
+        }
+        await transaction.CommitAsync(cancellationToken);
+        return new AdminPlayerControlStoreResult(
+            AdminPlayerControlStatus.Applied,
+            ToControlResult(controlEvent, false),
+            after,
+            null);
+    }
+
     public async Task RecordLoginAsync(
         AuthLoginEvent loginEvent, CancellationToken cancellationToken)
     {
@@ -306,8 +560,23 @@ public sealed class PostgresAuthStore(NpgsqlDataSource postgres) : IAuthStore, I
                    (SELECT COUNT(*) FROM auth_refresh_sessions AS session
                     WHERE session.player_id=identity.player_id
                       AND session.revoked_at_utc IS NULL
-                      AND session.expires_at_utc > $1)
+                      AND session.expires_at_utc > $1),
+                   COALESCE(control.version, 0),
+                   CASE
+                       WHEN control.account_status='Banned' THEN 'Banned'
+                       WHEN control.account_status='Frozen'
+                            AND control.frozen_until_utc > $1 THEN 'Frozen'
+                       ELSE 'Active'
+                   END,
+                   CASE WHEN control.frozen_until_utc > $1
+                        THEN control.frozen_until_utc ELSE NULL END,
+                   CASE WHEN control.muted_until_utc > $1
+                        THEN control.muted_until_utc ELSE NULL END,
+                   CASE WHEN control.risk_labels_expire_at_utc > $1
+                        THEN control.risk_labels ELSE ARRAY[]::TEXT[] END
             FROM auth_identities AS identity
+            LEFT JOIN auth_player_controls AS control
+                ON control.player_id=identity.player_id
             LEFT JOIN LATERAL (
                 SELECT occurred_at_utc, device_id, masked_ip
                 FROM auth_login_events
@@ -345,8 +614,23 @@ public sealed class PostgresAuthStore(NpgsqlDataSource postgres) : IAuthStore, I
                    (SELECT COUNT(*) FROM auth_refresh_sessions AS session
                     WHERE session.player_id=identity.player_id
                       AND session.revoked_at_utc IS NULL
-                      AND session.expires_at_utc > $1)
+                      AND session.expires_at_utc > $1),
+                   COALESCE(control.version, 0),
+                   CASE
+                       WHEN control.account_status='Banned' THEN 'Banned'
+                       WHEN control.account_status='Frozen'
+                            AND control.frozen_until_utc > $1 THEN 'Frozen'
+                       ELSE 'Active'
+                   END,
+                   CASE WHEN control.frozen_until_utc > $1
+                        THEN control.frozen_until_utc ELSE NULL END,
+                   CASE WHEN control.muted_until_utc > $1
+                        THEN control.muted_until_utc ELSE NULL END,
+                   CASE WHEN control.risk_labels_expire_at_utc > $1
+                        THEN control.risk_labels ELSE ARRAY[]::TEXT[] END
             FROM auth_identities AS identity
+            LEFT JOIN auth_player_controls AS control
+                ON control.player_id=identity.player_id
             LEFT JOIN LATERAL (
                 SELECT occurred_at_utc, device_id, masked_ip
                 FROM auth_login_events
@@ -409,11 +693,35 @@ public sealed class PostgresAuthStore(NpgsqlDataSource postgres) : IAuthStore, I
                 loginReader.GetString(4),
                 loginReader.GetFieldValue<DateTimeOffset>(5)));
         }
+        await loginReader.DisposeAsync();
+
+        var controlHistory = new List<PlayerControlEvent>();
+        await using var controlCommand = new NpgsqlCommand(
+            """
+            SELECT command_id, player_id, action_type, reason, trace_id, ticket_id,
+                   requested_by, approved_by, effective_at_utc, expires_at_utc,
+                   risk_label, revoked_session_count,
+                   before_state::text, after_state::text
+            FROM auth_player_control_events
+            WHERE player_id=$1
+            ORDER BY effective_at_utc DESC
+            LIMIT 200
+            """,
+            connection);
+        controlCommand.Parameters.AddWithValue(playerId);
+        await using var controlReader =
+            await controlCommand.ExecuteReaderAsync(cancellationToken);
+        while (await controlReader.ReadAsync(cancellationToken))
+            controlHistory.Add(ReadControlEvent(
+                controlReader,
+                controlReader.GetString(0),
+                1));
         return new PlayerDirectoryDetail(
             player,
             sessions.ToArray(),
             logins.ToArray(),
-            logins.Select(item => item.DeviceId).Distinct(StringComparer.Ordinal).ToArray());
+            logins.Select(item => item.DeviceId).Distinct(StringComparer.Ordinal).ToArray(),
+            controlHistory.ToArray());
     }
 
     private static AuthIdentity ReadIdentity(NpgsqlDataReader reader) => new(
@@ -427,13 +735,21 @@ public sealed class PostgresAuthStore(NpgsqlDataSource postgres) : IAuthStore, I
         reader.GetString(0),
         reader.GetString(1),
         reader.GetString(2),
-        "Active",
+        reader.GetString(10),
         reader.GetFieldValue<DateTimeOffset>(3),
         reader.GetFieldValue<DateTimeOffset>(4),
         reader.IsDBNull(5) ? null : reader.GetFieldValue<DateTimeOffset>(5),
         reader.IsDBNull(6) ? null : reader.GetString(6),
         reader.IsDBNull(7) ? null : reader.GetString(7),
-        checked((int)reader.GetInt64(8)));
+        checked((int)reader.GetInt64(8)),
+        reader.GetInt64(9),
+        reader.IsDBNull(11)
+            ? null
+            : reader.GetFieldValue<DateTimeOffset>(11),
+        reader.IsDBNull(12)
+            ? null
+            : reader.GetFieldValue<DateTimeOffset>(12),
+        reader.GetFieldValue<string[]>(13));
 
     private static void AddSessionParameters(NpgsqlCommand command, RefreshSession session)
     {
@@ -444,6 +760,172 @@ public sealed class PostgresAuthStore(NpgsqlDataSource postgres) : IAuthStore, I
         command.Parameters.AddWithValue(session.CreatedAtUtc);
         command.Parameters.AddWithValue((object?)session.RevokedAtUtc ?? DBNull.Value);
     }
+
+    private static PlayerControlState ReadControlState(NpgsqlDataReader reader) =>
+        new(
+            reader.GetInt64(0),
+            reader.GetString(1),
+            reader.IsDBNull(2)
+                ? null
+                : reader.GetFieldValue<DateTimeOffset>(2),
+            reader.IsDBNull(3)
+                ? null
+                : reader.GetFieldValue<DateTimeOffset>(3),
+            reader.GetFieldValue<string[]>(4),
+            reader.IsDBNull(5)
+                ? null
+                : reader.GetFieldValue<DateTimeOffset>(5),
+            reader.GetFieldValue<DateTimeOffset>(6));
+
+    private static void AddControlStateParameters(
+        NpgsqlCommand command,
+        string playerId,
+        PlayerControlState state)
+    {
+        command.Parameters.AddWithValue(playerId);
+        command.Parameters.AddWithValue(state.Version);
+        command.Parameters.AddWithValue(state.AccountStatus);
+        command.Parameters.AddWithValue((object?)state.FrozenUntilUtc ?? DBNull.Value);
+        command.Parameters.AddWithValue((object?)state.MutedUntilUtc ?? DBNull.Value);
+        command.Parameters.AddWithValue(state.RiskLabels);
+        command.Parameters.AddWithValue(
+            (object?)state.RiskLabelsExpireAtUtc ?? DBNull.Value);
+        command.Parameters.AddWithValue(state.UpdatedAtUtc);
+    }
+
+    private static void AddControlEventParameters(
+        NpgsqlCommand command,
+        PlayerControlEvent controlEvent)
+    {
+        command.Parameters.AddWithValue(controlEvent.CommandId);
+        command.Parameters.AddWithValue(controlEvent.PlayerId);
+        command.Parameters.AddWithValue(controlEvent.ActionType);
+        command.Parameters.AddWithValue(controlEvent.Reason);
+        command.Parameters.AddWithValue(controlEvent.TraceId);
+        command.Parameters.AddWithValue(controlEvent.TicketId);
+        command.Parameters.AddWithValue(controlEvent.RequestedBy);
+        command.Parameters.AddWithValue(controlEvent.ApprovedBy);
+        command.Parameters.AddWithValue(controlEvent.EffectiveAtUtc);
+        command.Parameters.AddWithValue(
+            (object?)controlEvent.ExpiresAtUtc ?? DBNull.Value);
+        command.Parameters.AddWithValue(
+            (object?)controlEvent.RiskLabel ?? DBNull.Value);
+        command.Parameters.AddWithValue(controlEvent.BeforeState.Version);
+        command.Parameters.AddWithValue(controlEvent.RevokedSessionCount);
+        command.Parameters.AddWithValue(
+            NpgsqlDbType.Jsonb,
+            JsonSerializer.Serialize(controlEvent.BeforeState, JsonOptions));
+        command.Parameters.AddWithValue(
+            NpgsqlDbType.Jsonb,
+            JsonSerializer.Serialize(controlEvent.AfterState, JsonOptions));
+    }
+
+    private static async Task<PlayerControlEvent?> ReadControlEventAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        string commandId,
+        CancellationToken cancellationToken)
+    {
+        await using var command = new NpgsqlCommand(
+            """
+            SELECT player_id, action_type, reason, trace_id, ticket_id,
+                   requested_by, approved_by, effective_at_utc, expires_at_utc,
+                   risk_label, revoked_session_count,
+                   before_state::text, after_state::text
+            FROM auth_player_control_events
+            WHERE command_id=$1
+            """,
+            connection,
+            transaction);
+        command.Parameters.AddWithValue(commandId);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        if (!await reader.ReadAsync(cancellationToken)) return null;
+        return ReadControlEvent(reader, commandId, 0);
+    }
+
+    private static PlayerControlEvent ReadControlEvent(
+        NpgsqlDataReader reader,
+        string commandId,
+        int offset) =>
+        new(
+            commandId,
+            reader.GetString(offset),
+            reader.GetString(offset + 1),
+            reader.GetString(offset + 2),
+            reader.GetString(offset + 3),
+            reader.GetString(offset + 4),
+            reader.GetString(offset + 5),
+            reader.GetString(offset + 6),
+            reader.GetFieldValue<DateTimeOffset>(offset + 7),
+            reader.IsDBNull(offset + 8)
+                ? null
+                : reader.GetFieldValue<DateTimeOffset>(offset + 8),
+            reader.IsDBNull(offset + 9)
+                ? null
+                : reader.GetString(offset + 9),
+            reader.GetInt32(offset + 10),
+            JsonSerializer.Deserialize<PlayerControlState>(
+                reader.GetString(offset + 11),
+                JsonOptions)
+                ?? throw new InvalidDataException(
+                    "Stored player control before-state is invalid."),
+            JsonSerializer.Deserialize<PlayerControlState>(
+                reader.GetString(offset + 12),
+                JsonOptions)
+                ?? throw new InvalidDataException(
+                    "Stored player control after-state is invalid."));
+
+    private static void EnsureSameControlCommand(
+        PlayerControlEvent existing,
+        string playerId,
+        AdminPlayerControlAction action,
+        long expectedVersion,
+        string reason,
+        string traceId,
+        string ticketId,
+        string requestedBy,
+        string approvedBy,
+        DateTimeOffset effectiveAtUtc,
+        DateTimeOffset? expiresAtUtc,
+        string? riskLabel)
+    {
+        if (existing.PlayerId != playerId
+            || existing.ActionType != action.ToString()
+            || existing.BeforeState.Version != expectedVersion
+            || existing.Reason != reason
+            || existing.TraceId != traceId
+            || existing.TicketId != ticketId
+            || existing.RequestedBy != requestedBy
+            || existing.ApprovedBy != approvedBy
+            || (existing.EffectiveAtUtc - effectiveAtUtc).Duration()
+                > TimeSpan.FromMilliseconds(1)
+            || !SameInstant(existing.ExpiresAtUtc, expiresAtUtc)
+            || existing.RiskLabel != riskLabel)
+        {
+            throw new InvalidOperationException(
+                "Admin command id was reused with different command parameters.");
+        }
+    }
+
+    private static bool SameInstant(
+        DateTimeOffset? left,
+        DateTimeOffset? right) =>
+        left.HasValue == right.HasValue
+        && (!left.HasValue
+            || (left.Value - right!.Value).Duration()
+                <= TimeSpan.FromMilliseconds(1));
+
+    private static AdminUpdatePlayerControlResult ToControlResult(
+        PlayerControlEvent controlEvent,
+        bool duplicate) =>
+        new(
+            controlEvent.CommandId,
+            controlEvent.PlayerId,
+            controlEvent.ActionType,
+            controlEvent.BeforeState,
+            controlEvent.AfterState,
+            controlEvent.RevokedSessionCount,
+            duplicate);
 
     private static bool FixedTimeEquals(byte[] left, byte[] right) =>
         left.Length == right.Length && CryptographicOperations.FixedTimeEquals(left, right);

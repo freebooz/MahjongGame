@@ -20,9 +20,37 @@ public sealed class HttpAdminCommandExecutor(
         AdminCommandOutboxRecord command,
         CancellationToken cancellationToken)
     {
+        var action = command.Payload.Deserialize<AdminActionRecord>(JsonOptions);
+        if (action is null)
+            return Failure(false, "InvalidCommandPayload", "Action payload is invalid.");
+        if (command.ActionType is
+            AdminManagementActionType.MarkRoomAbnormal
+            or AdminManagementActionType.ProhibitNewPlayers
+            or AdminManagementActionType.ForceDissolveRoom)
+        {
+            return await ExecuteRoomControlAsync(
+                command,
+                action,
+                cancellationToken);
+        }
+        if (command.ActionType ==
+            AdminManagementActionType.TerminateAbnormalServer)
+        {
+            return await ExecuteInstanceTerminationAsync(
+                command,
+                action,
+                cancellationToken);
+        }
+        if (IsPlayerControlAction(command.ActionType))
+        {
+            return await ExecutePlayerControlAsync(
+                command,
+                action,
+                cancellationToken);
+        }
         if (command.ActionType is not (
-                AdminManagementActionType.ForceLogoutPlayer
-                or AdminManagementActionType.ResetAbnormalPlayerSession))
+            AdminManagementActionType.ForceLogoutPlayer
+            or AdminManagementActionType.ResetAbnormalPlayerSession))
         {
             return Failure(
                 false,
@@ -30,9 +58,6 @@ public sealed class HttpAdminCommandExecutor(
                 $"No command adapter is configured for {command.ActionType}.");
         }
 
-        var action = command.Payload.Deserialize<AdminActionRecord>(JsonOptions);
-        if (action is null)
-            return Failure(false, "InvalidCommandPayload", "Action payload is invalid.");
         var body = new
         {
             action.Reason,
@@ -82,6 +107,197 @@ public sealed class HttpAdminCommandExecutor(
                 lobby = lobby.Body
             }, JsonOptions),
             null);
+    }
+
+    private async Task<AdminCommandExecutionResult> ExecuteRoomControlAsync(
+        AdminCommandOutboxRecord command,
+        AdminActionRecord action,
+        CancellationToken cancellationToken)
+    {
+        if (!action.ExpectedStateSequence.HasValue)
+        {
+            return Failure(
+                false,
+                "MissingExpectedStateSequence",
+                "Room command has no expected state sequence.");
+        }
+        var result = await SendAsync(
+            admin.Lobby.BaseUrl,
+            $"/internal/admin/rooms/{Uri.EscapeDataString(command.TargetId)}/controls",
+            admin.Management.LobbyCommandToken,
+            command.OutboxId,
+            command.TraceId,
+            new
+            {
+                ActionType = command.ActionType.ToString(),
+                ExpectedStateSequence = action.ExpectedStateSequence.Value,
+                action.Reason,
+                action.TraceId
+            },
+            cancellationToken);
+        return result.Succeeded
+            ? new AdminCommandExecutionResult(true, false, result.Body, null)
+            : Failure(
+                result.Retryable,
+                "LobbyRoomCommandFailed",
+                result.Error,
+                result.Body);
+    }
+
+    private async Task<AdminCommandExecutionResult> ExecutePlayerControlAsync(
+        AdminCommandOutboxRecord command,
+        AdminActionRecord action,
+        CancellationToken cancellationToken)
+    {
+        var expectedVersion = GetInt64(action.BeforeState, "controlVersion");
+        var approval = action.Approval;
+        if (!expectedVersion.HasValue || approval is null)
+        {
+            return Failure(
+                false,
+                "InvalidPlayerControlSnapshot",
+                "Player control command is missing its state version or approval.");
+        }
+        var effectiveAtUtc = approval.ApprovedAtUtc;
+        var expiresAtUtc = command.ActionType switch
+        {
+            AdminManagementActionType.TemporaryFreezePlayer =>
+                effectiveAtUtc.AddHours(
+                    admin.Management.TemporaryFreezeHours),
+            AdminManagementActionType.MutePlayer =>
+                effectiveAtUtc.AddHours(admin.Management.MuteHours),
+            AdminManagementActionType.MarkRiskAccount =>
+                effectiveAtUtc.AddDays(admin.Management.RiskLabelTtlDays),
+            _ => (DateTimeOffset?)null
+        };
+        var body = new
+        {
+            ActionType = command.ActionType.ToString(),
+            ExpectedVersion = expectedVersion.Value,
+            action.Reason,
+            action.TraceId,
+            action.TicketId,
+            action.RequestedBy,
+            approval.ApprovedBy,
+            EffectiveAtUtc = effectiveAtUtc,
+            ExpiresAtUtc = expiresAtUtc,
+            RiskLabel = command.ActionType ==
+                AdminManagementActionType.MarkRiskAccount
+                    ? "manual-review"
+                    : null
+        };
+        var auth = await SendAsync(
+            admin.Auth.BaseUrl,
+            $"/internal/admin/players/{Uri.EscapeDataString(command.TargetId)}/controls",
+            admin.Management.AuthCommandToken,
+            command.OutboxId,
+            command.TraceId,
+            body,
+            cancellationToken);
+        if (!auth.Succeeded)
+            return Failure(
+                auth.Retryable,
+                "AuthPlayerControlFailed",
+                auth.Error,
+                auth.Body);
+
+        if (command.ActionType is not (
+            AdminManagementActionType.TemporaryFreezePlayer
+            or AdminManagementActionType.PermanentBanPlayer))
+        {
+            return new AdminCommandExecutionResult(
+                true,
+                false,
+                auth.Body,
+                null);
+        }
+        var lobby = await SendAsync(
+            admin.Lobby.BaseUrl,
+            $"/internal/admin/players/{Uri.EscapeDataString(command.TargetId)}/disconnect",
+            admin.Management.LobbyCommandToken,
+            command.OutboxId,
+            command.TraceId,
+            new
+            {
+                action.Reason,
+                action.TraceId,
+                EffectiveAtUtc = effectiveAtUtc
+            },
+            cancellationToken);
+        if (!lobby.Succeeded)
+        {
+            return new AdminCommandExecutionResult(
+                false,
+                lobby.Retryable,
+                JsonSerializer.SerializeToElement(new
+                {
+                    status = "LobbyDisconnectFailed",
+                    auth = auth.Body,
+                    lobby = lobby.Body
+                }, JsonOptions),
+                lobby.Error);
+        }
+        return new AdminCommandExecutionResult(
+            true,
+            false,
+            JsonSerializer.SerializeToElement(new
+            {
+                status = "PlayerRestrictedAndDisconnected",
+                auth = auth.Body,
+                lobby = lobby.Body
+            }, JsonOptions),
+            null);
+    }
+
+    private async Task<AdminCommandExecutionResult> ExecuteInstanceTerminationAsync(
+        AdminCommandOutboxRecord command,
+        AdminActionRecord action,
+        CancellationToken cancellationToken)
+    {
+        var before = action.BeforeState;
+        var expectedState = GetString(before, "state");
+        var clusterId = GetString(before, "clusterId");
+        var nodeId = GetString(before, "nodeId");
+        if (expectedState is null || clusterId is null || nodeId is null)
+        {
+            return Failure(
+                false,
+                "InvalidInstanceSnapshot",
+                "Instance command snapshot is missing state or location.");
+        }
+        var sources = admin.Allocators.Where(candidate =>
+                candidate.Enabled
+                && candidate.ClusterId == clusterId
+                && candidate.NodeId == nodeId)
+            .ToArray();
+        if (sources.Length != 1)
+        {
+            return Failure(
+                false,
+                "AllocatorSourceNotFound",
+                $"Exactly one allocator source is required for {clusterId}/{nodeId}.");
+        }
+        var source = sources[0];
+        var result = await SendAsync(
+            source.BaseUrl,
+            $"/internal/admin/instances/{Uri.EscapeDataString(command.TargetId)}/terminate",
+            source.ManagementCommandToken,
+            command.OutboxId,
+            command.TraceId,
+            new
+            {
+                ExpectedState = expectedState,
+                action.Reason,
+                action.TraceId
+            },
+            cancellationToken);
+        return result.Succeeded
+            ? new AdminCommandExecutionResult(true, false, result.Body, null)
+            : Failure(
+                result.Retryable,
+                "AllocatorCommandFailed",
+                result.Error,
+                result.Body);
     }
 
     private async Task<CommandCallResult> SendAsync(
@@ -183,6 +399,36 @@ public sealed class HttpAdminCommandExecutor(
                 response = body
             }, JsonOptions),
             error);
+
+    private static string? GetString(JsonElement value, string name)
+    {
+        if (value.ValueKind != JsonValueKind.Object) return null;
+        foreach (var property in value.EnumerateObject())
+            if (property.Name.Equals(name, StringComparison.OrdinalIgnoreCase)
+                && property.Value.ValueKind == JsonValueKind.String)
+                return property.Value.GetString();
+        return null;
+    }
+
+    private static long? GetInt64(JsonElement value, string name)
+    {
+        if (value.ValueKind != JsonValueKind.Object) return null;
+        foreach (var property in value.EnumerateObject())
+            if (property.Name.Equals(name, StringComparison.OrdinalIgnoreCase)
+                && property.Value.TryGetInt64(out var result))
+                return result;
+        return null;
+    }
+
+    private static bool IsPlayerControlAction(
+        AdminManagementActionType actionType) =>
+        actionType is
+            AdminManagementActionType.TemporaryFreezePlayer
+            or AdminManagementActionType.PermanentBanPlayer
+            or AdminManagementActionType.LiftPlayerBan
+            or AdminManagementActionType.MutePlayer
+            or AdminManagementActionType.UnmutePlayer
+            or AdminManagementActionType.MarkRiskAccount;
 
     private sealed record CommandCallResult(
         bool Succeeded,

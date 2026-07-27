@@ -92,6 +92,7 @@ services:
       Allocator__LobbyInternalUrl: http://127.0.0.1:${LOBBY_PORT:-18080}
       Allocator__ServiceToken: ${ALLOCATOR_SERVICE_TOKEN:?ALLOCATOR_SERVICE_TOKEN is required}
       Allocator__MonitoringReadOnlyToken: ${MONITORING_READ_ONLY_TOKEN:?MONITORING_READ_ONLY_TOKEN is required}
+      Allocator__ManagementCommandToken: ${ALLOCATOR_MANAGEMENT_COMMAND_TOKEN:?ALLOCATOR_MANAGEMENT_COMMAND_TOKEN is required}
       Allocator__LobbyCallbackToken: ${LOBBY_INTERNAL_TOKEN:?LOBBY_INTERNAL_TOKEN is required}
       Allocator__JoinTicketSigningKey: ${JOIN_TICKET_SIGNING_KEY:?JOIN_TICKET_SIGNING_KEY is required}
     volumes:
@@ -172,6 +173,9 @@ services:
       Admin__Management__AuthCommandToken: ${AUTH_MANAGEMENT_COMMAND_TOKEN:?AUTH_MANAGEMENT_COMMAND_TOKEN is required}
       Admin__Management__LobbyCommandToken: ${LOBBY_MANAGEMENT_COMMAND_TOKEN:?LOBBY_MANAGEMENT_COMMAND_TOKEN is required}
       Admin__Management__CommandTimeoutSeconds: ${ADMIN_COMMAND_TIMEOUT_SECONDS:-5}
+      Admin__Management__TemporaryFreezeHours: ${ADMIN_TEMPORARY_FREEZE_HOURS:-24}
+      Admin__Management__MuteHours: ${ADMIN_MUTE_HOURS:-24}
+      Admin__Management__RiskLabelTtlDays: ${ADMIN_RISK_LABEL_TTL_DAYS:-30}
       Admin__Management__PersistenceMode: Postgres
       Admin__Management__PostgresConnectionString: Host=postgres;Port=5432;Database=mahjong;Username=mahjong;Password=${POSTGRES_PASSWORD}
       Admin__Principals__0__OperatorId: ${ADMIN_ROOM_OPERATOR_ID:-room-operator}
@@ -193,6 +197,18 @@ services:
       Admin__Principals__3__Roles__0: player.viewer
       Admin__Principals__3__Roles__1: player.approver
       Admin__Principals__3__Roles__2: audit.viewer
+      Admin__Principals__4__OperatorId: ${ADMIN_INFRASTRUCTURE_OPERATOR_ID:-infrastructure-operator}
+      Admin__Principals__4__AccessToken: ${ADMIN_INFRASTRUCTURE_OPERATOR_TOKEN:?ADMIN_INFRASTRUCTURE_OPERATOR_TOKEN is required}
+      Admin__Principals__4__Roles__0: room.viewer
+      Admin__Principals__4__Roles__1: infrastructure.operator
+      Admin__Principals__5__OperatorId: ${ADMIN_SANCTION_OPERATOR_ID:-sanction-operator}
+      Admin__Principals__5__AccessToken: ${ADMIN_SANCTION_OPERATOR_TOKEN:?ADMIN_SANCTION_OPERATOR_TOKEN is required}
+      Admin__Principals__5__Roles__0: player.viewer
+      Admin__Principals__5__Roles__1: sanction.operator
+      Admin__Principals__6__OperatorId: ${ADMIN_RISK_ANALYST_ID:-risk-analyst}
+      Admin__Principals__6__AccessToken: ${ADMIN_RISK_ANALYST_TOKEN:?ADMIN_RISK_ANALYST_TOKEN is required}
+      Admin__Principals__6__Roles__0: player.viewer
+      Admin__Principals__6__Roles__1: risk.analyst
       Admin__Auth__Enabled: "true"
       Admin__Auth__BaseUrl: http://auth:8080
       Admin__Auth__MonitoringToken: ${MONITORING_READ_ONLY_TOKEN:?MONITORING_READ_ONLY_TOKEN is required}
@@ -204,6 +220,7 @@ services:
       Admin__Allocators__0__NodeId: ${MAHJONG_NODE_ID:-game-node}
       Admin__Allocators__0__BaseUrl: http://host.docker.internal:${ALLOCATOR_PORT:-18081}
       Admin__Allocators__0__MonitoringToken: ${MONITORING_READ_ONLY_TOKEN:?MONITORING_READ_ONLY_TOKEN is required}
+      Admin__Allocators__0__ManagementCommandToken: ${ALLOCATOR_MANAGEMENT_COMMAND_TOKEN:?ALLOCATOR_MANAGEMENT_COMMAND_TOKEN is required}
     depends_on:
       auth: {condition: service_healthy}
       lobby: {condition: service_healthy}

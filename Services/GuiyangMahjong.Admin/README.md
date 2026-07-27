@@ -36,6 +36,30 @@ documented in `../../Docs/PLAYER_MONITORING_ADMIN_DESIGN.md`.
   and Lobby adapters. Auth revokes refresh sessions, while Lobby rejects access
   tokens issued before the command and disconnects matching WebSockets across
   replicas.
+- `TemporaryFreezePlayer`, `PermanentBanPlayer`, `LiftPlayerBan`,
+  `MutePlayer`, `UnmutePlayer`, and `MarkRiskAccount` use a versioned,
+  idempotent Auth control ledger. Freeze and ban atomically revoke refresh
+  sessions, block new login/session creation, and trigger cross-replica Lobby
+  disconnection.
+- Player monitoring reports the effective account state, control version,
+  freeze/mute expiry, active risk labels, and append-only control history.
+  Control-history reasons, operator identities, tickets, and TraceIds are
+  redacted unless the viewer is a sanction/risk operator, player approver, or
+  auditor.
+- `MarkRoomAbnormal` and `ProhibitNewPlayers` have idempotent Lobby adapters.
+  They require the approved room state sequence; stale commands fail without
+  mutation. Admission control permits existing members to reconnect but rejects
+  new room members.
+- `ForceDissolveRoom` transitions an approved non-terminal room to `Failed`,
+  clears its live route, blocks new joins, marks it abnormal, publishes the
+  room event, and requests allocator drain. Repeated delivery is idempotent.
+- `TerminateAbnormalServer` routes to the allocator that owns the approved
+  cluster/node snapshot. The allocator re-checks the expected instance state,
+  stops the process or Agones resource, releases the port, and accepts retries
+  after the instance is already `Stopped`.
+- Allocator mutations use a dedicated management credential that is rejected
+  on monitoring and ordinary allocation paths. The web console exposes server
+  termination only to `infrastructure.operator`.
 - Other high-privilege Lobby/Auth/Allocator command adapters are not configured
   yet, so production command execution remains hard-blocked during staged
   rollout.
@@ -56,6 +80,9 @@ Admin__Management__RetryBaseSeconds=5
 Admin__Management__AuthCommandToken=<dedicated 32+ Auth command token>
 Admin__Management__LobbyCommandToken=<different dedicated 32+ Lobby command token>
 Admin__Management__CommandTimeoutSeconds=5
+Admin__Management__TemporaryFreezeHours=24
+Admin__Management__MuteHours=24
+Admin__Management__RiskLabelTtlDays=30
 Admin__Management__PersistenceMode=Postgres
 Admin__Management__PostgresConnectionString=<secret PostgreSQL connection string>
 Admin__Principals__0__OperatorId=<stable enterprise operator id>
@@ -74,9 +101,22 @@ Admin__Principals__3__OperatorId=<different player approver id>
 Admin__Principals__3__AccessToken=<different 32+ player approver token>
 Admin__Principals__3__Roles__0=player.viewer
 Admin__Principals__3__Roles__1=player.approver
+Admin__Principals__4__OperatorId=<infrastructure operator id>
+Admin__Principals__4__AccessToken=<different 32+ infrastructure operator token>
+Admin__Principals__4__Roles__0=room.viewer
+Admin__Principals__4__Roles__1=infrastructure.operator
+Admin__Principals__5__OperatorId=<sanction operator id>
+Admin__Principals__5__AccessToken=<different 32+ sanction operator token>
+Admin__Principals__5__Roles__0=player.viewer
+Admin__Principals__5__Roles__1=sanction.operator
+Admin__Principals__6__OperatorId=<risk analyst id>
+Admin__Principals__6__AccessToken=<different 32+ risk analyst token>
+Admin__Principals__6__Roles__0=player.viewer
+Admin__Principals__6__Roles__1=risk.analyst
 Admin__Auth__MonitoringToken=<read-only token configured on Auth>
 Admin__Lobby__MonitoringToken=<different 32+ random characters>
 Admin__Allocators__0__MonitoringToken=<same read-only monitoring token configured on Allocator>
+Admin__Allocators__0__ManagementCommandToken=<dedicated 32+ token configured on that Allocator>
 ```
 
 The web console is served from `/`; health endpoints are `/health/live` and
@@ -91,11 +131,11 @@ the Allocator service token used by allocation and drain commands. The
 monitoring credentials can only read explicitly scoped internal monitoring
 endpoints; attempts to use them for mutation operations are rejected.
 
-Account state is currently reported as `Active` because the production account
-sanction ledger has not been introduced yet. Payment, assets, rewards, chat
-content, reports, risk labels, bans, and GM actions remain outside this delivery
-stage. Player-session termination is the only live domain-command adapter
-implemented so far.
+Account state and player controls are sourced from the Auth control ledger.
+Payment, assets, rewards, chat content, reports, replay evidence, and support
+ticket systems remain outside this delivery stage. Mute state is authoritative
+and visible to downstream services, but enforcement awaits the introduction of
+the chat service.
 
 The deployment configuration keeps management disabled by default. PostgreSQL
 mode transactionally persists the request transition, separate approval,
@@ -109,12 +149,23 @@ chain. Every domain adapter must use `OutboxId` as its idempotency key and
 re-check the room sequence or player state fingerprint before changing domain
 state.
 
+Room dissolution and instance termination are deliberately separate controls:
+dissolving the authoritative room requests a normal allocator drain, while the
+infrastructure-only termination action provides a separately approved recovery
+path for an abnormal server. Neither action can alter match results.
+
 The player-session adapter sends the same `OutboxId` to Auth and Lobby. Auth
 stores a durable command receipt in PostgreSQL in the same transaction that
 revokes refresh sessions. Lobby stores a monotonic access-token revocation
 cutoff in Redis, removes online presence, and broadcasts a targeted disconnect
 to every Lobby replica. Tokens issued after that cutoff remain valid so the
 player can authenticate again unless a separate account sanction applies.
+
+Player-control commands carry the control version captured before confirmation.
+Auth locks the player identity, re-checks that version, updates the projection,
+appends the domain event, and revokes sessions in one PostgreSQL transaction.
+Re-delivery with the same Outbox ID returns the original result; reusing that ID
+with different parameters is rejected.
 
 Before enabling command execution, replace development tokens with enterprise
 OIDC/MFA identities, replicate the audit chain to WORM storage, and attach

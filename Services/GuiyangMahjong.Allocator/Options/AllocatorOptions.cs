@@ -46,6 +46,7 @@ public sealed class AllocatorOptions
     [Required, Url] public string LobbyInternalUrl { get; init; } = "http://127.0.0.1:18080";
     [MinLength(32)] public string ServiceToken { get; init; } = string.Empty;
     public string MonitoringReadOnlyToken { get; init; } = string.Empty;
+    public string ManagementCommandToken { get; init; } = string.Empty;
     [MinLength(32)] public string LobbyCallbackToken { get; init; } = string.Empty;
     [MinLength(32)] public string JoinTicketSigningKey { get; init; } = string.Empty;
 }

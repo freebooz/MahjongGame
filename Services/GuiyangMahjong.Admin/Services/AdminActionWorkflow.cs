@@ -216,6 +216,10 @@ public sealed partial class AdminActionWorkflow(
                 player.Summary.RoomId,
                 player.Summary.ServerInstanceId,
                 player.Summary.ActiveSessionCount,
+                player.Summary.ControlVersion,
+                player.Summary.FrozenUntilUtc,
+                player.Summary.MutedUntilUtc,
+                player.Summary.RiskLabels,
                 player.Sessions
             });
             var auditState = JsonSerializer.SerializeToElement(new
@@ -270,6 +274,8 @@ public sealed partial class AdminActionWorkflow(
             room.PlayerIds,
             room.PublicRoom,
             room.AutoStart,
+            room.NewPlayersProhibited,
+            room.MarkedAbnormal,
             room.DedicatedServer,
             room.Runtime,
             room.TelemetryStatus

@@ -16,6 +16,77 @@ public sealed record AdminRevokePlayerSessionsResult(
     DateTimeOffset EffectiveAtUtc,
     bool Duplicate);
 
+public enum AdminPlayerControlAction
+{
+    TemporaryFreezePlayer,
+    PermanentBanPlayer,
+    LiftPlayerBan,
+    MutePlayer,
+    UnmutePlayer,
+    MarkRiskAccount
+}
+
+public sealed record AdminUpdatePlayerControlRequest(
+    string ActionType,
+    long ExpectedVersion,
+    string Reason,
+    string TraceId,
+    string TicketId,
+    string RequestedBy,
+    string ApprovedBy,
+    DateTimeOffset EffectiveAtUtc,
+    DateTimeOffset? ExpiresAtUtc,
+    string? RiskLabel);
+
+public sealed record PlayerControlState(
+    long Version,
+    string AccountStatus,
+    DateTimeOffset? FrozenUntilUtc,
+    DateTimeOffset? MutedUntilUtc,
+    string[] RiskLabels,
+    DateTimeOffset? RiskLabelsExpireAtUtc,
+    DateTimeOffset UpdatedAtUtc);
+
+public sealed record PlayerControlEvent(
+    string CommandId,
+    string PlayerId,
+    string ActionType,
+    string Reason,
+    string TraceId,
+    string TicketId,
+    string RequestedBy,
+    string ApprovedBy,
+    DateTimeOffset EffectiveAtUtc,
+    DateTimeOffset? ExpiresAtUtc,
+    string? RiskLabel,
+    int RevokedSessionCount,
+    PlayerControlState BeforeState,
+    PlayerControlState AfterState);
+
+public enum AdminPlayerControlStatus
+{
+    Applied,
+    Duplicate,
+    PlayerNotFound,
+    VersionConflict,
+    InvalidTransition
+}
+
+public sealed record AdminUpdatePlayerControlResult(
+    string CommandId,
+    string PlayerId,
+    string ActionType,
+    PlayerControlState BeforeState,
+    PlayerControlState AfterState,
+    int RevokedSessionCount,
+    bool Duplicate);
+
+public sealed record AdminPlayerControlStoreResult(
+    AdminPlayerControlStatus Status,
+    AdminUpdatePlayerControlResult? Result,
+    PlayerControlState? CurrentState,
+    string? Error);
+
 public sealed record AuthSessionResponse(
     string PlayerId,
     string DisplayName,
@@ -66,13 +137,28 @@ public sealed record PlayerDirectoryItem(
     DateTimeOffset? LastLoginAtUtc,
     string? CurrentDeviceId,
     string? CurrentMaskedIp,
-    int ActiveSessionCount);
+    int ActiveSessionCount,
+    long ControlVersion,
+    DateTimeOffset? FrozenUntilUtc,
+    DateTimeOffset? MutedUntilUtc,
+    string[] RiskLabels);
 
 public sealed record PlayerDirectoryDetail(
     PlayerDirectoryItem Player,
     AuthSessionMonitor[] Sessions,
     AuthLoginEvent[] LoginHistory,
-    string[] KnownDeviceIds);
+    string[] KnownDeviceIds,
+    PlayerControlEvent[] ControlHistory);
 
-public enum RefreshRotationStatus { Rotated, NotFound, Invalid, Expired, Revoked }
+public enum SessionCreationStatus { Created, Frozen, Banned }
+public enum RefreshRotationStatus
+{
+    Rotated,
+    NotFound,
+    Invalid,
+    Expired,
+    Revoked,
+    Frozen,
+    Banned
+}
 public sealed record RefreshRotationResult(RefreshRotationStatus Status, AuthIdentity? Identity);

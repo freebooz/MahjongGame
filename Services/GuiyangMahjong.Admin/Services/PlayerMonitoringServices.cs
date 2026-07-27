@@ -121,6 +121,7 @@ public sealed class PlayerMonitoringService(
             directory.KnownDeviceIds,
             history,
             disconnects,
+            directory.ControlHistory,
             "ReadOnlyMasked");
     }
 
@@ -144,7 +145,11 @@ public sealed class PlayerMonitoringService(
             runtime?.LatencyMilliseconds,
             player.LastLoginAtUtc,
             presence?.LastSeenAtUtc,
-            player.ActiveSessionCount);
+            player.ActiveSessionCount,
+            player.ControlVersion,
+            player.FrozenUntilUtc,
+            player.MutedUntilUtc,
+            player.RiskLabels);
 
     private static RoomMonitorSnapshot? FindCurrentRoom(
         IEnumerable<RoomMonitorSnapshot> rooms, string playerId) =>

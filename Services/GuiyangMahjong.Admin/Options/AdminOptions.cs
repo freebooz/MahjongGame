@@ -36,6 +36,9 @@ public sealed class AdminManagementOptions
     [Range(1, 30)] public int CommandTimeoutSeconds { get; init; } = 5;
     [Range(1, 15)] public int ConfirmationTtlMinutes { get; init; } = 5;
     [Range(5, 1440)] public int ApprovalTtlMinutes { get; init; } = 60;
+    [Range(1, 720)] public int TemporaryFreezeHours { get; init; } = 24;
+    [Range(1, 720)] public int MuteHours { get; init; } = 24;
+    [Range(1, 365)] public int RiskLabelTtlDays { get; init; } = 30;
 }
 
 public sealed class AuthMonitoringOptions
@@ -61,5 +64,6 @@ public sealed class AllocatorMonitoringOptions
     [Required] public string NodeId { get; init; } = "game-node";
     [Required, Url] public string BaseUrl { get; init; } = "http://127.0.0.1:18081";
     public string MonitoringToken { get; init; } = string.Empty;
+    public string ManagementCommandToken { get; init; } = string.Empty;
     [Range(1, 30)] public int TimeoutSeconds { get; init; } = 5;
 }

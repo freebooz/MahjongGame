@@ -118,6 +118,35 @@ public static class AllocatorEndpoints
             GameServerInstanceManager manager,
             CancellationToken cancellationToken) => Results.Ok(await manager.DrainAsync(
                 serverInstanceId, cancellationToken)));
+
+        internalApi.MapPost("/admin/instances/{serverInstanceId}/terminate", async (
+            string serverInstanceId,
+            AdminTerminateInstanceRequest request,
+            HttpContext context,
+            GameServerInstanceManager manager,
+            CancellationToken cancellationToken) =>
+        {
+            var commandId =
+                context.Request.Headers["Idempotency-Key"].ToString().Trim();
+            if (commandId.Length is < 16 or > 128
+                || serverInstanceId.Length is < 1 or > 128
+                || !Enum.TryParse<GameServerInstanceState>(
+                    request.ExpectedState,
+                    out var expectedState)
+                || (request.Reason ?? string.Empty).Trim().Length is < 5 or > 500
+                || (request.TraceId ?? string.Empty).Trim().Length is < 8 or > 64)
+            {
+                return Results.BadRequest();
+            }
+            var result = await manager.TerminateAbnormalAsync(
+                serverInstanceId,
+                expectedState,
+                cancellationToken);
+            return Results.Ok(new AdminTerminateInstanceResult(
+                commandId,
+                result.Instance,
+                result.AlreadyStopped));
+        });
     }
 
     private static string GetParentDirectory(string configuredPath)

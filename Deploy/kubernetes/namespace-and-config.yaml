@@ -27,6 +27,9 @@ data:
   Admin__Management__MaxAttempts: "5"
   Admin__Management__RetryBaseSeconds: "5"
   Admin__Management__CommandTimeoutSeconds: "5"
+  Admin__Management__TemporaryFreezeHours: "24"
+  Admin__Management__MuteHours: "24"
+  Admin__Management__RiskLabelTtlDays: "30"
   Admin__Management__PersistenceMode: Postgres
   Admin__Principals__0__OperatorId: room-operator
   Admin__Principals__0__Roles__0: room.viewer
@@ -43,6 +46,15 @@ data:
   Admin__Principals__3__Roles__0: player.viewer
   Admin__Principals__3__Roles__1: player.approver
   Admin__Principals__3__Roles__2: audit.viewer
+  Admin__Principals__4__OperatorId: infrastructure-operator
+  Admin__Principals__4__Roles__0: room.viewer
+  Admin__Principals__4__Roles__1: infrastructure.operator
+  Admin__Principals__5__OperatorId: sanction-operator
+  Admin__Principals__5__Roles__0: player.viewer
+  Admin__Principals__5__Roles__1: sanction.operator
+  Admin__Principals__6__OperatorId: risk-analyst
+  Admin__Principals__6__Roles__0: player.viewer
+  Admin__Principals__6__Roles__1: risk.analyst
   Admin__Allocators__0__Enabled: "true"
   Admin__Allocators__0__ClusterId: production
   Admin__Allocators__0__NodeId: agones

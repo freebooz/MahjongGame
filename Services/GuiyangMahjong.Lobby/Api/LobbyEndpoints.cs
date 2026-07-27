@@ -148,6 +148,161 @@ public static class LobbyEndpoints
             return Results.Json(response.Body, statusCode: response.StatusCode);
         });
 
+        app.MapPost("/internal/admin/rooms/{roomId}/controls", async (
+            string roomId,
+            AdminUpdateRoomControlRequest request,
+            HttpContext context,
+            ILobbyStore store,
+            IRoomMonitoringStore monitoring,
+            IIdempotencyStore idempotency,
+            LobbyEventHub eventHub,
+            LobbyService lobbyService,
+            IOptions<LobbyOptions> options,
+            TimeProvider timeProvider,
+            ILoggerFactory loggerFactory,
+            CancellationToken cancellationToken) =>
+        {
+            if (!HasInternalCredential(context, options.Value.ManagementCommandToken))
+                return Results.Unauthorized();
+            var key = RequireIdempotencyKey(context);
+            if (roomId.Length is < 1 or > 80
+                || request.ActionType is not (
+                    nameof(AdminManagementRoomAction.MarkRoomAbnormal)
+                    or nameof(AdminManagementRoomAction.ProhibitNewPlayers)
+                    or nameof(AdminManagementRoomAction.ForceDissolveRoom))
+                || request.ExpectedStateSequence < 1
+                || (request.Reason ?? string.Empty).Trim().Length is < 5 or > 500
+                || (request.TraceId ?? string.Empty).Trim().Length is < 8 or > 64)
+            {
+                return Results.BadRequest();
+            }
+            var response = await idempotency.ExecuteAsync(
+                $"admin-room-control:{roomId}:{key}",
+                async () =>
+                {
+                    var room = await store.GetRoomByIdAsync(roomId, cancellationToken);
+                    if (room is null)
+                    {
+                        return JsonResponse(
+                            StatusCodes.Status404NotFound,
+                            new { code = "ROOM_NOT_FOUND", roomId });
+                    }
+                    var forceDissolve = request.ActionType ==
+                        nameof(AdminManagementRoomAction.ForceDissolveRoom);
+                    if (forceDissolve
+                        && room.Lifecycle is
+                            RoomLifecycle.Closed or RoomLifecycle.Failed)
+                    {
+                        return JsonResponse(
+                            StatusCodes.Status200OK,
+                            ToRoomControlResult(
+                                room,
+                                request.ActionType,
+                                true));
+                    }
+                    if (room.StateSequence != request.ExpectedStateSequence)
+                    {
+                        return JsonResponse(
+                            StatusCodes.Status409Conflict,
+                            new
+                            {
+                                code = "ROOM_STATE_CHANGED",
+                                roomId,
+                                expectedStateSequence = request.ExpectedStateSequence,
+                                actualStateSequence = room.StateSequence
+                            });
+                    }
+                    var now = timeProvider.GetUtcNow();
+                    var serverInstanceId =
+                        room.Route?.ServerInstanceId
+                        ?? room.PendingServerInstanceId
+                        ?? room.LastServerInstanceId;
+                    var updated = forceDissolve
+                        ? RoomStateMachine.Transition(
+                            room,
+                            RoomLifecycle.Failed,
+                            timeProvider) with
+                        {
+                            Route = null,
+                            PendingServerInstanceId = null,
+                            LastServerInstanceId = serverInstanceId,
+                            NewPlayersProhibited = true,
+                            MarkedAbnormal = true
+                        }
+                        : room with
+                        {
+                            NewPlayersProhibited =
+                                room.NewPlayersProhibited
+                                || request.ActionType ==
+                                    nameof(AdminManagementRoomAction.ProhibitNewPlayers),
+                            MarkedAbnormal =
+                                room.MarkedAbnormal
+                                || request.ActionType ==
+                                    nameof(AdminManagementRoomAction.MarkRoomAbnormal),
+                            StateSequence = room.StateSequence + 1,
+                            UpdatedAtUtc = now
+                        };
+                    if (!await store.UpdateRoomAsync(updated, cancellationToken))
+                    {
+                        return JsonResponse(
+                            StatusCodes.Status409Conflict,
+                            new { code = "ROOM_STATE_CHANGED", roomId });
+                    }
+                    try
+                    {
+                        await monitoring.AppendEventAsync(
+                            roomId,
+                            new RoomTimelineEvent(
+                                Guid.NewGuid().ToString(),
+                                $"admin.{request.ActionType}",
+                                now,
+                                updated.StateSequence,
+                                request.TraceId!,
+                                new Dictionary<string, object?>
+                                {
+                                    ["reason"] = request.Reason,
+                                    ["newPlayersProhibited"] =
+                                        updated.NewPlayersProhibited,
+                                    ["markedAbnormal"] = updated.MarkedAbnormal
+                                }),
+                            cancellationToken);
+                        await eventHub.PublishAsync(
+                            forceDissolve
+                                ? LobbyEventTypes.RoomClosed
+                                : LobbyEventTypes.RoomUpdated,
+                            ToRoomControlResult(
+                                updated,
+                                request.ActionType,
+                                false),
+                            cancellationToken);
+                    }
+                    catch (Exception exception) when (
+                        exception is not OperationCanceledException)
+                    {
+                        loggerFactory.CreateLogger("AdminRoomControl")
+                            .LogError(
+                                exception,
+                                "Room control event publication failed RoomId={RoomId}",
+                                roomId);
+                    }
+                    if (forceDissolve)
+                    {
+                        await lobbyService.ReleaseClosedRoomServerAsync(
+                            request.TraceId!,
+                            roomId,
+                            cancellationToken);
+                    }
+                    return JsonResponse(
+                        StatusCodes.Status200OK,
+                        ToRoomControlResult(
+                            updated,
+                            request.ActionType,
+                            false));
+                },
+                cancellationToken);
+            return Results.Json(response.Body, statusCode: response.StatusCode);
+        });
+
         app.MapGet("/internal/monitoring/rooms", async (
             HttpContext context,
             ILobbyStore store,
@@ -377,8 +532,40 @@ public static class LobbyEndpoints
         return key;
     }
 
+    private static IdempotentHttpResponse JsonResponse(int statusCode, object body) =>
+        new(
+            statusCode,
+            System.Text.Json.JsonSerializer.SerializeToElement(
+                body,
+                new System.Text.Json.JsonSerializerOptions(
+                    System.Text.Json.JsonSerializerDefaults.Web)));
+
+    private static AdminUpdateRoomControlResult ToRoomControlResult(
+        LobbyRoom room,
+        string actionType,
+        bool alreadyTerminal) =>
+        new(
+            room.RoomId,
+            actionType,
+            room.StateSequence,
+            room.NewPlayersProhibited,
+            room.MarkedAbnormal,
+            room.Lifecycle,
+            room.Route?.ServerInstanceId
+                ?? room.PendingServerInstanceId
+                ?? room.LastServerInstanceId,
+            alreadyTerminal);
+
+    private enum AdminManagementRoomAction
+    {
+        MarkRoomAbnormal,
+        ProhibitNewPlayers,
+        ForceDissolveRoom
+    }
+
     private static bool HasInternalCredential(HttpContext context, string expectedToken)
     {
+        if (expectedToken.Length < 32) return false;
         var authorization = context.Request.Headers.Authorization.ToString();
         if (!authorization.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)) return false;
         var supplied = Encoding.UTF8.GetBytes(authorization[7..].Trim());

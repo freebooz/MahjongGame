@@ -3,6 +3,8 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using GuiyangMahjong.Lobby.Domain;
 using GuiyangMahjong.Lobby.Security;
+using GuiyangMahjong.Lobby.Storage;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace GuiyangMahjong.Lobby.Tests;
 
@@ -73,5 +75,130 @@ public sealed class PlayerManagementCommandTests(LobbyWebApplicationFactory fact
         Assert.Equal(
             HttpStatusCode.OK,
             (await newLoginClient.GetAsync("/v1/lobby/bootstrap")).StatusCode);
+    }
+
+    [Fact]
+    public async Task RoomControlIsIdempotentAndProhibitsNewPlayers()
+    {
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Request-Id", Guid.NewGuid().ToString());
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            LobbyWebApplicationFactory.ManagementToken);
+        var store = factory.Services.GetRequiredService<ILobbyStore>();
+        var now = DateTimeOffset.UtcNow;
+        var room = new LobbyRoom
+        {
+            RoomId = Guid.NewGuid().ToString("N"),
+            RoomCode = Random.Shared.Next(0, 1_000_000).ToString("D6"),
+            OwnerPlayerId = $"owner-{Guid.NewGuid():N}",
+            RoundCount = 4,
+            PublicRoom = true,
+            AutoStart = false,
+            MaximumPlayers = 4,
+            RuleSnapshot = [],
+            Lifecycle = RoomLifecycle.Waiting,
+            PlayerIds = [],
+            MatchId = Guid.NewGuid().ToString("N"),
+            StateSequence = 1,
+            CreatedAtUtc = now,
+            UpdatedAtUtc = now
+        };
+        room = room with { PlayerIds = [room.OwnerPlayerId] };
+        Assert.Equal(
+            CreateRoomStatus.Created,
+            (await store.TryCreateRoomAsync(room, CancellationToken.None)).Status);
+
+        var request = new AdminUpdateRoomControlRequest(
+            "ProhibitNewPlayers",
+            room.StateSequence,
+            "Security investigation admission control",
+            Guid.NewGuid().ToString());
+        var commandId = Guid.NewGuid().ToString();
+        client.DefaultRequestHeaders.Add("Idempotency-Key", commandId);
+        var path = $"/internal/admin/rooms/{room.RoomId}/controls";
+        using var first = await client.PostAsJsonAsync(path, request);
+        var result =
+            await first.Content.ReadFromJsonAsync<AdminUpdateRoomControlResult>();
+        Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+        Assert.NotNull(result);
+        Assert.True(result.NewPlayersProhibited);
+        Assert.Equal(2, result.StateSequence);
+
+        using var duplicate = await client.PostAsJsonAsync(path, request);
+        Assert.Equal(HttpStatusCode.OK, duplicate.StatusCode);
+        Assert.Equal(
+            AddPlayerStatus.AdmissionProhibited,
+            (await store.TryAddPlayerAsync(
+                room.RoomCode,
+                $"joining-{Guid.NewGuid():N}",
+                CancellationToken.None)).Status);
+
+        client.DefaultRequestHeaders.Remove("Idempotency-Key");
+        client.DefaultRequestHeaders.Add("Idempotency-Key", Guid.NewGuid().ToString());
+        using var stale = await client.PostAsJsonAsync(path, request);
+        Assert.Equal(HttpStatusCode.Conflict, stale.StatusCode);
+    }
+
+    [Fact]
+    public async Task ForceDissolveTransitionsRoomAndTreatsRetryAsTerminalSuccess()
+    {
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Request-Id", Guid.NewGuid().ToString());
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            LobbyWebApplicationFactory.ManagementToken);
+        var store = factory.Services.GetRequiredService<ILobbyStore>();
+        var now = DateTimeOffset.UtcNow;
+        var room = new LobbyRoom
+        {
+            RoomId = Guid.NewGuid().ToString("N"),
+            RoomCode = Random.Shared.Next(0, 1_000_000).ToString("D6"),
+            OwnerPlayerId = $"dissolve-owner-{Guid.NewGuid():N}",
+            RoundCount = 4,
+            PublicRoom = false,
+            AutoStart = false,
+            MaximumPlayers = 4,
+            RuleSnapshot = [],
+            Lifecycle = RoomLifecycle.Waiting,
+            PlayerIds = [],
+            MatchId = Guid.NewGuid().ToString("N"),
+            StateSequence = 1,
+            CreatedAtUtc = now,
+            UpdatedAtUtc = now
+        };
+        room = room with { PlayerIds = [room.OwnerPlayerId] };
+        Assert.Equal(
+            CreateRoomStatus.Created,
+            (await store.TryCreateRoomAsync(room, CancellationToken.None)).Status);
+        var request = new AdminUpdateRoomControlRequest(
+            "ForceDissolveRoom",
+            room.StateSequence,
+            "Abnormal room forced dissolution",
+            Guid.NewGuid().ToString());
+        var path = $"/internal/admin/rooms/{room.RoomId}/controls";
+        client.DefaultRequestHeaders.Add("Idempotency-Key", Guid.NewGuid().ToString());
+
+        using var first = await client.PostAsJsonAsync(path, request);
+        var firstResult =
+            await first.Content.ReadFromJsonAsync<AdminUpdateRoomControlResult>();
+        Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+        Assert.NotNull(firstResult);
+        Assert.Equal(RoomLifecycle.Failed, firstResult.Lifecycle);
+        Assert.True(firstResult.NewPlayersProhibited);
+        Assert.True(firstResult.MarkedAbnormal);
+        Assert.False(firstResult.AlreadyTerminal);
+
+        client.DefaultRequestHeaders.Remove("Idempotency-Key");
+        client.DefaultRequestHeaders.Add("Idempotency-Key", Guid.NewGuid().ToString());
+        using var retry = await client.PostAsJsonAsync(path, request);
+        var retryResult =
+            await retry.Content.ReadFromJsonAsync<AdminUpdateRoomControlResult>();
+        Assert.Equal(HttpStatusCode.OK, retry.StatusCode);
+        Assert.NotNull(retryResult);
+        Assert.True(retryResult.AlreadyTerminal);
+        Assert.Null(await store.GetActiveRoomByPlayerAsync(
+            room.OwnerPlayerId,
+            CancellationToken.None));
     }
 }
