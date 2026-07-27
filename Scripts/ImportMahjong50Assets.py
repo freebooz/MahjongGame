@@ -352,16 +352,22 @@ def build_face_material():
         unreal.MaterialSamplerType.SAMPLERTYPE_MASKS,
     )
 
-    # Use the authored height atlas for a 1.2 mm-class recessed parallax
-    # effect, then sample color/normal/ORM with the displaced coordinate.
+    # Keep the visible glyph, masks and PBR values on the authored atlas UV.
+    # Applying view-dependent parallax to these samples tears thin strokes
+    # and can cross into neighbouring atlas cells at oblique camera angles.
+    for sample in (base_color, glyph_mask, engrave_mask, orm):
+        connect(atlas_uv, "", sample, "UVs")
+
+    # Retain only a very small recessed offset for the engraved normal. The
+    # previous 0.042 full-atlas ratio could move hundreds of pixels at a
+    # grazing angle; 0.0015 stays within the cell artwork margin.
     connect(atlas_uv, "", height, "UVs")
     bump = expr(material, unreal.MaterialExpressionBumpOffset, 180, 20)
-    set_prop(bump, "height_ratio", 0.042)
-    set_prop(bump, "reference_plane", 0.78)
+    set_prop(bump, "height_ratio", 0.0015)
+    set_prop(bump, "reference_plane", 0.5)
     connect(atlas_uv, "", bump, "Coordinate")
     connect(height, "R", bump, "Height")
-    for sample in (base_color, glyph_mask, engrave_mask, normal, orm):
-        connect(bump, "", sample, "UVs")
+    connect(bump, "", normal, "UVs")
 
     cavity_color = expr(material, unreal.MaterialExpressionMultiply, 420, -300)
     connect(base_color, "", cavity_color, "A")

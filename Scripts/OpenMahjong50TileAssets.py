@@ -9,9 +9,9 @@ import unreal
 
 ASSET_PATHS = (
     "/Game/Art/Mahjong/Mahjong50/Tiles/"
-    "SM_Mahjong50_Characters_5.SM_Mahjong50_Characters_5",
+    "SM_Mahjong50_Characters_4.SM_Mahjong50_Characters_4",
     "/Game/Art/Mahjong/Mahjong50/Tiles/"
-    "SM_Mahjong50_Red_Dragon.SM_Mahjong50_Red_Dragon",
+    "SM_Mahjong50_Green_Dragon.SM_Mahjong50_Green_Dragon",
 )
 
 _started_at = time.monotonic()
