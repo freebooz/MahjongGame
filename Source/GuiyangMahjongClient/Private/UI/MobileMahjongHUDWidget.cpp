@@ -77,6 +77,13 @@ void UMobileMahjongHUDWidget::NativeConstruct()
         // Keep the legacy widget only for asset compatibility; it must not cover the level.
         Table3DViewport->SetVisibility(ESlateVisibility::Collapsed);
     }
+    if (UWidget* LegacyTableCenter =
+        WidgetTree ? WidgetTree->FindWidget(TEXT("Panel_TableCenter")) : nullptr)
+    {
+        // The physical table mesh owns the centre direction disc. Remove the old HUD copy so it
+        // cannot cover the disc or render a second set of 北/东/南/西 labels.
+        LegacyTableCenter->SetVisibility(ESlateVisibility::Collapsed);
+    }
     if (AGuiyangMahjongPlayerController* PC = Cast<AGuiyangMahjongPlayerController>(GetOwningPlayer()))
     {
         Table3DActor = Cast<AMahjong3DTableActor>(PC->EnsureMahjongRoomPresentation());
@@ -205,6 +212,7 @@ void UMobileMahjongHUDWidget::HandleReturnLobby()
 
 void UMobileMahjongHUDWidget::RefreshRoomState(const FMahjongRoomState& State, const int32 LocalSeat)
 {
+    CachedDealerSeat = State.RoomInfo.DealerSeat;
     Txt_RoomId->SetText(FText::FromString(FString::Printf(
         TEXT("|  房间号  %s"), *State.RoomInfo.RoomId)));
     if (UTextBlock* RoundInfo = Cast<UTextBlock>(WidgetTree->FindWidget(TEXT("Txt_RoundInfo"))))
@@ -352,17 +360,20 @@ void UMobileMahjongHUDWidget::RefreshTableState(const FMahjongPublicTableState& 
     {
         const int32 RelativeSeat = GetRelativeSeatIndex(Seat.SeatIndex, LocalSeat);
         if (RelativeSeat == INDEX_NONE) continue;
-        const FString TurnMark = Seat.SeatIndex == State.CurrentTurnSeat ? TEXT("▶ ") : TEXT("");
+        FString StatusText;
+        if (Seat.SeatIndex == CachedDealerSeat)
+        {
+            StatusText += TEXT("  [庄]");
+        }
+        if (Seat.SeatIndex == State.CurrentTurnSeat)
+        {
+            StatusText += TEXT("  ▶ 当前出牌");
+        }
         const FString ScoreText = FMath::Abs(Seat.Score) >= 10000
             ? FString::Printf(TEXT("%.2f万"), static_cast<double>(Seat.Score) / 10000.0)
             : FString::Printf(TEXT("%d"), Seat.Score);
         SeatWidgets[RelativeSeat]->SetText(FText::FromString(FString::Printf(
-            TEXT("%s%s\n      %s"), *TurnMark, *Seat.PlayerName, *ScoreText)));
-    }
-    if (UTextBlock* TableCenter = Cast<UTextBlock>(WidgetTree->FindWidget(TEXT("Txt_TableCenter"))))
-    {
-        TableCenter->SetText(FText::FromString(FString::Printf(
-            TEXT("北\n西   %02d   东\n南"), State.RemainingTileCount)));
+            TEXT("%s%s\n      %s"), *Seat.PlayerName, *StatusText, *ScoreText)));
     }
     RefreshOpponentHands(LocalSeat);
     RefreshDiscards(LocalSeat);
@@ -448,6 +459,10 @@ void UMobileMahjongHUDWidget::RebuildPrivateHand()
 {
     Panel_SelfHandTiles->ClearChildren();
     SelectedHandTile = nullptr;
+    if (Table3DActor)
+    {
+        Table3DActor->SetSelectedTile(INDEX_NONE);
+    }
     if (!bHasPrivateState) return;
     UClass* TileWidgetClass = LoadClass<UMobileHandTileWidget>(nullptr, TEXT("/Game/UI/Components/WBP_HandTile.WBP_HandTile_C"));
     if (!TileWidgetClass)

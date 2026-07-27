@@ -811,12 +811,8 @@ int32 UGenerateMahjongUICommandlet::Main(const FString& Params)
         ReadyStatus->SetJustification(ETextJustify::Center);
         Place(C, ReadyStatus, {650,850}, {620,44});
 
-        UBorder* TableCenter = Border(HUD, TEXT("Panel_TableCenter"), FLinearColor(0.025f, 0.13f, 0.11f, 0.96f));
-        TableCenter->SetPadding(FMargin(12.0f));
-        UTextBlock* TableCenterText = Text(HUD, TEXT("Txt_TableCenter"), TEXT("第 2 局\n等待碰杠胡"), 22);
-        TableCenterText->SetJustification(ETextJustify::Center);
-        TableCenter->AddChild(TableCenterText);
-        Place(C, TableCenter, {830,430}, {260,150});
+        // The 3D table mesh contains the authoritative centre direction disc. Do not generate a
+        // duplicate UMG panel over it.
 
         Place(C, Horizontal(HUD, TEXT("Panel_SelfHandTiles")), {210,890}, {1500,150});
 

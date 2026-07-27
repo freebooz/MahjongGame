@@ -31,6 +31,9 @@ public:
     void SetSelectedTile(int32 UniqueId);
     /** 将服务端绝对牌墙方位转换为当前客户端以自己为南方的相对方位。 */
     static int32 GetRelativeWallSide(int32 AbsoluteWallSide, int32 LocalSeat);
+    /** 判断物理牌墙槽位是否仍存在；抓牌从开门处沿顺时针连续推进。 */
+    static bool IsWallPhysicalSlotRemaining(int32 PhysicalIndex, int32 RemainingTileCount,
+        int32 WallBreakSide, int32 WallBreakStackFromRight);
     /** Applies the Mahjong50 face-axis correction for upright and flat presentation. */
     static FRotator ResolveTileMeshRotation(const FRotator& Rotation, bool bFaceUp, bool bUpright);
 
@@ -48,17 +51,22 @@ private:
     UPROPERTY(Transient) TArray<TObjectPtr<UStaticMesh>> TileMeshes;
     UPROPERTY(Transient) TObjectPtr<UMaterialInterface> BasicMaterial;
     /** 可在房间展示蓝图的 Child Actor 模板中人工调整的桌面布局距离。 */
-    UPROPERTY(EditAnywhere, Category="Mahjong|Layout", meta=(ClampMin="45.0", ClampMax="100.0"))
-    float WallDistanceFromCenter = 62.0f;
-    UPROPERTY(EditAnywhere, Category="Mahjong|Layout", meta=(ClampMin="80.0", ClampMax="140.0"))
-    float HandDistanceFromCenter = 110.0f;
+    UPROPERTY(EditAnywhere, Category="Mahjong|Layout", meta=(ClampMin="20.0", ClampMax="100.0"))
+    // Radial distance from the controller-disc centre to each wall row.
+    float WallDistanceFromCenter = 45.0f;
+    UPROPERTY(EditAnywhere, Category="Mahjong|Layout", meta=(ClampMin="20.0", ClampMax="140.0"))
+    // Radial distance from the controller-disc centre to each concealed hand.
+    float HandDistanceFromCenter = 50.0f;
     /** Local hand is raised above the near rail and kept parallel to the bottom of the screen. */
-    UPROPERTY(EditAnywhere, Category="Mahjong|Layout", meta=(ClampMin="110.0", ClampMax="148.0"))
-    float LocalHandDistanceFromCenter = 137.0f;
+    UPROPERTY(EditAnywhere, Category="Mahjong|Layout", meta=(ClampMin="20.0", ClampMax="160.0"))
+    float LocalHandDistanceFromCenter = 60.0f;
     UPROPERTY(EditAnywhere, Category="Mahjong|Layout", meta=(ClampMin="0.0", ClampMax="20.0"))
     float LocalHandElevation = 7.5f;
     UPROPERTY(EditAnywhere, Category="Mahjong|Layout", meta=(ClampMin="1.0", ClampMax="1.6"))
     float LocalHandScale = 1.35f;
+    /** Tilt the south face upward toward the elevated 30-degree room camera. */
+    UPROPERTY(EditAnywhere, Category="Mahjong|Layout", meta=(ClampMin="-60.0", ClampMax="0.0"))
+    float LocalHandCameraTiltDegrees = -30.0f;
     UPROPERTY(EditAnywhere, Category="Mahjong|Layout", meta=(ClampMin="65.0", ClampMax="105.0"))
     float MeldDistanceFromCenter = 82.0f;
     UPROPERTY(EditAnywhere, Category="Mahjong|Layout", meta=(ClampMin="18.0", ClampMax="45.0"))

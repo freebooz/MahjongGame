@@ -73,6 +73,7 @@ protected:
     /** 最近一次公共/私有快照；UI 重建只读取缓存，不修改权威状态。 */
     UPROPERTY() FMahjongPublicTableState CachedPublicState;
     UPROPERTY() FMahjongPrivatePlayerState CachedPrivateState;
+    int32 CachedDealerSeat = 0;
     bool bHasPrivateState = false;
     bool bVisualReviewMode = false;
     /** 网络事件入口：刷新公共/私有状态、动作、结算与错误。 */

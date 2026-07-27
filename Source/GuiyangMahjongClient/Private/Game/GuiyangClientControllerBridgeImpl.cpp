@@ -46,10 +46,20 @@ namespace
             Settings.bOverride_AutoExposureApplyPhysicalCameraExposure = true;
             Settings.AutoExposureApplyPhysicalCameraExposure = false;
         }
+        if (!Settings.bOverride_AutoExposureMinBrightness)
+        {
+            Settings.bOverride_AutoExposureMinBrightness = true;
+            Settings.AutoExposureMinBrightness = 1.0f;
+        }
+        if (!Settings.bOverride_AutoExposureMaxBrightness)
+        {
+            Settings.bOverride_AutoExposureMaxBrightness = true;
+            Settings.AutoExposureMaxBrightness = 1.0f;
+        }
         if (!Settings.bOverride_AutoExposureBias)
         {
             Settings.bOverride_AutoExposureBias = true;
-            Settings.AutoExposureBias = -1.0f;
+            Settings.AutoExposureBias = -0.8f;
         }
         if (!Settings.bOverride_BloomIntensity)
         {
@@ -334,22 +344,41 @@ void UGuiyangClientControllerBridgeImpl::ApplyRoomPresentationViewTarget()
         ? RoomPresentationActor->FindComponentByClass<UCineCameraComponent>() : nullptr;
     if (RuntimeCamera && EditorCamera)
     {
-        // Camera composition remains artist-authored in BP_MahjongRoomPresentation. Copy the
-        // editor camera into a dedicated runtime ViewTarget so Blueprint component registration
-        // cannot move the active camera after the first rendered frame.
+        // Keep the artist-authored relative camera transform, but deliberately ignore inherited
+        // component scale. Several old Blueprint revisions saved a 10x root scale, producing a
+        // camera at Y=-2020/Z=1200 and making the 300 cm tabletop disappear from view.
+        const FVector TableCenter = RoomTableActor
+            ? RoomTableActor->GetActorLocation() + FVector(0.0f, 0.0f, 3.5f)
+            : FVector(0.0f, 0.0f, 3.5f);
+        FVector CameraOffset = EditorCamera->GetRelativeLocation();
+        FRotator CameraRotation = EditorCamera->GetRelativeRotation();
+        const bool bEditorTransformSane =
+            CameraOffset.Size2D() >= 120.0f && CameraOffset.Size2D() <= 400.0f
+            && CameraOffset.Z >= 70.0f && CameraOffset.Z <= 260.0f
+            && CameraRotation.Pitch <= -15.0f && CameraRotation.Pitch >= -55.0f;
+        if (!bEditorTransformSane)
+        {
+            CameraOffset = FVector(0.0f, -164.6795f, 110.0f);
+            CameraRotation = FRotator(-30.0f, 90.0f, 0.0f);
+            UE_LOG(LogMahjongUI, Warning,
+                TEXT("Rejected stale room camera relative transform; using reference composition"));
+        }
         RoomCameraActor->SetActorLocationAndRotation(
-            EditorCamera->GetComponentLocation(), EditorCamera->GetComponentRotation());
+            TableCenter + CameraOffset, CameraRotation);
         RuntimeCamera->SetFilmback(EditorCamera->Filmback);
         RuntimeCamera->SetLensSettings(EditorCamera->LensSettings);
         RuntimeCamera->SetFocusSettings(EditorCamera->FocusSettings);
-        RuntimeCamera->SetCurrentFocalLength(EditorCamera->CurrentFocalLength);
+        const float FocalLength = FMath::IsWithinInclusive(
+            EditorCamera->CurrentFocalLength, 24.0f, 45.0f)
+            ? EditorCamera->CurrentFocalLength : 30.0f;
+        RuntimeCamera->SetCurrentFocalLength(FocalLength);
         RuntimeCamera->SetCurrentAperture(EditorCamera->CurrentAperture);
         RuntimeCamera->SetConstraintAspectRatio(EditorCamera->bConstrainAspectRatio);
         RuntimeCamera->PostProcessSettings = EditorCamera->PostProcessSettings;
         ApplyMissingRoomPostProcessDefaults(RuntimeCamera->PostProcessSettings);
         RuntimeCamera->PostProcessBlendWeight = EditorCamera->PostProcessBlendWeight;
         UE_LOG(LogMahjongUI, Display,
-            TEXT("Applied editor-authored room camera: location=%s rotation=%s focal=%.1fmm"),
+            TEXT("Applied scale-independent room camera: location=%s rotation=%s focal=%.1fmm"),
             *RoomCameraActor->GetActorLocation().ToCompactString(),
             *RoomCameraActor->GetActorRotation().ToCompactString(),
             RuntimeCamera->CurrentFocalLength);
@@ -362,7 +391,7 @@ void UGuiyangClientControllerBridgeImpl::ApplyRoomPresentationViewTarget()
             : FVector(0.0f, 0.0f, 3.5f);
         // The requested 60-degree tabletop-normal angle is a -30 degree UE pitch.
         // This keeps the near hand visible while retaining the reference image's table depth.
-        const FVector CameraLocation = TableCenter + FVector(0.0f, -202.0f, 116.5f);
+        const FVector CameraLocation = TableCenter + FVector(0.0f, -164.6795f, 110.0f);
         const FRotator CameraRotation(-30.0f, 90.0f, 0.0f);
         RoomCameraActor->SetActorLocationAndRotation(CameraLocation, CameraRotation);
         RuntimeCamera->SetCurrentFocalLength(30.0f);

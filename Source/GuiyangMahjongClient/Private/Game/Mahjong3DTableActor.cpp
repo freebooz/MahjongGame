@@ -5,6 +5,7 @@
 #include "Engine/StaticMesh.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
+#include "UI/MahjongTileVisualLibrary.h"
 
 namespace
 {
@@ -13,26 +14,57 @@ namespace
     constexpr float TileWidth = 4.4f;
     constexpr float TileHeight = 6.2f;
     constexpr float TileDepth = 3.0f;
-    // The mesh has rounded/beveled side edges, so exact bounding-box contact still looks gapped.
-    // A small overlap produces the tightly packed physical-table appearance requested.
-    constexpr float TileTightPitch = TileWidth - 0.2f;
-    constexpr float TileTightLongPitch = TileHeight - 0.2f;
+    // Adjacent wall, hand, discard, and meld tiles touch directly.
+    constexpr float TileSpacing = 0.0f;
+    constexpr float TilePitch = TileWidth + TileSpacing;
+    constexpr float TileLongPitch = TileHeight + TileSpacing;
     constexpr float Mahjong50ModelWidth = 3.6f;
+    constexpr int32 GuiyangSuitedTileCount = 108;
+    constexpr int32 WallSideCount = 4;
+    // Complete two-tile stacks: South/North 14 stacks, East/West 13.
+    constexpr int32 WallTilesByAbsoluteSide[WallSideCount] = { 28, 26, 28, 26 };
+    // Physical clockwise segment order is South, West, North, East.
+    constexpr int32 WallTilesByClockwiseSegment[WallSideCount] = { 28, 26, 28, 26 };
+
+    int32 GetClockwiseSegmentStart(const int32 Segment)
+    {
+        int32 Start = 0;
+        for (int32 Index = 0; Index < Segment; ++Index)
+        {
+            Start += WallTilesByClockwiseSegment[Index];
+        }
+        return Start;
+    }
+
+    int32 GetClockwiseSegmentForPhysicalIndex(const int32 PhysicalIndex)
+    {
+        int32 Start = 0;
+        for (int32 Segment = 0; Segment < WallSideCount; ++Segment)
+        {
+            const int32 End = Start + WallTilesByClockwiseSegment[Segment];
+            if (PhysicalIndex < End) return Segment;
+            Start = End;
+        }
+        return INDEX_NONE;
+    }
 
     FVector RotateAroundTable(const FVector& Position, const int32 RelativeSeat)
     {
         switch (RelativeSeat)
         {
-        case 1: return FVector(-Position.Y, Position.X, Position.Z);
+        // The room camera looks north with yaw +90, so screen-right is world -X.
+        // Relative seat 1 is the next player on the right; rotate clockwise in
+        // world space so East/West walls agree with both the HUD and center dial.
+        case 1: return FVector(Position.Y, -Position.X, Position.Z);
         case 2: return FVector(-Position.X, -Position.Y, Position.Z);
-        case 3: return FVector(Position.Y, -Position.X, Position.Z);
+        case 3: return FVector(-Position.Y, Position.X, Position.Z);
         default: return Position;
         }
     }
 
     FRotator RotateAroundTable(const FRotator& Rotation, const int32 RelativeSeat)
     {
-        return FRotator(Rotation.Pitch, Rotation.Yaw + 90.0f * RelativeSeat, Rotation.Roll);
+        return FRotator(Rotation.Pitch, Rotation.Yaw - 90.0f * RelativeSeat, Rotation.Roll);
     }
 }
 
@@ -123,14 +155,19 @@ FRotator AMahjong3DTableActor::ResolveTileMeshRotation(
     FRotator MeshRotation = Rotation;
     if (bUpright)
     {
-        // The rebuilt Mahjong50 face uses Blender/FBX's conventional local -Y
-        // front. Zero yaw already points an upright south-seat tile toward its
-        // owning player, so no legacy 180-degree compensation is required.
+        if (bFaceUp)
+        {
+            // Mahjong50's authored face points toward local +Y. Turning it
+            // outward is sufficient: rotating another 180 degrees around the
+            // face axis also inverted local Z and made the south glyph upside down.
+            MeshRotation.Yaw += 180.0f;
+        }
     }
     else
     {
-        // With a local -Y face, positive roll points the face toward world +Z.
-        MeshRotation.Roll += bFaceUp ? 90.0f : -90.0f;
+        // The imported face is local +Y. Unreal's negative roll points it
+        // upward for discards/melds; positive roll hides it below the back.
+        MeshRotation.Roll += bFaceUp ? -90.0f : 90.0f;
     }
     return MeshRotation;
 }
@@ -185,7 +222,8 @@ void AMahjong3DTableActor::AddTile(const FMahjongTile* Tile, const bool bFaceUp,
     const float ScaleMultiplier)
 {
     FVector TileLocation = Location;
-    if (bSelected) TileLocation.Z += 1.6f;
+    if (bSelected) TileLocation.Z += 4.0f;
+    const float SafeScale = FMath::Max(ScaleMultiplier, 0.1f);
     UStaticMesh* Mesh = ResolveTileMesh(Tile, bFaceUp);
     if (Mesh)
     {
@@ -209,7 +247,7 @@ void AMahjong3DTableActor::AddTile(const FMahjongTile* Tile, const bool bFaceUp,
         Component->SetRelativeLocation(TileLocation);
         Component->SetRelativeRotation(MeshRotation);
         Component->SetRelativeScale3D(FVector(
-            TileWidth / Mahjong50ModelWidth * FMath::Max(ScaleMultiplier, 0.1f)));
+            TileWidth / Mahjong50ModelWidth * SafeScale));
         if (bFaceUp)
         {
             // The face is an 8K atlas; request its resident mip while the room is visible so
@@ -219,9 +257,49 @@ void AMahjong3DTableActor::AddTile(const FMahjongTile* Tile, const bool bFaceUp,
         Component->SetupAttachment(SceneRoot);
         AddInstanceComponent(Component);
         Component->RegisterComponent();
-        // Face-up variants already own a validated Mahjong50 material instance. Replacing it with
-        // a runtime MID can fall back to atlas cell (0,0), making every tile display North.
+        if (bFaceUp && Tile)
+        {
+            int32 AtlasColumn = 0;
+            int32 AtlasRowFromBottom = 0;
+            if (UMahjongTileVisualLibrary::GetFaceAtlasCell(
+                *Tile, AtlasColumn, AtlasRowFromBottom))
+            {
+                // Explicit per-component atlas coordinates prevent the unified
+                // material's default cell (Characters_4) from being reused by
+                // every runtime tile after cooking or render-state recreation.
+                Component->SetScalarParameterValueOnMaterials(
+                    TEXT("Column"), static_cast<float>(AtlasColumn));
+                Component->SetScalarParameterValueOnMaterials(
+                    TEXT("RowFromBottom"), static_cast<float>(AtlasRowFromBottom));
+            }
+        }
         RuntimeComponents.Add(Component);
+
+        if (bSelected && bUpright)
+        {
+            // A thin gold frame sits just in front of the raised south tile. This is intentionally
+            // geometry-based instead of relying on a full-screen custom-depth post process, so the
+            // selection outline remains inexpensive and deterministic on mobile renderers.
+            const float Width = TileWidth * SafeScale;
+            const float Height = TileHeight * SafeScale;
+            const float FaceY = -TileDepth * SafeScale * 0.5f - 0.12f;
+            const float CenterZ = Height * 0.5f;
+            const FLinearColor Gold(0.96f, 0.62f, 0.08f, 1.0f);
+            const auto AddFrameBar = [this, &TileLocation, &Rotation, &Gold](
+                const FVector& LocalOffset, const FVector& Size)
+            {
+                AddBox(TileLocation + Rotation.RotateVector(LocalOffset),
+                    Size, Rotation, Gold);
+            };
+            AddFrameBar(FVector(0.0f, FaceY, 0.0f),
+                FVector(Width + 0.8f, 0.24f, 0.32f));
+            AddFrameBar(FVector(0.0f, FaceY, Height),
+                FVector(Width + 0.8f, 0.24f, 0.32f));
+            AddFrameBar(FVector(-Width * 0.5f - 0.24f, FaceY, CenterZ),
+                FVector(0.32f, 0.24f, Height + 0.4f));
+            AddFrameBar(FVector(Width * 0.5f + 0.24f, FaceY, CenterZ),
+                FVector(0.32f, 0.24f, Height + 0.4f));
+        }
     }
     else
     {
@@ -245,30 +323,84 @@ UStaticMesh* AMahjong3DTableActor::ResolveTileMesh(const FMahjongTile* Tile, con
 
 void AMahjong3DTableActor::AddRemainingWall()
 {
-    const int32 Remaining = FMath::Clamp(CachedPublicState.RemainingTileCount, 0, 108);
-    int32 Added = 0;
-    for (int32 AbsoluteWallSide = 0; AbsoluteWallSide < 4 && Added < Remaining; ++AbsoluteWallSide)
+    const int32 Remaining = FMath::Clamp(
+        CachedPublicState.RemainingTileCount, 0, GuiyangSuitedTileCount);
+    // Mirror MahjongDeckManager's physical clockwise ring. Consumed tiles are
+    // removed consecutively from the server-provided break position; they must
+    // never be averaged back across all four sides after every draw.
+    for (int32 PhysicalIndex = 0;
+         PhysicalIndex < GuiyangSuitedTileCount;
+         ++PhysicalIndex)
     {
-        // Remaining tiles are distributed in authoritative absolute wall order. Rotate only their
-        // presentation so every client sees its own seat at the south edge of the same table.
-        const int32 RelativeWallSide = GetRelativeWallSide(AbsoluteWallSide, CachedLocalSeat);
-        // Keep all four double-layer walls visually balanced. With the 108-tile
-        // Guiyang set this produces 27 tiles per side instead of 28/28/28/24.
-        const int32 SideCount = Remaining / 4 + (AbsoluteWallSide < Remaining % 4 ? 1 : 0);
-        const int32 ColumnCount = FMath::DivideAndRoundUp(SideCount, 2);
-        const float StartX = -0.5f * (ColumnCount - 1) * TileTightPitch;
-        for (int32 Index = 0; Index < SideCount; ++Index)
+        if (!IsWallPhysicalSlotRemaining(
+            PhysicalIndex,
+            Remaining,
+            CachedPublicState.WallBreakSide,
+            CachedPublicState.WallBreakStackFromRight))
         {
-            const int32 Column = Index / 2;
-            const int32 Level = Index % 2;
-            // Wall columns touch edge-to-edge and each upper tile sits on the full tile thickness.
-            const FVector Base(StartX + Column * TileTightPitch, -WallDistanceFromCenter,
-                TileDepth * 0.5f + Level * TileDepth);
-            AddTile(nullptr, false, false, RotateAroundTable(Base, RelativeWallSide),
-                RotateAroundTable(FRotator::ZeroRotator, RelativeWallSide));
-            ++Added;
+            continue;
         }
+
+        const int32 ClockwiseSegment =
+            GetClockwiseSegmentForPhysicalIndex(PhysicalIndex);
+        if (ClockwiseSegment == INDEX_NONE) continue;
+        const int32 IndexWithinSide =
+            PhysicalIndex - GetClockwiseSegmentStart(ClockwiseSegment);
+        // Physical clockwise segment order is South -> West -> North -> East,
+        // while absolute seat indices are South -> East -> North -> West.
+        const int32 AbsoluteWallSide =
+            (WallSideCount - ClockwiseSegment) % WallSideCount;
+        const int32 RelativeWallSide =
+            GetRelativeWallSide(AbsoluteWallSide, CachedLocalSeat);
+        if (RelativeWallSide == INDEX_NONE) continue;
+
+        // Physical indices run from the selected wall's right end toward its
+        // left end. Preserve the empty slots so the break and draw progression
+        // remain visible instead of compressing the surviving tiles together.
+        const int32 StacksOnSide =
+            WallTilesByAbsoluteSide[AbsoluteWallSide] / 2;
+        const float HalfWallSpan =
+            0.5f * (StacksOnSide - 1) * TilePitch;
+        const int32 StackFromRight = IndexWithinSide / 2;
+        // Draw the upper tile first, then the lower tile. A partially consumed
+        // stack may leave its lower tile, but can never leave an upper tile floating.
+        const int32 Level = 1 - IndexWithinSide % 2;
+        const FVector Base(
+            HalfWallSpan - StackFromRight * TilePitch,
+            -WallDistanceFromCenter,
+            TileDepth * 0.5f + Level * TileDepth);
+        AddTile(nullptr, false, false, RotateAroundTable(Base, RelativeWallSide),
+            RotateAroundTable(FRotator::ZeroRotator, RelativeWallSide));
     }
+}
+
+bool AMahjong3DTableActor::IsWallPhysicalSlotRemaining(
+    const int32 PhysicalIndex,
+    const int32 RemainingTileCount,
+    const int32 WallBreakSide,
+    const int32 WallBreakStackFromRight)
+{
+    if (PhysicalIndex < 0 || PhysicalIndex >= GuiyangSuitedTileCount) return false;
+
+    const int32 SafeRemaining = FMath::Clamp(
+        RemainingTileCount, 0, GuiyangSuitedTileCount);
+    const int32 SafeBreakSide =
+        WallBreakSide >= 0 && WallBreakSide < WallSideCount ? WallBreakSide : 0;
+    const int32 StacksOnBreakSide =
+        WallTilesByAbsoluteSide[SafeBreakSide] / 2;
+    const int32 SafeBreakStack = FMath::Clamp(
+        WallBreakStackFromRight, 0, StacksOnBreakSide);
+    const int32 ClockwiseBreakSegment =
+        (WallSideCount - SafeBreakSide) % WallSideCount;
+    const int32 DrawStartIndex =
+        (GetClockwiseSegmentStart(ClockwiseBreakSegment)
+            + SafeBreakStack * 2)
+        % GuiyangSuitedTileCount;
+    const int32 Consumed = GuiyangSuitedTileCount - SafeRemaining;
+    const int32 ClockwiseDistanceFromBreak =
+        (PhysicalIndex - DrawStartIndex + GuiyangSuitedTileCount)
+        % GuiyangSuitedTileCount;
+    return ClockwiseDistanceFromBreak >= Consumed;
 }
 
 void AMahjong3DTableActor::AddHands()
@@ -276,14 +408,15 @@ void AMahjong3DTableActor::AddHands()
     if (bCachedPrivateState)
     {
         const TArray<FMahjongTile>& Tiles = CachedPrivateState.Hand.Tiles;
-        const float LocalHandPitch = TileTightPitch * LocalHandScale;
+        const float LocalHandPitch = TileWidth * LocalHandScale + TileSpacing;
         const float StartX = -0.5f * (Tiles.Num() - 1) * LocalHandPitch;
         for (int32 Index = 0; Index < Tiles.Num(); ++Index)
         {
             AddTile(&Tiles[Index], true, true,
                 FVector(StartX + Index * LocalHandPitch, -LocalHandDistanceFromCenter,
                     TileHeight * 0.5f + LocalHandElevation),
-                FRotator::ZeroRotator, Tiles[Index].UniqueId == SelectedTileId,
+                FRotator(0.0f, 0.0f, LocalHandCameraTiltDegrees),
+                Tiles[Index].UniqueId == SelectedTileId,
                 LocalHandScale);
         }
     }
@@ -293,13 +426,21 @@ void AMahjong3DTableActor::AddHands()
         const int32 RelativeSeat = GetRelativeSeat(Seat.SeatIndex);
         if (RelativeSeat == 0) continue;
         const int32 Count = FMath::Clamp(Seat.HandTileCount, 0, 14);
-        const float StartX = -0.5f * (Count - 1) * TileTightPitch;
+        const float StartX = -0.5f * (Count - 1) * TilePitch;
         for (int32 Index = 0; Index < Count; ++Index)
         {
-            const FVector Base(StartX + Index * TileTightPitch, -HandDistanceFromCenter,
+            const FVector Base(StartX + Index * TilePitch, -HandDistanceFromCenter,
                 TileHeight * 0.5f + 0.9f);
-            AddTile(nullptr, false, true, RotateAroundTable(Base, RelativeSeat),
-                RotateAroundTable(FRotator::ZeroRotator, RelativeSeat));
+            // Use the authored white-body/green-back PBR tile and rotate its
+            // face outward toward the owning player. The local viewer therefore
+            // sees only the concealed green back, without leaking the mesh's
+            // default Characters_4 face or wrapping a white cap in a green cube.
+            FRotator ConcealedRotation =
+                RotateAroundTable(FRotator::ZeroRotator, RelativeSeat);
+            ConcealedRotation.Yaw += 180.0f;
+            AddTile(nullptr, false, true,
+                RotateAroundTable(Base, RelativeSeat),
+                ConcealedRotation);
         }
     }
 }
@@ -321,9 +462,9 @@ void AMahjong3DTableActor::AddDiscards()
         const int32 Column = SeatSequence % SafeDiscardColumns;
         const int32 Row = SeatSequence / SafeDiscardColumns;
         const float DiscardStartX =
-            -0.5f * static_cast<float>(SafeDiscardColumns - 1) * TileTightPitch;
-        const FVector Base(DiscardStartX + Column * TileTightPitch,
-            -DiscardFirstRowDistanceFromCenter - Row * TileTightLongPitch, 1.4f);
+            -0.5f * static_cast<float>(SafeDiscardColumns - 1) * TilePitch;
+        const FVector Base(DiscardStartX + Column * TilePitch,
+            -DiscardFirstRowDistanceFromCenter - Row * TileLongPitch, 1.4f);
         AddTile(&Record.Tile, true, false, RotateAroundTable(Base, RelativeSeat),
             RotateAroundTable(FRotator::ZeroRotator, RelativeSeat),
             Record.Sequence == CachedPublicState.Discards.Last().Sequence);
@@ -353,8 +494,8 @@ void AMahjong3DTableActor::AddMelds()
             const int32 PackedIndex = MeldTileIndexBySeat[RelativeSeat]++;
             // Exposed melds use the same upright orientation and tight pitch as the player's hand.
             // Keep them on a parallel inner row so they remain readable without overlapping the hand.
-            const float StartX = -0.5f * (MeldTileCountBySeat[RelativeSeat] - 1) * TileTightPitch;
-            const FVector Base(StartX + PackedIndex * TileTightPitch, -MeldDistanceFromCenter,
+            const float StartX = -0.5f * (MeldTileCountBySeat[RelativeSeat] - 1) * TilePitch;
+            const FVector Base(StartX + PackedIndex * TilePitch, -MeldDistanceFromCenter,
                 TileHeight * 0.5f + 0.9f);
             AddTile(Tile.IsValid() ? &Tile : nullptr, Tile.IsValid(), true,
                 RotateAroundTable(Base, RelativeSeat), RotateAroundTable(FRotator::ZeroRotator, RelativeSeat));

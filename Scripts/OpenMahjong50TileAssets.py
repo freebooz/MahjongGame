@@ -1,4 +1,4 @@
-"""Open the imported Mahjong50 verification meshes in Unreal Editor."""
+"""Open the current PBR table, tile body/back, and a face-up tile in Unreal Editor."""
 
 from __future__ import annotations
 
@@ -8,10 +8,12 @@ import unreal
 
 
 ASSET_PATHS = (
+    "/Game/Art/Mahjong/Table/Meshes/"
+    "SM_StandardMahjongTable.SM_StandardMahjongTable",
+    "/Game/Art/Mahjong/Mahjong50/Meshes/"
+    "SM_Mahjong50.SM_Mahjong50",
     "/Game/Art/Mahjong/Mahjong50/Tiles/"
     "SM_Mahjong50_Characters_4.SM_Mahjong50_Characters_4",
-    "/Game/Art/Mahjong/Mahjong50/Tiles/"
-    "SM_Mahjong50_Green_Dragon.SM_Mahjong50_Green_Dragon",
 )
 
 _started_at = time.monotonic()
@@ -37,13 +39,13 @@ def _open_assets_after_editor_ready(delta_seconds):
 
     if len(assets) != len(ASSET_PATHS):
         unreal.log_error(
-            "[Mahjong50Open] Could not load both verification tile meshes"
+            "[Mahjong50Open] Could not load all table/tile verification meshes"
         )
     else:
         asset_editor = unreal.get_editor_subsystem(unreal.AssetEditorSubsystem)
         opened = asset_editor.open_editor_for_assets(assets)
         unreal.log(
-            "[Mahjong50Open] MAHJONG50_TILE_EDITORS_OPENED "
+            "[Mahjong50Open] MAHJONG_TABLE_AND_TILE_EDITORS_OPENED "
             f"count={len(assets)} result={opened}"
         )
 

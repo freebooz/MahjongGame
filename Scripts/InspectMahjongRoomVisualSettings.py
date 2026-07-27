@@ -76,6 +76,8 @@ for name, component in components:
         "BP_SkyLight",
         "BP_KeyLight",
         "BP_FillLight",
+        "BP_TopSoftLight",
+        "BP_RimLight",
     ):
         unreal.log_warning(
             "MAHJONG_VISUAL_LIGHT "

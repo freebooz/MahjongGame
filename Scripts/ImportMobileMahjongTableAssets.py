@@ -281,6 +281,15 @@ def build_textured_material(spec: dict):
         if not texture:
             raise RuntimeError(f"Missing imported texture {path}")
         textures[channel] = texture
+    texcoord = expression(
+        material,
+        unreal.MaterialExpressionTextureCoordinate,
+        -850,
+        40,
+    )
+    uv_tiling = float(spec.get("uv_tiling", 1.0))
+    set_prop(texcoord, "u_tiling", uv_tiling)
+    set_prop(texcoord, "v_tiling", uv_tiling)
     base = texture_parameter(
         material,
         textures["BaseColor"],
@@ -306,6 +315,8 @@ def build_textured_material(spec: dict):
         unreal.MaterialSamplerType.SAMPLERTYPE_MASKS,
     )
     library = unreal.MaterialEditingLibrary
+    for sample in (base, normal, orm):
+        library.connect_material_expressions(texcoord, "", sample, "UVs")
     library.connect_material_property(
         base, "", unreal.MaterialProperty.MP_BASE_COLOR
     )

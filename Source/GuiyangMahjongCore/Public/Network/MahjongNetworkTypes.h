@@ -159,6 +159,10 @@ struct GUIYANGMAHJONGCORE_API FMahjongPublicTableState
     UPROPERTY(EditAnywhere, BlueprintReadWrite) EMahjongTablePhase Phase = EMahjongTablePhase::WaitingForPlayers;
     UPROPERTY(EditAnywhere, BlueprintReadWrite) int32 CurrentTurnSeat = INDEX_NONE;
     UPROPERTY(EditAnywhere, BlueprintReadWrite) int32 RemainingTileCount = 0;
+    /** 开门信息：逆时针数到牌墙、从右向左数墩，之后牌墙顺时针消耗。 */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite) int32 WallBreakDiceTotal = 0;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite) int32 WallBreakSide = INDEX_NONE;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite) int32 WallBreakStackFromRight = 0;
     UPROPERTY(EditAnywhere, BlueprintReadWrite) int32 ActionTimeoutSeconds = 0;
     UPROPERTY(EditAnywhere, BlueprintReadWrite) double ActionDeadlineServerTimeSeconds = 0.0;
     /** 公开座位、弃牌、副露、赢家及鸡事件。 */

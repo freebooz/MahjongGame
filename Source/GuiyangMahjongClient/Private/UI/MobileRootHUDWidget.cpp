@@ -87,32 +87,17 @@ namespace
         State.ServerActionSequence = 37;
         State.Phase = EMahjongTablePhase::WaitingForAction;
         State.CurrentTurnSeat = 0;
-        State.RemainingTileCount = 56;
+        // Use the real opening distribution for layout review:
+        // dealer 14 + three players 13 + 55 in the four double-layer walls = 108.
+        // Discards and melds are intentionally absent so the wall/hand position,
+        // direction and spacing can be inspected against the reference image.
+        State.RemainingTileCount = 55;
+        State.WallBreakDiceTotal = 6;
+        State.WallBreakSide = 1;
+        State.WallBreakStackFromRight = 6;
         State.ActionTimeoutSeconds = 12;
         State.Seats = MakeReviewSeats();
         int32 UniqueId = 100;
-        int32 Sequence = 1;
-        for (int32 SeatIndex = 0; SeatIndex < 4; ++SeatIndex)
-        {
-            for (int32 TileIndex = 0; TileIndex < 5; ++TileIndex)
-            {
-                FMahjongDiscardRecord& Record = State.Discards.AddDefaulted_GetRef();
-                Record.SeatIndex = SeatIndex;
-                Record.Tile = MakeReviewTile(static_cast<EMahjongSuit>((SeatIndex + TileIndex) % 3),
-                    TileIndex + 1, UniqueId++);
-                Record.Sequence = Sequence++;
-            }
-        }
-        FMahjongMeld& Meld = State.PublicMelds.AddDefaulted_GetRef();
-        Meld.Type = EMahjongMeldType::Peng;
-        Meld.OwnerSeat = 1;
-        Meld.FromSeat = 2;
-        Meld.Tiles = {
-            MakeReviewTile(EMahjongSuit::Dots, 8, UniqueId++),
-            MakeReviewTile(EMahjongSuit::Dots, 8, UniqueId++),
-            MakeReviewTile(EMahjongSuit::Dots, 8, UniqueId++)
-        };
-        State.LastDiscard = State.Discards.Last().Tile;
         State.FlippedJiTile = MakeReviewTile(EMahjongSuit::Characters, 1, UniqueId++);
         FMahjongJiEvent& JiEvent = State.JiEvents.AddDefaulted_GetRef();
         JiEvent.Type = EMahjongJiEventType::ChongFeng;

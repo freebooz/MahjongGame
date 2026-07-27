@@ -54,6 +54,9 @@ private:
     int32 LastPublishedSettlementSequence = INDEX_NONE;
     int32 LastFinalizedSettlementSequence = INDEX_NONE;
     int32 LastPublishedFinalRoomSequence = INDEX_NONE;
+    /** 服务端洗牌代次和最近种子，确保每局发牌前使用新的牌序。 */
+    uint32 ShuffleGeneration = 0;
+    int32 LastShuffleSeed = 0;
     /** 当前活动房间码及托管模式固定房间码。 */
     FString ActiveRoomCode;
     FString ManagedRoomCode;

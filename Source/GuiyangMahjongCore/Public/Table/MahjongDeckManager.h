@@ -17,14 +17,24 @@ public:
     UFUNCTION(BlueprintCallable, Category="麻将|牌墙") void InitializeStandardDeck();
     /** 使用服务端种子进行 Fisher-Yates 洗牌。测试可传固定种子以复现牌局。 */
     UFUNCTION(BlueprintCallable, Category="麻将|牌墙") void ShuffleDeck(int32 Seed);
-    /** 从牌墙头部摸一张牌；牌墙为空时返回 false，且不修改输出。 */
+    /** 按骰子点数确定开门：逆时针数到牌墙，从右向左数墩，第 N+1 墩开始顺时针抓。 */
+    void ConfigureWallBreak(int32 DealerSeat, int32 DiceTotal);
+    /** 从开门缺口沿牌墙顺时针摸牌；数墩方向始终从该面牌墙右端向左。 */
     UFUNCTION(BlueprintCallable, Category="麻将|牌墙") bool DrawTile(FMahjongTile& OutTile);
 
     bool DealInitialHands(TArray<FMahjongHand>& OutHands, int32 DealerSeat);
-    int32 GetRemainingCount() const { return Deck.Num() - DrawIndex; }
+    int32 GetRemainingCount() const { return Deck.Num() - ClockwiseDrawOffset; }
+    /** 从开门缺口起已经顺时针消耗的牌数。 */
+    int32 GetClockwiseDrawOffset() const { return ClockwiseDrawOffset; }
+    int32 GetWallBreakSide() const { return WallBreakSide; }
+    int32 GetWallBreakStackFromRight() const { return WallBreakStackFromRight; }
     const TArray<FMahjongTile>& GetDeckForServerTest() const { return Deck; }
 
 private:
     UPROPERTY() TArray<FMahjongTile> Deck;
-    UPROPERTY() int32 DrawIndex = 0;
+    UPROPERTY() int32 ClockwiseDrawStartIndex = 0;
+    UPROPERTY() int32 WallBreakSide = 0;
+    UPROPERTY() int32 WallBreakStackFromRight = 0;
+    /** 顺时针抓牌游标，与逆时针玩家行动座次游标相互独立。 */
+    UPROPERTY() int32 ClockwiseDrawOffset = 0;
 };

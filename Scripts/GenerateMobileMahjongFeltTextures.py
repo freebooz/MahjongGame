@@ -285,6 +285,8 @@ def main() -> None:
                 "texture_set": FELT_SET,
                 "resolution_suffix": "4K",
                 "blend": "opaque",
+                # Five repeats per authored UV span make the fibre detail 1/5 size.
+                "uv_tiling": 5.0,
             },
             "M_Table_Felt_Edge_Mobile": {
                 "asset": "M_Table_Felt_Edge_Mobile",

@@ -35,8 +35,8 @@
 #include "CineCameraComponent.h"
 #include "Components/ChildActorComponent.h"
 #include "Components/DirectionalLightComponent.h"
+#include "Components/RectLightComponent.h"
 #include "Components/SkyLightComponent.h"
-#include "Components/SpotLightComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/DirectionalLight.h"
 #include "Engine/Level.h"
@@ -138,6 +138,45 @@ bool FMahjongShuffleDealTest::RunTest(const FString& Parameters)
     return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMahjongDirectionRuleTest, "GuiyangMahjong.Core.Deck.ClockwiseDrawCounterClockwisePlay",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMahjongDirectionRuleTest::RunTest(const FString& Parameters)
+{
+    TestEqual(TEXT("庄家下家必须是右手边的逆时针下一座"),
+        UMahjongTableEngine::GetNextTurnSeatCounterClockwise(2), 3);
+    TestEqual(TEXT("从庄家到下家逆时针距离为一座"),
+        UMahjongTableEngine::GetCounterClockwiseSeatDistance(2, 3), 1);
+    TestEqual(TEXT("从庄家到上家逆时针距离为三座"),
+        UMahjongTableEngine::GetCounterClockwiseSeatDistance(2, 1), 3);
+
+    UMahjongDeckManager* Wall = NewObject<UMahjongDeckManager>();
+    Wall->InitializeDeck(FMahjongRuleConfig());
+    Wall->ConfigureWallBreak(2, 6);
+    TestEqual(TEXT("骰子从庄家逆时针数六应落在下家牌墙"), Wall->GetWallBreakSide(), 3);
+    TestEqual(TEXT("开门必须从牌墙右端向左数六墩"), Wall->GetWallBreakStackFromRight(), 6);
+    FMahjongTile FirstDraw;
+    TestTrue(TEXT("开门后第一张顺时针抓牌成功"), Wall->DrawTile(FirstDraw));
+    TestEqual(TEXT("顺时针牌墙游标每抓一张增加一"), Wall->GetClockwiseDrawOffset(), 1);
+    TestEqual(TEXT("完整双层牌墩中右端向左数后的物理起点必须稳定"),
+        FirstDraw.UniqueId, 40);
+
+    UMahjongDeckManager* DealWall = NewObject<UMahjongDeckManager>();
+    DealWall->InitializeDeck(FMahjongRuleConfig());
+    TArray<FMahjongHand> Hands;
+    TestTrue(TEXT("从庄家开始按逆时针顺序发牌成功"), DealWall->DealInitialHands(Hands, 2));
+    const auto HasUniqueId = [&Hands](const int32 Seat, const int32 UniqueId)
+    {
+        return Hands[Seat].Tiles.ContainsByPredicate(
+            [UniqueId](const FMahjongTile& Tile) { return Tile.UniqueId == UniqueId; });
+    };
+    TestTrue(TEXT("庄家必须先取得第一组四张"), HasUniqueId(2, 0) && HasUniqueId(2, 3));
+    TestTrue(TEXT("庄家下家必须取得第二组四张"), HasUniqueId(3, 4) && HasUniqueId(3, 7));
+    TestTrue(TEXT("对家必须取得第三组四张"), HasUniqueId(0, 8) && HasUniqueId(0, 11));
+    TestTrue(TEXT("上家必须取得第四组四张"), HasUniqueId(1, 12) && HasUniqueId(1, 15));
+    TestEqual(TEXT("完成庄14闲13后牌墙顺时针消耗53张"), DealWall->GetClockwiseDrawOffset(), 53);
+    return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMahjongRuleSnapshotTest, "GuiyangMahjong.Rules.SnapshotDeterminism", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FMahjongRuleSnapshotTest::RunTest(const FString& Parameters)
 {
@@ -205,6 +244,28 @@ bool FMahjongHudSeatMappingTest::RunTest(const FString& Parameters)
         AMahjong3DTableActor::GetRelativeWallSide(0, 3), 1);
     TestEqual(TEXT("非法本地座位不得生成牌墙方位"),
         AMahjong3DTableActor::GetRelativeWallSide(0, INDEX_NONE), INDEX_NONE);
+    constexpr int32 ReviewBreakSide = 1;
+    constexpr int32 ReviewBreakStack = 6;
+    constexpr int32 ReviewRemaining = 55;
+    // Clockwise segments are South 28, West 26, North 28, East 26.
+    constexpr int32 ReviewDrawStart = 28 + 26 + 28 + ReviewBreakStack * 2;
+    int32 VisibleWallSlots = 0;
+    for (int32 PhysicalIndex = 0; PhysicalIndex < 108; ++PhysicalIndex)
+    {
+        VisibleWallSlots += AMahjong3DTableActor::IsWallPhysicalSlotRemaining(
+            PhysicalIndex, ReviewRemaining, ReviewBreakSide, ReviewBreakStack) ? 1 : 0;
+    }
+    TestEqual(TEXT("展示层可见牌墙槽位必须等于服务端剩余牌数"),
+        VisibleWallSlots, ReviewRemaining);
+    TestFalse(TEXT("开门处第一张已抓牌必须形成缺口"),
+        AMahjong3DTableActor::IsWallPhysicalSlotRemaining(
+            ReviewDrawStart % 108, ReviewRemaining, ReviewBreakSide, ReviewBreakStack));
+    TestFalse(TEXT("顺时针第53张抓牌必须连续消耗"),
+        AMahjong3DTableActor::IsWallPhysicalSlotRemaining(
+            (ReviewDrawStart + 52) % 108, ReviewRemaining, ReviewBreakSide, ReviewBreakStack));
+    TestTrue(TEXT("顺时针下一张未抓牌必须继续保留"),
+        AMahjong3DTableActor::IsWallPhysicalSlotRemaining(
+            (ReviewDrawStart + 53) % 108, ReviewRemaining, ReviewBreakSide, ReviewBreakStack));
     TestEqual(TEXT("牌局阶段显示中文"), UMobileMahjongHUDWidget::GetPhaseDisplayText(
         EMahjongTablePhase::WaitingForAction), FString(TEXT("等待碰杠胡")));
     return true;
@@ -226,23 +287,21 @@ bool FMahjongTileVisualMappingTest::RunTest(const FString& Parameters)
     TestTrue(TEXT("一万必须映射到图集格"),
         UMahjongTileVisualLibrary::GetFaceAtlasCell(Tile, Column, Row));
     TestEqual(TEXT("一万图集列"), Column, 0);
-    TestEqual(TEXT("一万图集行"), Row, 3);
+    TestEqual(TEXT("一万图集行"), Row, 0);
     Tile.Suit = EMahjongSuit::Bamboo;
     TestTrue(TEXT("一条必须映射到图集格"),
         UMahjongTileVisualLibrary::GetFaceAtlasCell(Tile, Column, Row));
     TestEqual(TEXT("一条图集列"), Column, 0);
-    TestEqual(TEXT("一条图集行"), Row, 2);
+    TestEqual(TEXT("一条图集行"), Row, 1);
     Tile.Suit = EMahjongSuit::Dots;
     TestTrue(TEXT("一筒必须映射到图集格"),
         UMahjongTileVisualLibrary::GetFaceAtlasCell(Tile, Column, Row));
     TestEqual(TEXT("一筒图集列"), Column, 0);
-    TestEqual(TEXT("一筒图集行"), Row, 1);
+    TestEqual(TEXT("一筒图集行"), Row, 2);
 
     Tile.Type = EMahjongTileType::East;
-    TestTrue(TEXT("东风必须映射到字牌图集格"),
+    TestFalse(TEXT("贵阳捉鸡麻将客户端不得映射字牌图集"),
         UMahjongTileVisualLibrary::GetFaceAtlasCell(Tile, Column, Row));
-    TestEqual(TEXT("东风图集列"), Column, 5);
-    TestEqual(TEXT("东风图集行"), Row, 0);
     return true;
 }
 
@@ -1394,17 +1453,25 @@ bool FMahjongThreeDTableLayoutTest::RunTest(const FString& Parameters)
 
     const FRotator UprightRotation =
         AMahjong3DTableActor::ResolveTileMeshRotation(FRotator::ZeroRotator, true, true);
-    const FVector UprightFaceNormal = UprightRotation.RotateVector(-FVector::YAxisVector);
+    const FVector UprightFaceNormal = UprightRotation.RotateVector(FVector::YAxisVector);
     TestTrue(TEXT("Local upright Mahjong50 face must point toward the south-side camera"),
         UprightFaceNormal.Y < -0.99f);
+    TestTrue(TEXT("Local upright Mahjong50 glyph must remain right-side up"),
+        UprightRotation.RotateVector(FVector::ZAxisVector).Z > 0.99f);
+    const FRotator CameraFacingSouthRotation =
+        AMahjong3DTableActor::ResolveTileMeshRotation(FRotator(0.0f, 0.0f, -30.0f), true, true);
+    const FVector CameraFacingSouthNormal =
+        CameraFacingSouthRotation.RotateVector(FVector::YAxisVector);
+    TestTrue(TEXT("South hand face must tilt upward toward the elevated room camera"),
+        CameraFacingSouthNormal.Y < -0.8f && CameraFacingSouthNormal.Z > 0.49f);
     const FRotator FlatFaceUpRotation =
         AMahjong3DTableActor::ResolveTileMeshRotation(FRotator::ZeroRotator, true, false);
     TestTrue(TEXT("Flat face-up Mahjong50 tile must point upward"),
-        FlatFaceUpRotation.RotateVector(-FVector::YAxisVector).Z > 0.99f);
+        FlatFaceUpRotation.RotateVector(FVector::YAxisVector).Z > 0.99f);
     const FRotator FlatFaceDownRotation =
         AMahjong3DTableActor::ResolveTileMeshRotation(FRotator::ZeroRotator, false, false);
     TestTrue(TEXT("Flat face-down Mahjong50 tile must point downward"),
-        FlatFaceDownRotation.RotateVector(-FVector::YAxisVector).Z < -0.99f);
+        FlatFaceDownRotation.RotateVector(FVector::YAxisVector).Z < -0.99f);
 
     UWorld* SharedRoomWorld = LoadObject<UWorld>(nullptr,
         TEXT("/Game/Maps/MahjongRoomMap.MahjongRoomMap"));
@@ -1465,7 +1532,7 @@ bool FMahjongThreeDTableLayoutTest::RunTest(const FString& Parameters)
                     Directional->CreationMethod, EComponentCreationMethod::SimpleConstructionScript);
                 TestTrue(TEXT("主方向光必须处于手动曝光安全范围"),
                     Directional->Intensity > 0.0f && Directional->Intensity <= 50.0f);
-                TestFalse(TEXT("移动端稳定主光默认不得投射高成本阴影"), Directional->CastShadows);
+                TestTrue(TEXT("夜间主方向光必须保留桌面接触阴影"), Directional->CastShadows);
             }
             const USkyLightComponent* Sky =
                 PresentationInstance->FindComponentByClass<USkyLightComponent>();
@@ -1475,17 +1542,17 @@ bool FMahjongThreeDTableLayoutTest::RunTest(const FString& Parameters)
                 TestEqual(TEXT("天光必须由展示蓝图拥有"),
                     Sky->CreationMethod, EComponentCreationMethod::SimpleConstructionScript);
             }
-            TArray<USpotLightComponent*> SpotLights;
-            PresentationInstance->GetComponents<USpotLightComponent>(SpotLights);
-            TestEqual(TEXT("运行时展示必须包含主灯与补光灯"), SpotLights.Num(), 2);
-            for (const USpotLightComponent* Spot : SpotLights)
+            TArray<URectLightComponent*> RectLights;
+            PresentationInstance->GetComponents<URectLightComponent>(RectLights);
+            TestEqual(TEXT("运行时展示必须包含主光、补光、顶光与轮廓光"), RectLights.Num(), 4);
+            for (const URectLightComponent* Rect : RectLights)
             {
-                TestEqual(TEXT("局部灯必须由展示蓝图拥有"),
-                    Spot->CreationMethod, EComponentCreationMethod::SimpleConstructionScript);
-                TestEqual(TEXT("本地灯必须使用明确的流明单位"), Spot->IntensityUnits, ELightUnits::Lumens);
-                TestTrue(TEXT("局部灯必须处于安全流明范围"),
-                    Spot->Intensity > 0.0f && Spot->Intensity <= 1000.0f);
-                TestFalse(TEXT("移动端本地灯默认不得投射高成本阴影"), Spot->CastShadows);
+                TestEqual(TEXT("矩形灯必须由展示蓝图拥有"),
+                    Rect->CreationMethod, EComponentCreationMethod::SimpleConstructionScript);
+                TestEqual(TEXT("矩形灯必须使用明确的流明单位"),
+                    Rect->IntensityUnits, ELightUnits::Lumens);
+                TestTrue(TEXT("减半后的矩形灯必须处于安全流明范围"),
+                    Rect->Intensity > 0.0f && Rect->Intensity <= 100.0f);
             }
             const UCineCameraComponent* PresentationCamera =
                 PresentationInstance->FindComponentByClass<UCineCameraComponent>();

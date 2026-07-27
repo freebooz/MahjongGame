@@ -26,4 +26,7 @@ public:
     /** 从蓝图组件树中查找牌桌与预定摄像机。 */
     AMahjong3DTableActor* GetTableActor() const;
     AActor* GetRoomCameraActor() const;
+
+private:
+    virtual void BeginPlay() override;
 };

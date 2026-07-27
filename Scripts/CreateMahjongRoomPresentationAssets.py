@@ -12,7 +12,7 @@ MAP_PATH = "/Game/Maps/MahjongRoomVisualPreviewMap"
 NATIVE_CLASS_PATH = "/Script/GuiyangMahjongClient.MahjongRoomPresentationActor"
 TABLE_CLASS_PATH = "/Script/GuiyangMahjongClient.Mahjong3DTableActor"
 SCHEMA_METADATA_TAG = "MahjongPresentationSchemaVersion"
-SCHEMA_VERSION = "5"
+SCHEMA_VERSION = "6"
 TABLE_MESH_PATH = (
     "/Game/Art/Mahjong/Table/Meshes/"
     "SM_StandardMahjongTable.SM_StandardMahjongTable"
@@ -68,11 +68,23 @@ def configure_new_component(component, properties):
         component.set_editor_property(property_name, value)
 
 
+def configure_supported(component, properties):
+    """Apply optional light properties that can vary slightly between UE builds."""
+    for property_name, value in properties.items():
+        try:
+            component.set_editor_property(property_name, value)
+        except Exception as error:
+            unreal.log_warning(
+                f"MAHJONG_LIGHT_OPTION_SKIPPED={component.get_name()}."
+                f"{property_name}:{error}"
+            )
+
+
 def configure_tabletop_post_process(camera):
     settings = camera.get_editor_property("post_process_settings")
     settings.set_editor_property("override_auto_exposure_method", True)
     settings.set_editor_property(
-        "auto_exposure_method", unreal.AutoExposureMethod.AEM_HISTOGRAM
+        "auto_exposure_method", unreal.AutoExposureMethod.AEM_MANUAL
     )
     settings.set_editor_property(
         "override_auto_exposure_apply_physical_camera_exposure", True
@@ -80,8 +92,14 @@ def configure_tabletop_post_process(camera):
     settings.set_editor_property(
         "auto_exposure_apply_physical_camera_exposure", False
     )
+    settings.set_editor_property("override_auto_exposure_min_brightness", True)
+    settings.set_editor_property("auto_exposure_min_brightness", 1.0)
+    settings.set_editor_property("override_auto_exposure_max_brightness", True)
+    settings.set_editor_property("auto_exposure_max_brightness", 1.0)
     settings.set_editor_property("override_auto_exposure_bias", True)
-    settings.set_editor_property("auto_exposure_bias", -1.0)
+    # Nighttime fixed exposure: two stops darker than the attachment's neutral
+    # EV100 7.5 baseline, with no eye-adaptation drift.
+    settings.set_editor_property("auto_exposure_bias", 9.5)
     settings.set_editor_property("override_bloom_intensity", True)
     settings.set_editor_property("bloom_intensity", 0.0)
     settings.set_editor_property("override_lens_flare_intensity", True)
@@ -124,6 +142,35 @@ root_handle, root_component, root_created = add_component(
     subsystem, blueprint, actor_handle, unreal.SceneComponent, "PresentationRoot"
 )
 
+# Schema 6 replaces the old weak Directional/Sky + two Spot Light rig. Delete
+# those component templates rather than hiding or stacking them, then create the
+# authored four-Rect-Light setup from a clean slate.
+needs_lighting_rebuild = (
+    unreal.EditorAssetLibrary.get_metadata_tag(blueprint, SCHEMA_METADATA_TAG)
+    != SCHEMA_VERSION
+)
+if needs_lighting_rebuild:
+    removed_lights = []
+    for light_name in (
+        "BP_DirectionalLight",
+        "BP_SkyLight",
+        "BP_KeyLight",
+        "BP_FillLight",
+        "BP_TopSoftLight",
+        "BP_RimLight",
+    ):
+        light_handle = find_handle(subsystem, blueprint, light_name)
+        if light_handle:
+            deleted = subsystem.delete_subobject(
+                actor_handle, light_handle, blueprint
+            )
+            if deleted != 1:
+                raise RuntimeError(
+                    f"Could not delete old light component {light_name}: {deleted}"
+                )
+            removed_lights.append(light_name)
+    unreal.log(f"MAHJONG_PRESENTATION_OLD_LIGHTS_DELETED={removed_lights}")
+
 table_mesh = unreal.EditorAssetLibrary.load_asset(TABLE_MESH_PATH.split(".")[0])
 if not table_mesh:
     raise RuntimeError(f"Could not load table mesh {TABLE_MESH_PATH}")
@@ -146,9 +193,8 @@ if table_created:
         table_component,
         {
             "relative_location": unreal.Vector(0.0, 0.0, 0.0),
-            "relative_scale3d": unreal.Vector(
-                300.0 / 115.0, 300.0 / 115.0, 300.0 / 115.0
-            ),
+            # The current authored mesh is already 300 x 300 cm.
+            "relative_scale3d": unreal.Vector(1.0, 1.0, 1.0),
             "cast_shadow": True,
             "mobility": unreal.ComponentMobility.MOVABLE,
         },
@@ -191,7 +237,7 @@ if camera_created:
     configure_new_component(
         camera_component,
         {
-            "relative_location": unreal.Vector(0.0, -202.0, 120.0),
+            "relative_location": unreal.Vector(0.0, -164.6795, 110.0),
             "relative_rotation": unreal.Rotator(0.0, -30.0, 90.0),
             "current_focal_length": 30.0,
             "current_aperture": 16.0,
@@ -211,12 +257,26 @@ if directional_created:
     configure_new_component(
         directional,
         {
-            "relative_rotation": unreal.Rotator(-105.0, -31.0, -14.0),
+            "relative_rotation": unreal.Rotator(
+                pitch=-42.0, yaw=-35.0, roll=0.0
+            ),
             "visible": True,
-            "intensity": 10.0,
-            "light_color": unreal.Color(r=255, g=250, b=242, a=255),
-            "cast_shadows": False,
+            "intensity": 0.015,
+            "use_temperature": True,
+            "temperature": 9000.0,
+            "light_color": unreal.Color(r=255, g=255, b=255, a=255),
+            "cast_shadows": True,
             "mobility": unreal.ComponentMobility.MOVABLE,
+        },
+    )
+    configure_supported(
+        directional,
+        {
+            "light_source_angle": 3.0,
+            "atmosphere_sun_light": False,
+            "indirect_lighting_intensity": 0.45,
+            "volumetric_scattering_intensity": 0.2,
+            "forward_shading_priority": 1,
         },
     )
 
@@ -231,10 +291,22 @@ if sky_created:
     configure_new_component(
         sky,
         {
-            "intensity": 0.15,
-            "light_color": unreal.Color(r=199, g=219, b=255, a=255),
-            "cast_shadows": False,
+            "intensity": 0.025,
+            "light_color": unreal.Color(r=165, g=190, b=230, a=255),
+            "cast_shadows": True,
             "mobility": unreal.ComponentMobility.MOVABLE,
+        },
+    )
+    configure_supported(
+        sky,
+        {
+            "real_time_capture": True,
+            "lower_hemisphere_is_black": False,
+            "lower_hemisphere_color": unreal.LinearColor(
+                r=0.012, g=0.010, b=0.009, a=1.0
+            ),
+            "indirect_lighting_intensity": 0.9,
+            "transmission": True,
         },
     )
 
@@ -242,23 +314,39 @@ _, key, key_created = add_component(
     subsystem,
     blueprint,
     root_handle,
-    unreal.SpotLightComponent,
+    unreal.RectLightComponent,
     "BP_KeyLight",
 )
 if key_created:
     configure_new_component(
         key,
         {
-            "relative_location": unreal.Vector(0.0, 0.0, 120.0),
-            "relative_rotation": unreal.Rotator(0.0, -90.0, 0.0),
+            "relative_location": unreal.Vector(-180.0, -160.0, 260.0),
+            "relative_rotation": unreal.Rotator(
+                pitch=-42.0, yaw=42.0, roll=0.0
+            ),
             "intensity_units": unreal.LightUnits.LUMENS,
-            "intensity": 400.0,
-            "attenuation_radius": 300.0,
-            "inner_cone_angle": 40.0,
-            "outer_cone_angle": 65.0,
-            "light_color": unreal.Color(r=255, g=248, b=238, a=255),
-            "cast_shadows": False,
+            "intensity": 90.0,
+            "attenuation_radius": 600.0,
+            "source_width": 160.0,
+            "source_height": 120.0,
+            "use_temperature": True,
+            "temperature": 7200.0,
+            "light_color": unreal.Color(r=255, g=255, b=255, a=255),
+            "cast_shadows": True,
             "mobility": unreal.ComponentMobility.MOVABLE,
+        },
+    )
+    configure_supported(
+        key,
+        {
+            "volumetric_scattering_intensity": 0.2,
+            "specular_scale": 1.0,
+            "indirect_lighting_intensity": 1.0,
+            "contact_shadow_length": 0.05,
+            "shadow_bias": 0.4,
+            "shadow_slope_bias": 0.4,
+            "shadow_sharpen": 0.1,
         },
     )
 
@@ -266,23 +354,111 @@ _, fill, fill_created = add_component(
     subsystem,
     blueprint,
     root_handle,
-    unreal.SpotLightComponent,
+    unreal.RectLightComponent,
     "BP_FillLight",
 )
 if fill_created:
     configure_new_component(
         fill,
         {
-            "relative_location": unreal.Vector(0.0, -145.0, 52.0),
-            "relative_rotation": unreal.Rotator(0.0, -26.6, 90.0),
+            "relative_location": unreal.Vector(180.0, -120.0, 210.0),
+            "relative_rotation": unreal.Rotator(
+                pitch=-35.0, yaw=-50.0, roll=0.0
+            ),
             "intensity_units": unreal.LightUnits.LUMENS,
-            "intensity": 300.0,
-            "attenuation_radius": 180.0,
-            "inner_cone_angle": 50.0,
-            "outer_cone_angle": 70.0,
-            "light_color": unreal.Color(r=230, g=240, b=255, a=255),
+            "intensity": 20.0,
+            "attenuation_radius": 550.0,
+            "source_width": 200.0,
+            "source_height": 150.0,
+            "use_temperature": True,
+            "temperature": 6800.0,
+            "light_color": unreal.Color(r=255, g=255, b=255, a=255),
             "cast_shadows": False,
             "mobility": unreal.ComponentMobility.MOVABLE,
+        },
+    )
+    configure_supported(
+        fill,
+        {
+            "volumetric_scattering_intensity": 0.0,
+            "specular_scale": 0.65,
+            "indirect_lighting_intensity": 0.7,
+        },
+    )
+
+_, top_soft, top_soft_created = add_component(
+    subsystem,
+    blueprint,
+    root_handle,
+    unreal.RectLightComponent,
+    "BP_TopSoftLight",
+)
+if top_soft_created:
+    configure_new_component(
+        top_soft,
+        {
+            "relative_location": unreal.Vector(0.0, 0.0, 300.0),
+            "relative_rotation": unreal.Rotator(
+                pitch=-90.0, yaw=0.0, roll=0.0
+            ),
+            "intensity_units": unreal.LightUnits.LUMENS,
+            "intensity": 35.0,
+            "attenuation_radius": 600.0,
+            "source_width": 230.0,
+            "source_height": 230.0,
+            "use_temperature": True,
+            "temperature": 6800.0,
+            "light_color": unreal.Color(r=255, g=255, b=255, a=255),
+            "cast_shadows": True,
+            "mobility": unreal.ComponentMobility.MOVABLE,
+        },
+    )
+    configure_supported(
+        top_soft,
+        {
+            "volumetric_scattering_intensity": 0.1,
+            "specular_scale": 0.85,
+            "indirect_lighting_intensity": 0.9,
+            "contact_shadow_length": 0.05,
+            "shadow_bias": 0.4,
+            "shadow_slope_bias": 0.4,
+            "shadow_sharpen": 0.1,
+        },
+    )
+
+_, rim, rim_created = add_component(
+    subsystem,
+    blueprint,
+    root_handle,
+    unreal.RectLightComponent,
+    "BP_RimLight",
+)
+if rim_created:
+    configure_new_component(
+        rim,
+        {
+            "relative_location": unreal.Vector(0.0, 190.0, 240.0),
+            "relative_rotation": unreal.Rotator(
+                pitch=-35.0, yaw=180.0, roll=0.0
+            ),
+            "intensity_units": unreal.LightUnits.LUMENS,
+            "intensity": 25.0,
+            "attenuation_radius": 500.0,
+            "source_width": 150.0,
+            "source_height": 100.0,
+            "use_temperature": True,
+            "temperature": 8500.0,
+            "light_color": unreal.Color(r=255, g=255, b=255, a=255),
+            "cast_shadows": False,
+            "mobility": unreal.ComponentMobility.MOVABLE,
+        },
+    )
+    configure_supported(
+        rim,
+        {
+            "volumetric_scattering_intensity": 0.0,
+            "specular_scale": 1.0,
+            "indirect_lighting_intensity": 0.4,
         },
     )
 
@@ -295,7 +471,7 @@ if (
     configure_new_component(
         camera_component,
         {
-            "relative_location": unreal.Vector(0.0, -202.0, 120.0),
+            "relative_location": unreal.Vector(0.0, -164.6795, 110.0),
             "relative_rotation": unreal.Rotator(0.0, -30.0, 90.0),
             "current_focal_length": 30.0,
             "current_aperture": 16.0,
@@ -303,44 +479,6 @@ if (
         },
     )
     configure_tabletop_post_process(camera_component)
-    configure_new_component(
-        directional,
-        {
-            "visible": True,
-            "intensity": 10.0,
-            "light_color": unreal.Color(r=255, g=250, b=242, a=255),
-            "cast_shadows": False,
-        },
-    )
-    configure_new_component(
-        sky,
-        {
-            "intensity": 0.15,
-            "light_color": unreal.Color(r=199, g=219, b=255, a=255),
-            "cast_shadows": False,
-        },
-    )
-    configure_new_component(
-        key,
-        {
-            "intensity": 400.0,
-            "light_color": unreal.Color(r=255, g=248, b=238, a=255),
-            "cast_shadows": False,
-        },
-    )
-    configure_new_component(
-        fill,
-        {
-            "relative_location": unreal.Vector(0.0, -145.0, 52.0),
-            "relative_rotation": unreal.Rotator(0.0, -26.6, 90.0),
-            "intensity": 300.0,
-            "attenuation_radius": 180.0,
-            "inner_cone_angle": 50.0,
-            "outer_cone_angle": 70.0,
-            "light_color": unreal.Color(r=230, g=240, b=255, a=255),
-            "cast_shadows": False,
-        },
-    )
     unreal.EditorAssetLibrary.set_metadata_tag(
         blueprint, SCHEMA_METADATA_TAG, SCHEMA_VERSION
     )
@@ -409,6 +547,7 @@ unreal.log(f"MAHJONG_PRESENTATION_RUNTIME_CLASS={presentation.get_class().get_pa
 unreal.log(
     "MAHJONG_PRESENTATION_BLUEPRINT_COMPONENTS_OK="
     "PresentationRoot,MahjongTableMesh,MahjongTileLayout,MahjongRoomCamera,"
-    "BP_DirectionalLight,BP_SkyLight,BP_KeyLight,BP_FillLight"
+    "BP_DirectionalLight,BP_SkyLight,BP_KeyLight,BP_FillLight,"
+    "BP_TopSoftLight,BP_RimLight"
 )
 unreal.log("MAHJONG_PRESENTATION_ASSETS_OK")

@@ -575,7 +575,24 @@ void AGuiyangMahjongGameMode::TryStartTable(const FMahjongRoomState& StartingRoo
     if (!RoomManager || (TableEngine && TableEngine->GetPublicState().Phase != EMahjongTablePhase::Settlement)) return;
     UMahjongTableEngine* RoundEngine = TableEngine ? TableEngine.Get() : NewObject<UMahjongTableEngine>(this);
     FString Error;
-    const int32 Seed = static_cast<int32>(FPlatformTime::Cycles64());
+    // 只在权威服务端、且紧邻 StartRound 发牌前生成洗牌种子。组合系统
+    // GUID、UTC 时间、进程周期、房间号和单调代次，避免快速连续开局或
+    // 新分配的 Dedicated Server 重复同一牌序。
+    ++ShuffleGeneration;
+    uint32 SeedBits = GetTypeHash(FGuid::NewGuid());
+    SeedBits = HashCombineFast(SeedBits, GetTypeHash(FDateTime::UtcNow().GetTicks()));
+    SeedBits = HashCombineFast(SeedBits, GetTypeHash(FPlatformTime::Cycles64()));
+    SeedBits = HashCombineFast(SeedBits, GetTypeHash(StartingRoomState.RoomInfo.RoomId));
+    SeedBits = HashCombineFast(SeedBits, ShuffleGeneration);
+    int32 Seed = static_cast<int32>(SeedBits);
+    if (Seed == LastShuffleSeed)
+    {
+        Seed = static_cast<int32>(SeedBits + 0x9E3779B9u + ShuffleGeneration);
+    }
+    LastShuffleSeed = Seed;
+    UE_LOG(LogMahjongServer, Display,
+        TEXT("Authoritative pre-deal shuffle: room=%s generation=%u seed=%d tiles=108 honors=0"),
+        *StartingRoomState.RoomInfo.RoomId, ShuffleGeneration, Seed);
     if (!RoundEngine->StartRound(StartingRoomState.RuleSnapshot, StartingRoomState.Seats,
         StartingRoomState.RoomInfo.DealerSeat, Seed, Error))
     {

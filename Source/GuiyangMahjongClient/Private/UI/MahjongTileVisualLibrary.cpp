@@ -38,24 +38,16 @@ bool UMahjongTileVisualLibrary::GetFaceAtlasCell(const FMahjongTile& Tile,
             return false;
         }
         OutColumn = RuleIndex % 9;
-        OutRowFromBottom = 3 - RuleIndex / 9;
+        // The texture rows are Characters, Bamboo, Dots, Honors from top to
+        // bottom. The legacy parameter name is retained, but its UV offset is
+        // measured from the top edge.
+        OutRowFromBottom = RuleIndex / 9;
         return true;
     }
 
-    // 字牌行的实际顺序为北、白、南、中、发、东、西。
-    switch (Tile.Type)
-    {
-    case EMahjongTileType::North: OutColumn = 0; break;
-    case EMahjongTileType::WhiteDragon: OutColumn = 1; break;
-    case EMahjongTileType::South: OutColumn = 2; break;
-    case EMahjongTileType::RedDragon: OutColumn = 3; break;
-    case EMahjongTileType::GreenDragon: OutColumn = 4; break;
-    case EMahjongTileType::East: OutColumn = 5; break;
-    case EMahjongTileType::West: OutColumn = 6; break;
-    default: return false;
-    }
-    OutRowFromBottom = 0;
-    return true;
+    // 贵阳捉鸡麻将仅使用万、条、筒。即使旧缓存或异常数据传入字牌，
+    // 客户端也不得映射并显示图集中的字牌行。
+    return false;
 }
 
 bool UMahjongTileVisualLibrary::ConfigureFaceBrush(const FMahjongTile& Tile,

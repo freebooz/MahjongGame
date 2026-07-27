@@ -8,6 +8,20 @@
 #include "Rules/MahjongScoreCalculator.h"
 #include "Table/MahjongDeckManager.h"
 
+int32 UMahjongTableEngine::GetNextTurnSeatCounterClockwise(const int32 SeatIndex)
+{
+    return SeatIndex >= 0 && SeatIndex < 4 ? (SeatIndex + 1) % 4 : INDEX_NONE;
+}
+
+int32 UMahjongTableEngine::GetCounterClockwiseSeatDistance(const int32 FromSeat, const int32 ToSeat)
+{
+    if (FromSeat < 0 || FromSeat >= 4 || ToSeat < 0 || ToSeat >= 4)
+    {
+        return MAX_int32;
+    }
+    return (ToSeat - FromSeat + 4) % 4;
+}
+
 bool UMahjongTableEngine::StartRound(const FGuiyangRuleSnapshot& RuleSnapshot, const TArray<FMahjongSeatInfo>& Seats,
     const int32 DealerSeat, const int32 ShuffleSeed, FString& OutError)
 {
@@ -32,6 +46,13 @@ bool UMahjongTableEngine::StartRound(const FGuiyangRuleSnapshot& RuleSnapshot, c
     DeckManager = NewObject<UMahjongDeckManager>(this);
     DeckManager->InitializeDeck(LockedRules.Config);
     DeckManager->ShuffleDeck(ShuffleSeed);
+    FRandomStream DiceStream(ShuffleSeed ^ 0x4D41484A);
+    int32 WallBreakDiceTotal = 0;
+    for (int32 Die = 0; Die < 3; ++Die)
+    {
+        WallBreakDiceTotal += DiceStream.RandRange(1, 6);
+    }
+    DeckManager->ConfigureWallBreak(DealerSeat, WallBreakDiceTotal);
     if (!DeckManager->DealInitialHands(Hands, DealerSeat))
     {
         OutError = TEXT("服务端发牌失败");
@@ -46,6 +67,9 @@ bool UMahjongTableEngine::StartRound(const FGuiyangRuleSnapshot& RuleSnapshot, c
     PublicState.Phase = EMahjongTablePhase::PlayerTurn;
     PublicState.CurrentTurnSeat = DealerSeat;
     PublicState.RemainingTileCount = DeckManager->GetRemainingCount();
+    PublicState.WallBreakDiceTotal = WallBreakDiceTotal;
+    PublicState.WallBreakSide = DeckManager->GetWallBreakSide();
+    PublicState.WallBreakStackFromRight = DeckManager->GetWallBreakStackFromRight();
     PublicState.Seats = Seats;
     PublicState.StateSequence = 1;
     LastClientSequences.Init(-1, 4);
@@ -543,7 +567,8 @@ void UMahjongTableEngine::ResolveHuReactions(const TArray<int32>& HuSeats)
         PublicState.WinningSeats = HuSeats;
         PublicState.WinningSeats.Sort([this](const int32 Left, const int32 Right)
         {
-            return (Left - LastDiscardSeat + 4) % 4 < (Right - LastDiscardSeat + 4) % 4;
+            return GetCounterClockwiseSeatDistance(LastDiscardSeat, Left)
+                < GetCounterClockwiseSeatDistance(LastDiscardSeat, Right);
         });
     }
     else
@@ -551,7 +576,11 @@ void UMahjongTableEngine::ResolveHuReactions(const TArray<int32>& HuSeats)
         int32 ClosestSeat = HuSeats[0];
         for (const int32 Seat : HuSeats)
         {
-            if ((Seat - LastDiscardSeat + 4) % 4 < (ClosestSeat - LastDiscardSeat + 4) % 4) ClosestSeat = Seat;
+            if (GetCounterClockwiseSeatDistance(LastDiscardSeat, Seat)
+                < GetCounterClockwiseSeatDistance(LastDiscardSeat, ClosestSeat))
+            {
+                ClosestSeat = Seat;
+            }
         }
         PublicState.WinningSeats.Add(ClosestSeat);
     }
@@ -614,10 +643,10 @@ void UMahjongTableEngine::ApplyClaim(const int32 SeatIndex, const EMahjongAction
 
 void UMahjongTableEngine::AdvanceTurnAndDraw()
 {
-    // 响应窗口结束后按顺时针推进；牌墙耗尽立即进入流局结算。
+    // 顺抓逆打：玩家座次逆时针推进；牌墙由 DeckManager 独立顺时针消耗。
     AvailableActionsBySeat.Reset();
     SubmittedReactions.Reset();
-    PublicState.CurrentTurnSeat = (LastDiscardSeat + 1) % 4;
+    PublicState.CurrentTurnSeat = GetNextTurnSeatCounterClockwise(LastDiscardSeat);
     ++PublicState.TurnId;
     FMahjongTile Drawn;
     if (!DeckManager->DrawTile(Drawn))
@@ -843,7 +872,7 @@ int32 UMahjongTableEngine::FindBestReactionSeat() const
     for (const TPair<int32, FMahjongActionRequest>& Pair : SubmittedReactions)
     {
         const int32 Priority = GetReactionPriority(Pair.Value.Type);
-        const int32 Distance = (Pair.Key - LastDiscardSeat + 4) % 4;
+        const int32 Distance = GetCounterClockwiseSeatDistance(LastDiscardSeat, Pair.Key);
         if (Priority > BestPriority || (Priority == BestPriority && Priority > 0 && Distance < BestDistance))
         {
             BestSeat = Pair.Key;

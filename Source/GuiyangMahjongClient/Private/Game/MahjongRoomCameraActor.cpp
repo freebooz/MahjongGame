@@ -36,8 +36,14 @@ void AMahjongRoomCameraActor::ConfigureStablePostProcess()
     Settings.AutoExposureMethod = AEM_Histogram;
     Settings.bOverride_AutoExposureApplyPhysicalCameraExposure = true;
     Settings.AutoExposureApplyPhysicalCameraExposure = false;
+    Settings.bOverride_AutoExposureMinBrightness = true;
+    Settings.AutoExposureMinBrightness = 1.0f;
+    Settings.bOverride_AutoExposureMaxBrightness = true;
+    Settings.AutoExposureMaxBrightness = 1.0f;
     Settings.bOverride_AutoExposureBias = true;
-    Settings.AutoExposureBias = -1.0f;
+    // Keep the dark-green tabletop subdued while retaining readable tile faces
+    // and warm gold highlights. Equal min/max values disable eye adaptation.
+    Settings.AutoExposureBias = -0.8f;
     Settings.bOverride_BloomIntensity = true;
     Settings.BloomIntensity = 0.0f;
     Settings.bOverride_LensFlareIntensity = true;

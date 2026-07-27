@@ -29,8 +29,11 @@ subsystem = unreal.get_engine_subsystem(unreal.SubobjectDataSubsystem)
 camera = find_component_template(subsystem, blueprint, "MahjongRoomCamera")
 table = find_component_template(subsystem, blueprint, "MahjongTableMesh")
 directional = find_component_template(subsystem, blueprint, "BP_DirectionalLight")
+sky = find_component_template(subsystem, blueprint, "BP_SkyLight")
 key = find_component_template(subsystem, blueprint, "BP_KeyLight")
 fill = find_component_template(subsystem, blueprint, "BP_FillLight")
+top_soft = find_component_template(subsystem, blueprint, "BP_TopSoftLight")
+rim = find_component_template(subsystem, blueprint, "BP_RimLight")
 if not camera or not table:
     raise RuntimeError("MahjongRoomCamera or MahjongTableMesh component was not found")
 
@@ -44,27 +47,73 @@ table.set_editor_property(
 )
 if directional:
     directional.set_editor_property("visible", True)
-    directional.set_editor_property("intensity", 10.0)
-    directional.set_editor_property("cast_shadows", False)
+    directional.set_editor_property("intensity", 0.015)
+    directional.set_editor_property("use_temperature", True)
+    directional.set_editor_property("temperature", 9000.0)
+    directional.set_editor_property("cast_shadows", True)
+if sky:
+    sky.set_editor_property("intensity", 0.025)
+    sky.set_editor_property(
+        "light_color", unreal.Color(r=165, g=190, b=230, a=255)
+    )
+    sky.set_editor_property("cast_shadows", True)
 if key:
-    key.set_editor_property("relative_location", unreal.Vector(0.0, 0.0, 120.0))
-    key.set_editor_property("attenuation_radius", 300.0)
-    key.set_editor_property("cast_shadows", False)
+    key.set_editor_property("relative_location", unreal.Vector(-180.0, -160.0, 260.0))
+    key.set_editor_property("intensity", 90.0)
+    key.set_editor_property("attenuation_radius", 600.0)
+    key.set_editor_property("use_temperature", True)
+    key.set_editor_property("temperature", 7200.0)
+    key.set_editor_property("cast_shadows", True)
 if fill:
     fill.set_editor_property(
-        "relative_location", unreal.Vector(0.0, -145.0, 52.0)
+        "relative_location", unreal.Vector(180.0, -120.0, 210.0)
     )
-    fill.set_editor_property("attenuation_radius", 180.0)
+    fill.set_editor_property("intensity", 20.0)
+    fill.set_editor_property("attenuation_radius", 550.0)
+    fill.set_editor_property("use_temperature", True)
+    fill.set_editor_property("temperature", 6800.0)
     fill.set_editor_property("cast_shadows", False)
+if top_soft:
+    top_soft.set_editor_property("relative_location", unreal.Vector(0.0, 0.0, 300.0))
+    top_soft.set_editor_property("intensity", 35.0)
+    top_soft.set_editor_property("attenuation_radius", 600.0)
+    top_soft.set_editor_property("use_temperature", True)
+    top_soft.set_editor_property("temperature", 6800.0)
+    top_soft.set_editor_property("cast_shadows", True)
+if rim:
+    rim.set_editor_property("relative_location", unreal.Vector(0.0, 190.0, 240.0))
+    rim.set_editor_property("intensity", 25.0)
+    rim.set_editor_property("attenuation_radius", 500.0)
+    rim.set_editor_property("use_temperature", True)
+    rim.set_editor_property("temperature", 8500.0)
+    rim.set_editor_property("cast_shadows", False)
 
 camera.set_editor_property(
-    "relative_location", unreal.Vector(0.0, -202.0, 120.0)
+    "relative_location", unreal.Vector(0.0, -164.6795, 110.0)
 )
 camera.set_editor_property(
     "relative_rotation", unreal.Rotator(0.0, -30.0, 90.0)
 )
 camera.set_editor_property("current_focal_length", 30.0)
 camera.set_editor_property("constrain_aspect_ratio", False)
+post_process = camera.get_editor_property("post_process_settings")
+post_process.set_editor_property("override_auto_exposure_method", True)
+post_process.set_editor_property(
+    "auto_exposure_method", unreal.AutoExposureMethod.AEM_MANUAL
+)
+post_process.set_editor_property(
+    "override_auto_exposure_apply_physical_camera_exposure", True
+)
+post_process.set_editor_property(
+    "auto_exposure_apply_physical_camera_exposure", False
+)
+post_process.set_editor_property("override_auto_exposure_min_brightness", True)
+post_process.set_editor_property("auto_exposure_min_brightness", 1.0)
+post_process.set_editor_property("override_auto_exposure_max_brightness", True)
+post_process.set_editor_property("auto_exposure_max_brightness", 1.0)
+post_process.set_editor_property("override_auto_exposure_bias", True)
+post_process.set_editor_property("auto_exposure_bias", 9.5)
+camera.set_editor_property("post_process_settings", post_process)
 
 unreal.BlueprintEditorLibrary.compile_blueprint(blueprint)
 unreal.EditorAssetLibrary.save_loaded_asset(blueprint, only_if_is_dirty=False)

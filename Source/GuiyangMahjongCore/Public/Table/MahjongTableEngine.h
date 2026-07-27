@@ -30,6 +30,9 @@ public:
     TArray<FMahjongAction> GetAvailableActions(int32 SeatIndex) const;
     const FGuiyangRuleSnapshot& GetLockedRuleSnapshot() const { return LockedRules; }
     bool GetSettlementResult(FMahjongSettlementResult& OutResult) const;
+    /** Seat indices increase from dealer to right-hand player: counter-clockwise around the table. */
+    static int32 GetNextTurnSeatCounterClockwise(int32 SeatIndex);
+    static int32 GetCounterClockwiseSeatDistance(int32 FromSeat, int32 ToSeat);
 #if WITH_DEV_AUTOMATION_TESTS
     bool SetHandForServerTest(int32 SeatIndex, const FMahjongHand& Hand);
 #endif
