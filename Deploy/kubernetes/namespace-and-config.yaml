@@ -27,7 +27,22 @@ data:
   Admin__Management__MaxAttempts: "5"
   Admin__Management__RetryBaseSeconds: "5"
   Admin__Management__CommandTimeoutSeconds: "5"
+  Admin__Management__TemporaryFreezeHours: "24"
+  Admin__Management__MuteHours: "24"
+  Admin__Management__RiskLabelTtlDays: "30"
   Admin__Management__PersistenceMode: Postgres
+  Admin__EnterpriseIdentity__Enabled: "true"
+  Admin__EnterpriseIdentity__Authority: https://identity.example.com/tenant
+  Admin__EnterpriseIdentity__Audience: mahjong-admin
+  Admin__EnterpriseIdentity__RequireHttpsMetadata: "true"
+  Admin__EnterpriseIdentity__RequireMfa: "true"
+  Admin__AuditArchive__Enabled: "true"
+  Admin__AuditArchive__AppendUrl: https://worm-archive.example.com/v1/admin-audit
+  Admin__AuditArchive__PollIntervalMilliseconds: "1000"
+  Admin__AuditArchive__MaxAttempts: "20"
+  Admin__Wallet__Enabled: "true"
+  Admin__Wallet__BaseUrl: http://mahjong-player-data:8080
+  Admin__Wallet__TimeoutSeconds: "5"
   Admin__Principals__0__OperatorId: room-operator
   Admin__Principals__0__Roles__0: room.viewer
   Admin__Principals__0__Roles__1: player.viewer
@@ -43,10 +58,34 @@ data:
   Admin__Principals__3__Roles__0: player.viewer
   Admin__Principals__3__Roles__1: player.approver
   Admin__Principals__3__Roles__2: audit.viewer
+  Admin__Principals__4__OperatorId: infrastructure-operator
+  Admin__Principals__4__Roles__0: room.viewer
+  Admin__Principals__4__Roles__1: infrastructure.operator
+  Admin__Principals__5__OperatorId: sanction-operator
+  Admin__Principals__5__Roles__0: player.viewer
+  Admin__Principals__5__Roles__1: sanction.operator
+  Admin__Principals__6__OperatorId: risk-analyst
+  Admin__Principals__6__Roles__0: player.viewer
+  Admin__Principals__6__Roles__1: risk.analyst
+  Admin__Principals__7__OperatorId: support-operator
+  Admin__Principals__7__Roles__0: player.viewer
+  Admin__Principals__7__Roles__1: support.operator
+  Admin__Principals__8__OperatorId: compensation-operator
+  Admin__Principals__8__Roles__0: room.viewer
+  Admin__Principals__8__Roles__1: compensation.operator
+  Admin__Principals__9__OperatorId: chat-compliance
+  Admin__Principals__9__Roles__0: player.viewer
+  Admin__Principals__9__Roles__1: chat.compliance
   Admin__Allocators__0__Enabled: "true"
   Admin__Allocators__0__ClusterId: production
   Admin__Allocators__0__NodeId: agones
   Admin__Allocators__0__BaseUrl: http://mahjong-allocator:8080
+  PlayerData__PersistenceMode: Postgres
+  PlayerData__AuthBaseUrl: http://mahjong-auth:8080
+  PlayerData__AdminProjectionBaseUrl: http://mahjong-admin:8080
+  PlayerData__ProjectionEnabled: "true"
+  PlayerData__ProjectionPollMilliseconds: "1000"
+  PlayerData__ProjectionMaxAttempts: "10"
   Lobby__AccessRevocationTtlMinutes: "120"
   Allocator__Backend: Agones
   Allocator__LobbyInternalUrl: http://mahjong-lobby:8080

@@ -45,7 +45,24 @@ public sealed partial class AuthService(
             new AuthIdentity(playerId, displayName, "Guest", now, now),
             cancellationToken);
         var refresh = CreateRefreshSession(identity.PlayerId, now);
-        await store.CreateRefreshSessionAsync(refresh.Session, cancellationToken);
+        var creation = await store.CreateRefreshSessionAsync(
+            refresh.Session,
+            now,
+            cancellationToken);
+        if (creation != SessionCreationStatus.Created)
+        {
+            await store.RecordLoginAsync(
+                new AuthLoginEvent(
+                    Guid.NewGuid().ToString(),
+                    identity.PlayerId,
+                    $"device-{installationHash[..20]}",
+                    NormalizeObservation(observation.MaskedIp, 64, "Unknown"),
+                    NormalizeObservation(observation.ClientSummary, 160, "Unknown"),
+                    creation.ToString(),
+                    now),
+                cancellationToken);
+            throw Restricted(creation.ToString());
+        }
         await store.RecordLoginAsync(
             new AuthLoginEvent(
                 Guid.NewGuid().ToString(),
@@ -73,6 +90,8 @@ public sealed partial class AuthService(
             replacement.Session,
             now,
             cancellationToken);
+        if (rotation.Status is RefreshRotationStatus.Frozen or RefreshRotationStatus.Banned)
+            throw Restricted(rotation.Status.ToString());
         if (rotation.Status != RefreshRotationStatus.Rotated || rotation.Identity is null)
             throw InvalidRefresh();
 
@@ -153,6 +172,14 @@ public sealed partial class AuthService(
 
     private static AuthOperationException InvalidRefresh() =>
         new("SESSION_EXPIRED", "刷新凭据无效、已过期或已被使用", 401);
+
+    private static AuthOperationException Restricted(string status) =>
+        new(
+            $"ACCOUNT_{status.ToUpperInvariant()}",
+            status == "Banned"
+                ? "Account is permanently banned."
+                : "Account is temporarily frozen.",
+            StatusCodes.Status403Forbidden);
 
     private static string Base64UrlEncode(ReadOnlySpan<byte> bytes) =>
         Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');

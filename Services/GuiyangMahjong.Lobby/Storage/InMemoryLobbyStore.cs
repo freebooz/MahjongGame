@@ -196,6 +196,12 @@ public sealed class InMemoryLobbyStore : ILobbyStore
             {
                 return Task.FromResult(new AddPlayerResult(AddPlayerStatus.RoomClosed, room));
             }
+            if (room.NewPlayersProhibited)
+            {
+                return Task.FromResult(new AddPlayerResult(
+                    AddPlayerStatus.AdmissionProhibited,
+                    room));
+            }
             if (room.PlayerIds.Length >= room.MaximumPlayers)
             {
                 return Task.FromResult(new AddPlayerResult(AddPlayerStatus.RoomFull, room));

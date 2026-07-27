@@ -27,6 +27,9 @@ public sealed record RoomMonitorSnapshot
     public required long StateSequence { get; init; }
     public required DateTimeOffset CreatedAtUtc { get; init; }
     public required DateTimeOffset UpdatedAtUtc { get; init; }
+    public bool NewPlayersProhibited { get; init; }
+    public bool MaintenanceMode { get; init; }
+    public bool MarkedAbnormal { get; init; }
 }
 
 public sealed record GameServerInstanceSnapshot(
@@ -119,6 +122,9 @@ public sealed record RoomDetail(
     string[] PlayerIds,
     bool PublicRoom,
     bool AutoStart,
+    bool NewPlayersProhibited,
+    bool MaintenanceMode,
+    bool MarkedAbnormal,
     MonitoredInstance? DedicatedServer,
     RoomRuntimeTelemetry? Runtime,
     RoomTimelineEvent[] Timeline,
@@ -134,7 +140,11 @@ public sealed record AuthPlayerDirectoryItem(
     DateTimeOffset? LastLoginAtUtc,
     string? CurrentDeviceId,
     string? CurrentMaskedIp,
-    int ActiveSessionCount);
+    int ActiveSessionCount,
+    long ControlVersion,
+    DateTimeOffset? FrozenUntilUtc,
+    DateTimeOffset? MutedUntilUtc,
+    string[] RiskLabels);
 
 public sealed record AuthSessionMonitor(
     string SessionReference,
@@ -156,7 +166,33 @@ public sealed record AuthPlayerDirectoryDetail(
     AuthPlayerDirectoryItem Player,
     AuthSessionMonitor[] Sessions,
     AuthLoginEvent[] LoginHistory,
-    string[] KnownDeviceIds);
+    string[] KnownDeviceIds,
+    PlayerControlEvent[] ControlHistory);
+
+public sealed record PlayerControlState(
+    long Version,
+    string AccountStatus,
+    DateTimeOffset? FrozenUntilUtc,
+    DateTimeOffset? MutedUntilUtc,
+    string[] RiskLabels,
+    DateTimeOffset? RiskLabelsExpireAtUtc,
+    DateTimeOffset UpdatedAtUtc);
+
+public sealed record PlayerControlEvent(
+    string CommandId,
+    string PlayerId,
+    string ActionType,
+    string Reason,
+    string TraceId,
+    string TicketId,
+    string RequestedBy,
+    string ApprovedBy,
+    DateTimeOffset EffectiveAtUtc,
+    DateTimeOffset? ExpiresAtUtc,
+    string? RiskLabel,
+    int RevokedSessionCount,
+    PlayerControlState BeforeState,
+    PlayerControlState AfterState);
 
 public sealed record PlayerPresenceSnapshot(
     string PlayerId,
@@ -179,7 +215,11 @@ public sealed record PlayerMonitorListItem(
     double? LatencyMilliseconds,
     DateTimeOffset? LastLoginAtUtc,
     DateTimeOffset? LastSeenAtUtc,
-    int ActiveSessionCount);
+    int ActiveSessionCount,
+    long ControlVersion,
+    DateTimeOffset? FrozenUntilUtc,
+    DateTimeOffset? MutedUntilUtc,
+    string[] RiskLabels);
 
 public sealed record PlayerMonitorDetail(
     PlayerMonitorListItem Summary,
@@ -188,4 +228,5 @@ public sealed record PlayerMonitorDetail(
     string[] KnownDeviceIds,
     RoomListItem[] RoomHistory,
     RoomTimelineEvent[] DisconnectHistory,
+    PlayerControlEvent[] ControlHistory,
     string DataScope);

@@ -18,6 +18,7 @@ public enum AddPlayerStatus
     RoomNotFound,
     RoomClosed,
     RoomFull,
+    AdmissionProhibited,
     AlreadyInAnotherRoom
 }
 

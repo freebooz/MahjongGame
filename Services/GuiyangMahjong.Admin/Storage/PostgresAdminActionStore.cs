@@ -40,9 +40,68 @@ public sealed class PostgresAdminActionStore(
     {
         await using var connection = await postgres.OpenConnectionAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        await using (var advisoryLock = new NpgsqlCommand(
+            "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
+            connection,
+            transaction))
+        {
+            advisoryLock.Parameters.AddWithValue(action.ActionRequestId);
+            await advisoryLock.ExecuteNonQueryAsync(cancellationToken);
+        }
+        var existing = await GetActionAsync(
+            connection,
+            transaction,
+            action.ActionRequestId,
+            cancellationToken);
+        if (existing is not null)
+        {
+            EnsureSameCreate(existing, action);
+            await transaction.CommitAsync(cancellationToken);
+            return;
+        }
         await InsertActionAsync(connection, transaction, action, cancellationToken);
         await AppendAuditAsync(connection, transaction, audit, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
+    }
+
+    private static async Task<AdminActionRecord?> GetActionAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        string actionRequestId,
+        CancellationToken cancellationToken)
+    {
+        await using var command = new NpgsqlCommand(
+            $"{ActionSelectSql} WHERE action.action_request_id=$1",
+            connection,
+            transaction);
+        command.Parameters.AddWithValue(Guid.Parse(actionRequestId));
+        await using var reader =
+            await command.ExecuteReaderAsync(cancellationToken);
+        return await reader.ReadAsync(cancellationToken)
+            ? ReadAction(reader)
+            : null;
+    }
+
+    private static void EnsureSameCreate(
+        AdminActionRecord existing,
+        AdminActionRecord proposed)
+    {
+        if (existing.ActionType != proposed.ActionType
+            || existing.TargetType != proposed.TargetType
+            || existing.TargetId != proposed.TargetId
+            || existing.RequestedBy != proposed.RequestedBy
+            || existing.Reason != proposed.Reason
+            || existing.TicketId != proposed.TicketId
+            || existing.ExpectedStateSequence != proposed.ExpectedStateSequence
+            || existing.Parameters.HasValue != proposed.Parameters.HasValue
+            || (existing.Parameters.HasValue
+                && !JsonElement.DeepEquals(
+                    existing.Parameters.Value,
+                    proposed.Parameters!.Value)))
+        {
+            throw new InvalidOperationException(
+                "Action request id was reused with different parameters.");
+        }
     }
 
     public async Task<AdminActionRecord?> GetAsync(
@@ -142,6 +201,22 @@ public sealed class PostgresAdminActionStore(
                 reader.GetString(14)));
         }
         return result;
+    }
+
+    public async Task AppendAuditAsync(
+        AdminAuditDraft audit,
+        CancellationToken cancellationToken)
+    {
+        await using var connection =
+            await postgres.OpenConnectionAsync(cancellationToken);
+        await using var transaction =
+            await connection.BeginTransactionAsync(cancellationToken);
+        await AppendAuditAsync(
+            connection,
+            transaction,
+            audit,
+            cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
     }
 
     public async Task<IReadOnlyList<AdminCommandOutboxRecord>> ListOutboxAsync(
@@ -352,8 +427,8 @@ public sealed class PostgresAdminActionStore(
                 action_request_id, action_type, target_type, target_id, requested_by,
                 requested_at_utc, confirmation_expires_at_utc, confirmed_at_utc,
                 reason, ticket_id, trace_id, expected_state_sequence, expected_state_hash,
-                before_state, status, expires_at_utc, version)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+                before_state, status, expires_at_utc, version, action_parameters)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
             """,
             connection,
             transaction);
@@ -374,6 +449,7 @@ public sealed class PostgresAdminActionStore(
         command.Parameters.AddWithValue(action.Status.ToString());
         command.Parameters.AddWithValue(action.ExpiresAtUtc);
         command.Parameters.AddWithValue(action.Version);
+        AddNullableJson(command, action.Parameters);
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
@@ -504,6 +580,7 @@ public sealed class PostgresAdminActionStore(
                action.confirmed_at_utc, action.reason, action.ticket_id, action.trace_id,
                action.expected_state_sequence, action.expected_state_hash,
                action.before_state::text, action.status, action.version,
+               action.action_parameters::text,
                approval.approval_id, approval.approved_by, approval.approved_at_utc,
                approval.decision, approval.comment
         FROM admin_monitor.action_requests AS action
@@ -513,14 +590,14 @@ public sealed class PostgresAdminActionStore(
 
     private static AdminActionRecord ReadAction(NpgsqlDataReader reader)
     {
-        AdminActionApproval? approval = reader.IsDBNull(17)
+        AdminActionApproval? approval = reader.IsDBNull(18)
             ? null
             : new AdminActionApproval(
-                reader.GetGuid(17).ToString(),
-                reader.GetString(18),
-                reader.GetFieldValue<DateTimeOffset>(19),
-                Enum.Parse<ApprovalDecision>(reader.GetString(20)),
-                reader.GetString(21));
+                reader.GetGuid(18).ToString(),
+                reader.GetString(19),
+                reader.GetFieldValue<DateTimeOffset>(20),
+                Enum.Parse<ApprovalDecision>(reader.GetString(21)),
+                reader.GetString(22));
         return new AdminActionRecord(
             reader.GetGuid(0).ToString(),
             Enum.Parse<AdminManagementActionType>(reader.GetString(1)),
@@ -539,7 +616,8 @@ public sealed class PostgresAdminActionStore(
             ReadJson(reader.GetString(14)),
             Enum.Parse<AdminActionStatus>(reader.GetString(15)),
             approval,
-            reader.GetInt32(16));
+            reader.GetInt32(16),
+            ReadNullableJson(reader, 17));
     }
 
     private static AdminCommandOutboxRecord ReadOutbox(NpgsqlDataReader reader) =>

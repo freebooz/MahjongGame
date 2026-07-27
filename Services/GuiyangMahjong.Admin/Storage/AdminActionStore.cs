@@ -27,6 +27,9 @@ public interface IAdminActionStore
     Task<IReadOnlyList<AdminAuditRecord>> ListAuditAsync(
         int limit,
         CancellationToken cancellationToken);
+    Task AppendAuditAsync(
+        AdminAuditDraft audit,
+        CancellationToken cancellationToken);
     Task<IReadOnlyList<AdminCommandOutboxRecord>> ListOutboxAsync(
         int limit,
         CancellationToken cancellationToken);
@@ -71,10 +74,37 @@ public sealed class InMemoryAdminActionStore : IAdminActionStore
         cancellationToken.ThrowIfCancellationRequested();
         lock (gate)
         {
+            if (actions.TryGetValue(action.ActionRequestId, out var existing))
+            {
+                EnsureSameCreate(existing, action);
+                return Task.CompletedTask;
+            }
             actions.Add(action.ActionRequestId, action);
             AppendAuditUnsafe(auditDraft);
         }
         return Task.CompletedTask;
+    }
+
+    private static void EnsureSameCreate(
+        AdminActionRecord existing,
+        AdminActionRecord proposed)
+    {
+        if (existing.ActionType != proposed.ActionType
+            || existing.TargetType != proposed.TargetType
+            || existing.TargetId != proposed.TargetId
+            || existing.RequestedBy != proposed.RequestedBy
+            || existing.Reason != proposed.Reason
+            || existing.TicketId != proposed.TicketId
+            || existing.ExpectedStateSequence != proposed.ExpectedStateSequence
+            || existing.Parameters.HasValue != proposed.Parameters.HasValue
+            || (existing.Parameters.HasValue
+                && !JsonElement.DeepEquals(
+                    existing.Parameters.Value,
+                    proposed.Parameters!.Value)))
+        {
+            throw new InvalidOperationException(
+                "Action request id was reused with different parameters.");
+        }
     }
 
     public Task<AdminActionRecord?> GetAsync(
@@ -139,6 +169,18 @@ public sealed class InMemoryAdminActionStore : IAdminActionStore
                 .ToArray();
             return Task.FromResult(result);
         }
+    }
+
+    public Task AppendAuditAsync(
+        AdminAuditDraft auditDraft,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        lock (gate)
+        {
+            AppendAuditUnsafe(auditDraft);
+        }
+        return Task.CompletedTask;
     }
 
     public Task<IReadOnlyList<AdminCommandOutboxRecord>> ListOutboxAsync(

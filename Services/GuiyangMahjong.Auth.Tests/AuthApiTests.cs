@@ -185,6 +185,167 @@ public sealed class AuthApiTests(AuthWebApplicationFactory factory)
         Assert.Equal(HttpStatusCode.Unauthorized, refresh.StatusCode);
     }
 
+    [Fact]
+    public async Task TemporaryFreezeIsVersionedIdempotentAndBlocksLoginAndRefresh()
+    {
+        using var client = factory.CreateClient();
+        var installationId = $"admin-freeze-{Guid.NewGuid():N}";
+        var login = await LoginAsync(client, installationId);
+        var path =
+            $"/internal/admin/players/{Uri.EscapeDataString(login.PlayerId)}/controls";
+        var effectiveAtUtc = DateTimeOffset.UtcNow;
+        var body = new AdminUpdatePlayerControlRequest(
+            nameof(AdminPlayerControlAction.TemporaryFreezePlayer),
+            0,
+            "Confirmed account takeover investigation",
+            Guid.NewGuid().ToString(),
+            "SEC-FREEZE-001",
+            "sanction-operator",
+            "player-approver",
+            effectiveAtUtc,
+            effectiveAtUtc.AddHours(24),
+            null);
+        using var unauthorized = await client.PostAsJsonAsync(path, body);
+        Assert.Equal(HttpStatusCode.Unauthorized, unauthorized.StatusCode);
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            AuthWebApplicationFactory.ManagementToken);
+        var commandId = Guid.NewGuid().ToString();
+        client.DefaultRequestHeaders.Add("Idempotency-Key", commandId);
+        using var applied = await client.PostAsJsonAsync(path, body);
+        var result =
+            await applied.Content.ReadFromJsonAsync<AdminUpdatePlayerControlResult>();
+        Assert.Equal(HttpStatusCode.OK, applied.StatusCode);
+        Assert.NotNull(result);
+        Assert.Equal("Frozen", result.AfterState.AccountStatus);
+        Assert.Equal(1, result.AfterState.Version);
+        Assert.Equal(1, result.RevokedSessionCount);
+        Assert.False(result.Duplicate);
+
+        using var duplicate = await client.PostAsJsonAsync(path, body);
+        var duplicateResult =
+            await duplicate.Content.ReadFromJsonAsync<AdminUpdatePlayerControlResult>();
+        Assert.Equal(HttpStatusCode.OK, duplicate.StatusCode);
+        Assert.NotNull(duplicateResult);
+        Assert.True(duplicateResult.Duplicate);
+        Assert.Equal(result.RevokedSessionCount, duplicateResult.RevokedSessionCount);
+
+        client.DefaultRequestHeaders.Remove("Idempotency-Key");
+        client.DefaultRequestHeaders.Authorization = null;
+        using var refresh = await client.PostAsJsonAsync(
+            "/v1/auth/refresh",
+            new RefreshSessionRequest(login.RefreshToken));
+        Assert.Equal(HttpStatusCode.Unauthorized, refresh.StatusCode);
+        using var relogin = await client.PostAsJsonAsync(
+            "/v1/auth/guest",
+            new GuestLoginRequest(installationId, null));
+        Assert.Equal(HttpStatusCode.Forbidden, relogin.StatusCode);
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            AuthWebApplicationFactory.MonitoringToken);
+        var detail = await client.GetFromJsonAsync<PlayerDirectoryDetail>(
+            $"/internal/monitoring/players/{Uri.EscapeDataString(login.PlayerId)}");
+        Assert.NotNull(detail);
+        Assert.Equal("Frozen", detail.Player.AccountStatus);
+        Assert.Equal(1, detail.Player.ControlVersion);
+        Assert.NotNull(detail.Player.FrozenUntilUtc);
+        Assert.Single(detail.ControlHistory);
+        Assert.Equal(commandId, detail.ControlHistory[0].CommandId);
+    }
+
+    [Fact]
+    public async Task BanMuteAndRiskControlsRequireCurrentVersionAndRecordHistory()
+    {
+        using var client = factory.CreateClient();
+        var login = await LoginAsync(client, $"admin-controls-{Guid.NewGuid():N}");
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            AuthWebApplicationFactory.ManagementToken);
+        var path =
+            $"/internal/admin/players/{Uri.EscapeDataString(login.PlayerId)}/controls";
+        var version = 0L;
+
+        async Task<AdminUpdatePlayerControlResult> ApplyAsync(
+            AdminPlayerControlAction action,
+            DateTimeOffset? expiresAtUtc = null,
+            string? riskLabel = null)
+        {
+            var effectiveAtUtc = DateTimeOffset.UtcNow;
+            var request = new AdminUpdatePlayerControlRequest(
+                action.ToString(),
+                version,
+                $"Approved security control for {action}",
+                Guid.NewGuid().ToString(),
+                $"SEC-{action}",
+                action == AdminPlayerControlAction.MarkRiskAccount
+                    ? "risk-analyst"
+                    : "sanction-operator",
+                "player-approver",
+                effectiveAtUtc,
+                expiresAtUtc,
+                riskLabel);
+            client.DefaultRequestHeaders.Remove("Idempotency-Key");
+            client.DefaultRequestHeaders.Add(
+                "Idempotency-Key",
+                Guid.NewGuid().ToString());
+            using var response = await client.PostAsJsonAsync(path, request);
+            response.EnsureSuccessStatusCode();
+            var result = await response.Content
+                .ReadFromJsonAsync<AdminUpdatePlayerControlResult>();
+            Assert.NotNull(result);
+            version = result.AfterState.Version;
+            return result;
+        }
+
+        var banned = await ApplyAsync(
+            AdminPlayerControlAction.PermanentBanPlayer);
+        Assert.Equal("Banned", banned.AfterState.AccountStatus);
+
+        var staleRequest = new AdminUpdatePlayerControlRequest(
+            nameof(AdminPlayerControlAction.LiftPlayerBan),
+            0,
+            "Attempt using a stale player control version",
+            Guid.NewGuid().ToString(),
+            "SEC-STALE",
+            "sanction-operator",
+            "player-approver",
+            DateTimeOffset.UtcNow,
+            null,
+            null);
+        client.DefaultRequestHeaders.Remove("Idempotency-Key");
+        client.DefaultRequestHeaders.Add("Idempotency-Key", Guid.NewGuid().ToString());
+        using var stale = await client.PostAsJsonAsync(path, staleRequest);
+        Assert.Equal(HttpStatusCode.Conflict, stale.StatusCode);
+
+        var lifted = await ApplyAsync(AdminPlayerControlAction.LiftPlayerBan);
+        Assert.Equal("Active", lifted.AfterState.AccountStatus);
+        var mutedAt = DateTimeOffset.UtcNow;
+        var muted = await ApplyAsync(
+            AdminPlayerControlAction.MutePlayer,
+            mutedAt.AddHours(24));
+        Assert.NotNull(muted.AfterState.MutedUntilUtc);
+        var riskAt = DateTimeOffset.UtcNow;
+        var risk = await ApplyAsync(
+            AdminPlayerControlAction.MarkRiskAccount,
+            riskAt.AddDays(30),
+            "manual-review");
+        Assert.Contains("manual-review", risk.AfterState.RiskLabels);
+        var unmuted = await ApplyAsync(AdminPlayerControlAction.UnmutePlayer);
+        Assert.Null(unmuted.AfterState.MutedUntilUtc);
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            AuthWebApplicationFactory.MonitoringToken);
+        var detail = await client.GetFromJsonAsync<PlayerDirectoryDetail>(
+            $"/internal/monitoring/players/{Uri.EscapeDataString(login.PlayerId)}");
+        Assert.NotNull(detail);
+        Assert.Equal(5, detail.Player.ControlVersion);
+        Assert.Equal(5, detail.ControlHistory.Length);
+        Assert.Contains("manual-review", detail.Player.RiskLabels);
+    }
+
     private static async Task<AuthSessionResponse> LoginAsync(HttpClient client, string installationId)
     {
         var response = await client.PostAsJsonAsync(

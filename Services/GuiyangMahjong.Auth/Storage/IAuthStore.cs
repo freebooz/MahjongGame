@@ -10,7 +10,10 @@ public interface IAuthStore
         string installationHash,
         AuthIdentity proposedIdentity,
         CancellationToken cancellationToken);
-    Task CreateRefreshSessionAsync(RefreshSession session, CancellationToken cancellationToken);
+    Task<SessionCreationStatus> CreateRefreshSessionAsync(
+        RefreshSession session,
+        DateTimeOffset now,
+        CancellationToken cancellationToken);
     Task<RefreshRotationResult> RotateRefreshSessionAsync(
         string currentSessionId,
         byte[] currentTokenHash,
@@ -26,6 +29,20 @@ public interface IAuthStore
         string commandId,
         string playerId,
         DateTimeOffset effectiveAtUtc,
+        CancellationToken cancellationToken);
+    Task<AdminPlayerControlStoreResult> ApplyPlayerControlAsync(
+        string commandId,
+        string playerId,
+        AdminPlayerControlAction action,
+        long expectedVersion,
+        string reason,
+        string traceId,
+        string ticketId,
+        string requestedBy,
+        string approvedBy,
+        DateTimeOffset effectiveAtUtc,
+        DateTimeOffset? expiresAtUtc,
+        string? riskLabel,
         CancellationToken cancellationToken);
     Task RecordLoginAsync(AuthLoginEvent loginEvent, CancellationToken cancellationToken);
     Task<IReadOnlyList<PlayerDirectoryItem>> ListPlayersAsync(

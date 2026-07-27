@@ -147,6 +147,67 @@ app.MapPost("/internal/admin/players/{playerId}/sessions/revoke", async (
         cancellationToken));
 });
 
+app.MapPost("/internal/admin/players/{playerId}/controls", async (
+    string playerId,
+    AdminUpdatePlayerControlRequest request,
+    HttpContext context,
+    IAuthStore store,
+    IOptions<AuthOptions> options,
+    TimeProvider timeProvider,
+    CancellationToken cancellationToken) =>
+{
+    if (!HasMonitoringCredential(context, options.Value.ManagementCommandToken))
+        return Results.Unauthorized();
+    var commandId = context.Request.Headers["Idempotency-Key"].ToString().Trim();
+    var now = timeProvider.GetUtcNow();
+    if (!Enum.TryParse<AdminPlayerControlAction>(
+            request.ActionType,
+            out var action)
+        || !ValidatePlayerControlCommand(
+            commandId,
+            playerId,
+            request,
+            action,
+            now))
+    {
+        return Results.BadRequest(new
+        {
+            code = "INVALID_ADMIN_COMMAND",
+            message = "Player control command validation failed."
+        });
+    }
+    var result = await store.ApplyPlayerControlAsync(
+        commandId,
+        playerId,
+        action,
+        request.ExpectedVersion,
+        request.Reason.Trim(),
+        request.TraceId.Trim(),
+        request.TicketId.Trim(),
+        request.RequestedBy.Trim(),
+        request.ApprovedBy.Trim(),
+        request.EffectiveAtUtc,
+        request.ExpiresAtUtc,
+        request.RiskLabel?.Trim(),
+        cancellationToken);
+    return result.Status switch
+    {
+        AdminPlayerControlStatus.Applied or
+        AdminPlayerControlStatus.Duplicate => Results.Ok(result.Result),
+        AdminPlayerControlStatus.PlayerNotFound => Results.NotFound(new
+        {
+            code = "PLAYER_NOT_FOUND",
+            message = result.Error
+        }),
+        _ => Results.Conflict(new
+        {
+            code = result.Status.ToString().ToUpperInvariant(),
+            message = result.Error,
+            currentState = result.CurrentState
+        })
+    };
+});
+
 app.MapGet("/internal/monitoring/players", async (
     HttpContext context,
     IAuthStore store,
@@ -216,6 +277,55 @@ static string MaskIp(IPAddress? address)
         return $"{bytes[0]}.{bytes[1]}.{bytes[2]}.*";
     for (var index = 6; index < bytes.Length; index++) bytes[index] = 0;
     return $"{new IPAddress(bytes)}/48";
+}
+
+static bool ValidatePlayerControlCommand(
+    string commandId,
+    string playerId,
+    AdminUpdatePlayerControlRequest request,
+    AdminPlayerControlAction action,
+    DateTimeOffset now)
+{
+    var reason = request.Reason?.Trim() ?? string.Empty;
+    var traceId = request.TraceId?.Trim() ?? string.Empty;
+    var ticketId = request.TicketId?.Trim() ?? string.Empty;
+    var requestedBy = request.RequestedBy?.Trim() ?? string.Empty;
+    var approvedBy = request.ApprovedBy?.Trim() ?? string.Empty;
+    var riskLabel = request.RiskLabel?.Trim();
+    if (commandId.Length is < 16 or > 128
+        || playerId.Length is < 3 or > 80
+        || request.ExpectedVersion < 0
+        || reason.Length is < 10 or > 500
+        || traceId.Length is < 8 or > 64
+        || ticketId.Length is < 3 or > 128
+        || requestedBy.Length is < 3 or > 128
+        || approvedBy.Length is < 3 or > 128
+        || requestedBy == approvedBy
+        || request.EffectiveAtUtc < now.AddHours(-24)
+        || request.EffectiveAtUtc > now.AddMinutes(1))
+    {
+        return false;
+    }
+    var timedAction = action is
+        AdminPlayerControlAction.TemporaryFreezePlayer
+        or AdminPlayerControlAction.MutePlayer
+        or AdminPlayerControlAction.MarkRiskAccount;
+    if (timedAction
+        && (request.ExpiresAtUtc <= request.EffectiveAtUtc.AddMinutes(1)
+            || request.ExpiresAtUtc > request.EffectiveAtUtc.AddDays(
+                action == AdminPlayerControlAction.MarkRiskAccount ? 365 : 30)))
+    {
+        return false;
+    }
+    if (!timedAction && request.ExpiresAtUtc is not null) return false;
+    if (action == AdminPlayerControlAction.MarkRiskAccount)
+    {
+        return riskLabel is { Length: >= 3 and <= 64 }
+            && riskLabel.All(character =>
+                char.IsAsciiLetterOrDigit(character)
+                || character is '.' or '_' or '-');
+    }
+    return riskLabel is null;
 }
 
 public partial class Program;

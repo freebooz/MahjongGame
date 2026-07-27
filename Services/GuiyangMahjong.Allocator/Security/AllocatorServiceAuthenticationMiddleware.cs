@@ -12,6 +12,8 @@ public sealed class AllocatorServiceAuthenticationMiddleware(
     private readonly byte[] expected = Encoding.UTF8.GetBytes(options.Value.ServiceToken);
     private readonly byte[] monitoringExpected =
         Encoding.UTF8.GetBytes(options.Value.MonitoringReadOnlyToken);
+    private readonly byte[] managementExpected =
+        Encoding.UTF8.GetBytes(options.Value.ManagementCommandToken);
 
     public async Task InvokeAsync(HttpContext context)
     {
@@ -25,8 +27,14 @@ public sealed class AllocatorServiceAuthenticationMiddleware(
         var supplied = header.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)
             ? Encoding.UTF8.GetBytes(header[7..].Trim())
             : [];
-        var authenticated = supplied.Length == expected.Length
-            && CryptographicOperations.FixedTimeEquals(supplied, expected);
+        var isManagementRequest = HttpMethods.IsPost(context.Request.Method)
+            && context.Request.Path.StartsWithSegments("/internal/admin/instances");
+        var authenticated = isManagementRequest
+            ? managementExpected.Length >= 32
+              && supplied.Length == managementExpected.Length
+              && CryptographicOperations.FixedTimeEquals(supplied, managementExpected)
+            : supplied.Length == expected.Length
+              && CryptographicOperations.FixedTimeEquals(supplied, expected);
         var isReadOnlyInstancesRequest = HttpMethods.IsGet(context.Request.Method)
             && context.Request.Path.StartsWithSegments("/internal/instances");
         if (!authenticated && isReadOnlyInstancesRequest && monitoringExpected.Length >= 32)

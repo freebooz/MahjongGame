@@ -10,6 +10,10 @@ public sealed class InMemoryAuthStore : IAuthStore
     private readonly Dictionary<string, RefreshSession> sessions = new(StringComparer.Ordinal);
     private readonly Dictionary<string, AdminRevokePlayerSessionsResult> adminCommands =
         new(StringComparer.Ordinal);
+    private readonly Dictionary<string, PlayerControlState> playerControls =
+        new(StringComparer.Ordinal);
+    private readonly Dictionary<string, PlayerControlEvent> playerControlEvents =
+        new(StringComparer.Ordinal);
     private readonly List<AuthLoginEvent> loginEvents = [];
     private readonly object gate = new();
 
@@ -32,11 +36,22 @@ public sealed class InMemoryAuthStore : IAuthStore
         }
     }
 
-    public Task CreateRefreshSessionAsync(RefreshSession session, CancellationToken cancellationToken)
+    public Task<SessionCreationStatus> CreateRefreshSessionAsync(
+        RefreshSession session,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        lock (gate) sessions.Add(session.SessionId, session);
-        return Task.CompletedTask;
+        lock (gate)
+        {
+            var control = GetEffectiveControl(session.PlayerId, now);
+            if (control.AccountStatus == "Banned")
+                return Task.FromResult(SessionCreationStatus.Banned);
+            if (control.AccountStatus == "Frozen")
+                return Task.FromResult(SessionCreationStatus.Frozen);
+            sessions.Add(session.SessionId, session);
+            return Task.FromResult(SessionCreationStatus.Created);
+        }
     }
 
     public Task<RefreshRotationResult> RotateRefreshSessionAsync(
@@ -59,6 +74,11 @@ public sealed class InMemoryAuthStore : IAuthStore
                 return Task.FromResult(new RefreshRotationResult(RefreshRotationStatus.Expired, null));
             if (!identitiesByPlayer.TryGetValue(current.PlayerId, out var identity))
                 return Task.FromResult(new RefreshRotationResult(RefreshRotationStatus.NotFound, null));
+            var control = GetEffectiveControl(current.PlayerId, now);
+            if (control.AccountStatus == "Banned")
+                return Task.FromResult(new RefreshRotationResult(RefreshRotationStatus.Banned, null));
+            if (control.AccountStatus == "Frozen")
+                return Task.FromResult(new RefreshRotationResult(RefreshRotationStatus.Frozen, null));
 
             sessions[currentSessionId] = current with { RevokedAtUtc = now };
             sessions.Add(replacement.SessionId, replacement with { PlayerId = current.PlayerId });
@@ -99,6 +119,7 @@ public sealed class InMemoryAuthStore : IAuthStore
             foreach (var session in sessions.Values
                          .Where(item => item.PlayerId == playerId
                              && item.RevokedAtUtc is null
+                             && item.CreatedAtUtc <= effectiveAtUtc
                              && item.ExpiresAtUtc > effectiveAtUtc)
                          .ToArray())
             {
@@ -117,6 +138,118 @@ public sealed class InMemoryAuthStore : IAuthStore
                 false);
             adminCommands[commandId] = result;
             return Task.FromResult(result);
+        }
+    }
+
+    public Task<AdminPlayerControlStoreResult> ApplyPlayerControlAsync(
+        string commandId,
+        string playerId,
+        AdminPlayerControlAction action,
+        long expectedVersion,
+        string reason,
+        string traceId,
+        string ticketId,
+        string requestedBy,
+        string approvedBy,
+        DateTimeOffset effectiveAtUtc,
+        DateTimeOffset? expiresAtUtc,
+        string? riskLabel,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        lock (gate)
+        {
+            if (playerControlEvents.TryGetValue(commandId, out var duplicate))
+            {
+                EnsureSameControlCommand(
+                    duplicate,
+                    playerId,
+                    action,
+                    expectedVersion,
+                    reason,
+                    traceId,
+                    ticketId,
+                    requestedBy,
+                    approvedBy,
+                    effectiveAtUtc,
+                    expiresAtUtc,
+                    riskLabel);
+                return Task.FromResult(new AdminPlayerControlStoreResult(
+                    AdminPlayerControlStatus.Duplicate,
+                    ToControlResult(duplicate, true),
+                    duplicate.AfterState,
+                    null));
+            }
+            if (!identitiesByPlayer.ContainsKey(playerId))
+            {
+                return Task.FromResult(new AdminPlayerControlStoreResult(
+                    AdminPlayerControlStatus.PlayerNotFound,
+                    null,
+                    null,
+                    "Player was not found."));
+            }
+            var before = GetEffectiveControl(playerId, effectiveAtUtc);
+            if (before.Version != expectedVersion)
+            {
+                return Task.FromResult(new AdminPlayerControlStoreResult(
+                    AdminPlayerControlStatus.VersionConflict,
+                    null,
+                    before,
+                    "Player control state changed."));
+            }
+            var transition = ApplyControlTransition(
+                before,
+                action,
+                effectiveAtUtc,
+                expiresAtUtc,
+                riskLabel);
+            if (transition.State is null)
+            {
+                return Task.FromResult(new AdminPlayerControlStoreResult(
+                    AdminPlayerControlStatus.InvalidTransition,
+                    null,
+                    before,
+                    transition.Error));
+            }
+            playerControls[playerId] = transition.State;
+            var revoked = 0;
+            if (action is AdminPlayerControlAction.TemporaryFreezePlayer
+                or AdminPlayerControlAction.PermanentBanPlayer)
+            {
+                foreach (var session in sessions.Values
+                             .Where(item => item.PlayerId == playerId
+                                 && item.RevokedAtUtc is null
+                                 && item.ExpiresAtUtc > effectiveAtUtc)
+                             .ToArray())
+                {
+                    sessions[session.SessionId] = session with
+                    {
+                        RevokedAtUtc = effectiveAtUtc
+                    };
+                    revoked++;
+                }
+            }
+            var controlEvent = new PlayerControlEvent(
+                commandId,
+                playerId,
+                action.ToString(),
+                reason,
+                traceId,
+                ticketId,
+                requestedBy,
+                approvedBy,
+                effectiveAtUtc,
+                expiresAtUtc,
+                riskLabel,
+                revoked,
+                before,
+                transition.State);
+            playerControlEvents.Add(commandId, controlEvent);
+            return Task.FromResult(new AdminPlayerControlStoreResult(
+                AdminPlayerControlStatus.Applied,
+                ToControlResult(controlEvent, false, revoked),
+                transition.State,
+                null));
         }
     }
 
@@ -178,7 +311,12 @@ public sealed class InMemoryAuthStore : IAuthStore
                 BuildDirectoryItem(identity, now),
                 monitoredSessions,
                 history,
-                history.Select(item => item.DeviceId).Distinct(StringComparer.Ordinal).ToArray()));
+                history.Select(item => item.DeviceId).Distinct(StringComparer.Ordinal).ToArray(),
+                playerControlEvents.Values
+                    .Where(item => item.PlayerId == playerId)
+                    .OrderByDescending(item => item.EffectiveAtUtc)
+                    .Take(200)
+                    .ToArray()));
         }
     }
 
@@ -191,18 +329,98 @@ public sealed class InMemoryAuthStore : IAuthStore
             item.PlayerId == identity.PlayerId
             && item.RevokedAtUtc is null
             && item.ExpiresAtUtc > now);
+        var control = GetEffectiveControl(identity.PlayerId, now);
         return new PlayerDirectoryItem(
             identity.PlayerId,
             identity.DisplayName,
             identity.Provider,
-            "Active",
+            control.AccountStatus,
             identity.CreatedAtUtc,
             identity.UpdatedAtUtc,
             lastLogin?.OccurredAtUtc,
             lastLogin?.DeviceId,
             lastLogin?.MaskedIp,
-            activeSessions);
+            activeSessions,
+            control.Version,
+            control.FrozenUntilUtc,
+            control.MutedUntilUtc,
+            control.RiskLabels);
     }
+
+    private PlayerControlState GetEffectiveControl(
+        string playerId,
+        DateTimeOffset now)
+    {
+        var state = playerControls.GetValueOrDefault(playerId)
+            ?? PlayerControlPolicy.Empty;
+        return PlayerControlPolicy.Normalize(state, now);
+    }
+
+    private static (PlayerControlState? State, string? Error) ApplyControlTransition(
+        PlayerControlState before,
+        AdminPlayerControlAction action,
+        DateTimeOffset effectiveAtUtc,
+        DateTimeOffset? expiresAtUtc,
+        string? riskLabel)
+        => PlayerControlPolicy.Apply(
+            before,
+            action,
+            effectiveAtUtc,
+            expiresAtUtc,
+            riskLabel);
+
+    private static void EnsureSameControlCommand(
+        PlayerControlEvent existing,
+        string playerId,
+        AdminPlayerControlAction action,
+        long expectedVersion,
+        string reason,
+        string traceId,
+        string ticketId,
+        string requestedBy,
+        string approvedBy,
+        DateTimeOffset effectiveAtUtc,
+        DateTimeOffset? expiresAtUtc,
+        string? riskLabel)
+    {
+        if (existing.PlayerId != playerId
+            || existing.ActionType != action.ToString()
+            || existing.BeforeState.Version != expectedVersion
+            || existing.Reason != reason
+            || existing.TraceId != traceId
+            || existing.TicketId != ticketId
+            || existing.RequestedBy != requestedBy
+            || existing.ApprovedBy != approvedBy
+            || (existing.EffectiveAtUtc - effectiveAtUtc).Duration()
+                > TimeSpan.FromMilliseconds(1)
+            || !SameInstant(existing.ExpiresAtUtc, expiresAtUtc)
+            || existing.RiskLabel != riskLabel)
+        {
+            throw new InvalidOperationException(
+                "Admin command id was reused with different command parameters.");
+        }
+    }
+
+    private static bool SameInstant(
+        DateTimeOffset? left,
+        DateTimeOffset? right) =>
+        left.HasValue == right.HasValue
+        && (!left.HasValue
+            || (left.Value - right!.Value).Duration()
+                <= TimeSpan.FromMilliseconds(1));
+
+    private static AdminUpdatePlayerControlResult ToControlResult(
+        PlayerControlEvent controlEvent,
+        bool duplicate,
+        int? revokedSessionCount = null) =>
+        new(
+            controlEvent.CommandId,
+            controlEvent.PlayerId,
+            controlEvent.ActionType,
+            controlEvent.BeforeState,
+            controlEvent.AfterState,
+            revokedSessionCount ?? controlEvent.RevokedSessionCount,
+            duplicate);
 
     private static AuthSessionMonitor MapSession(RefreshSession session, DateTimeOffset now) =>
         new(

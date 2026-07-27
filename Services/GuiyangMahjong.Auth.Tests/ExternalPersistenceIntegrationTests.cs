@@ -136,6 +136,65 @@ public sealed class ExternalPersistenceIntegrationTests
             CancellationToken.None));
     }
 
+    [AuthExternalPersistenceFact]
+    [Trait("Category", "ExternalPersistence")]
+    public async Task PostgreSql_PlayerBanIsAtomicIdempotentAndVisibleAcrossInstances()
+    {
+        var options = CreateOptions();
+        await using var storeA = CreateStore();
+        await using var storeB = CreateStore();
+        await storeA.InitializeAsync(CancellationToken.None);
+        var serviceA = CreateService(storeA, options);
+        var installationId = $"external-admin-ban-{Guid.NewGuid():N}";
+        var login = await serviceA.LoginGuestAsync(
+            new GuestLoginRequest(installationId, "External Banned Player"),
+            CancellationToken.None);
+        var effectiveAtUtc = DateTimeOffset.UtcNow;
+        var commandId = Guid.NewGuid().ToString();
+        var traceId = Guid.NewGuid().ToString();
+
+        Task<AdminPlayerControlStoreResult> ApplyAsync(PostgresAuthStore store) =>
+            store.ApplyPlayerControlAsync(
+                commandId,
+                login.PlayerId,
+                AdminPlayerControlAction.PermanentBanPlayer,
+                0,
+                "Confirmed severe abuse investigation",
+                traceId,
+                "SEC-EXTERNAL-BAN",
+                "sanction-operator",
+                "player-approver",
+                effectiveAtUtc,
+                null,
+                null,
+                CancellationToken.None);
+        var results = await Task.WhenAll(
+            ApplyAsync(storeA),
+            ApplyAsync(storeB));
+        var applied = Assert.Single(
+            results,
+            item => item.Status == AdminPlayerControlStatus.Applied);
+        var duplicate = Assert.Single(
+            results,
+            item => item.Status == AdminPlayerControlStatus.Duplicate);
+
+        Assert.Equal("Banned", applied.Result?.AfterState.AccountStatus);
+        Assert.Equal(1, applied.Result?.RevokedSessionCount);
+        Assert.True(duplicate.Result?.Duplicate);
+        var detail = await storeB.GetPlayerDetailAsync(
+            login.PlayerId,
+            DateTimeOffset.UtcNow,
+            CancellationToken.None);
+        Assert.NotNull(detail);
+        Assert.Equal("Banned", detail.Player.AccountStatus);
+        Assert.Single(detail.ControlHistory);
+        var exception = await Assert.ThrowsAsync<AuthOperationException>(() =>
+            serviceA.LoginGuestAsync(
+                new GuestLoginRequest(installationId, null),
+                CancellationToken.None));
+        Assert.Equal("ACCOUNT_BANNED", exception.Code);
+    }
+
     private static string ConnectionString =>
         Environment.GetEnvironmentVariable("AUTH_TEST_POSTGRES")!;
 

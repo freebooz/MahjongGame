@@ -212,6 +212,11 @@ public sealed class LobbyService
             case AddPlayerStatus.RoomFull:
                 throw new LobbyOperationException(
                     LobbyErrorCode.RoomFull, "房间人数已满", StatusCodes.Status409Conflict);
+            case AddPlayerStatus.AdmissionProhibited:
+                throw new LobbyOperationException(
+                    LobbyErrorCode.RoomClosed,
+                    "房间已禁止新玩家加入",
+                    StatusCodes.Status409Conflict);
             case AddPlayerStatus.AlreadyInAnotherRoom:
                 throw new LobbyOperationException(
                     LobbyErrorCode.RequestInProgress,

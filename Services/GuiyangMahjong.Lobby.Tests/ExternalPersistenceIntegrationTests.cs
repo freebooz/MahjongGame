@@ -78,6 +78,64 @@ public sealed class ExternalPersistenceIntegrationTests
 
     [ExternalPersistenceFact]
     [Trait("Category", "ExternalPersistence")]
+    public async Task PostgreSql_RoomAdmissionControlIsVisibleAcrossInstances()
+    {
+        var options = CreateOptions();
+        await using var connectionsA = new LobbyPersistenceConnections(options);
+        await using var connectionsB = new LobbyPersistenceConnections(options);
+        var storeA = CreateStore(options, connectionsA);
+        var storeB = CreateStore(options, connectionsB);
+        await storeA.InitializeAsync(CancellationToken.None);
+        var room = NewRoom(
+            $"external-owner-{Guid.NewGuid():N}",
+            RandomRoomCode());
+        Assert.Equal(
+            CreateRoomStatus.Created,
+            (await storeA.TryCreateRoomAsync(room, CancellationToken.None)).Status);
+        try
+        {
+            var controlled = room with
+            {
+                NewPlayersProhibited = true,
+                StateSequence = room.StateSequence + 1,
+                UpdatedAtUtc = room.UpdatedAtUtc.AddSeconds(1)
+            };
+            Assert.True(await storeA.UpdateRoomAsync(
+                controlled,
+                CancellationToken.None));
+            var reloaded = await storeB.GetRoomByIdAsync(
+                room.RoomId,
+                CancellationToken.None);
+            Assert.NotNull(reloaded);
+            Assert.True(reloaded.NewPlayersProhibited);
+            Assert.Equal(
+                AddPlayerStatus.AdmissionProhibited,
+                (await storeB.TryAddPlayerAsync(
+                    room.RoomCode,
+                    $"external-joiner-{Guid.NewGuid():N}",
+                    CancellationToken.None)).Status);
+        }
+        finally
+        {
+            var current = await storeA.GetRoomByIdAsync(
+                room.RoomId,
+                CancellationToken.None);
+            if (current is not null)
+            {
+                _ = await storeA.UpdateRoomAsync(
+                    current with
+                    {
+                        Lifecycle = RoomLifecycle.Failed,
+                        StateSequence = current.StateSequence + 1,
+                        UpdatedAtUtc = DateTimeOffset.UtcNow
+                    },
+                    CancellationToken.None);
+            }
+        }
+    }
+
+    [ExternalPersistenceFact]
+    [Trait("Category", "ExternalPersistence")]
     public async Task Redis_IdempotencyCoalescesExecutionAcrossStoreInstances()
     {
         var options = CreateOptions();

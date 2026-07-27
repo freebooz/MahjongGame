@@ -122,6 +122,35 @@ public sealed class GameServerInstanceManagerTests
     }
 
     [Fact]
+    public async Task AdminTerminationChecksExpectedStateAndIsIdempotent()
+    {
+        var fixture = CreateFixture(19205, 19205);
+        var allocation = await AllocateAsync(fixture, "room-admin-terminate");
+        await Assert.ThrowsAsync<AllocatorOperationException>(() =>
+            fixture.Manager.TerminateAbnormalAsync(
+                allocation.ServerInstanceId,
+                GameServerInstanceState.Allocated,
+                CancellationToken.None));
+
+        var first = await fixture.Manager.TerminateAbnormalAsync(
+            allocation.ServerInstanceId,
+            GameServerInstanceState.Starting,
+            CancellationToken.None);
+        var duplicate = await fixture.Manager.TerminateAbnormalAsync(
+            allocation.ServerInstanceId,
+            GameServerInstanceState.Starting,
+            CancellationToken.None);
+
+        Assert.Equal(GameServerInstanceState.Stopped, first.Instance.State);
+        Assert.False(first.AlreadyStopped);
+        Assert.Equal(GameServerInstanceState.Stopped, duplicate.Instance.State);
+        Assert.True(duplicate.AlreadyStopped);
+        Assert.True(
+            fixture.Launcher.Processes[allocation.ServerInstanceId].HasExited);
+        Assert.Equal(1, fixture.Ports.AvailableCount);
+    }
+
+    [Fact]
     public async Task Drain_CallerCancellationDuringShutdown_StillStopsAndReleasesPort()
     {
         var fixture = CreateFixture(19210, 19210);
