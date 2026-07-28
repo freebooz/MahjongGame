@@ -237,7 +237,7 @@ if camera_created:
     configure_new_component(
         camera_component,
         {
-            "relative_location": unreal.Vector(0.0, -164.6795, 110.0),
+            "relative_location": unreal.Vector(0.0, -160.3494, 107.5),
             "relative_rotation": unreal.Rotator(0.0, -30.0, 90.0),
             "current_focal_length": 30.0,
             "current_aperture": 16.0,
@@ -321,6 +321,7 @@ if key_created:
     configure_new_component(
         key,
         {
+            "visible": True,
             "relative_location": unreal.Vector(-180.0, -160.0, 260.0),
             "relative_rotation": unreal.Rotator(
                 pitch=-42.0, yaw=42.0, roll=0.0
@@ -442,7 +443,7 @@ if rim_created:
                 pitch=-35.0, yaw=180.0, roll=0.0
             ),
             "intensity_units": unreal.LightUnits.LUMENS,
-            "intensity": 25.0,
+            "intensity": 12.5,
             "attenuation_radius": 500.0,
             "source_width": 150.0,
             "source_height": 100.0,
@@ -458,7 +459,7 @@ if rim_created:
         {
             "volumetric_scattering_intensity": 0.0,
             "specular_scale": 1.0,
-            "indirect_lighting_intensity": 0.4,
+            "indirect_lighting_intensity": 0.2,
         },
     )
 
@@ -471,7 +472,7 @@ if (
     configure_new_component(
         camera_component,
         {
-            "relative_location": unreal.Vector(0.0, -164.6795, 110.0),
+            "relative_location": unreal.Vector(0.0, -160.3494, 107.5),
             "relative_rotation": unreal.Rotator(0.0, -30.0, 90.0),
             "current_focal_length": 30.0,
             "current_aperture": 16.0,

@@ -32,6 +32,8 @@ public:
 
     /** 使用控制面 Bootstrap 创建本进程唯一的权威房间。 */
     bool InitializeManagedRoomAuthority(const FGuiyangManagedRoomDefinition& Definition, FString& OutError);
+    /** Return player ids bound to live, ticket-authorized network connections. */
+    void GetConnectedAuthorizedPlayerIds(TArray<FString>& OutPlayerIds) const;
 
     /** 实现共享 Controller 转发的鉴权、大厅和牌桌请求。 */
     virtual void HandleCreateRoom(class AGuiyangMahjongPlayerController* Controller, const FMahjongCreateRoomRequest& Request) override;

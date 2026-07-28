@@ -358,7 +358,7 @@ void UGuiyangClientControllerBridgeImpl::ApplyRoomPresentationViewTarget()
             && CameraRotation.Pitch <= -15.0f && CameraRotation.Pitch >= -55.0f;
         if (!bEditorTransformSane)
         {
-            CameraOffset = FVector(0.0f, -164.6795f, 110.0f);
+            CameraOffset = FVector(0.0f, -160.3494f, 107.5f);
             CameraRotation = FRotator(-30.0f, 90.0f, 0.0f);
             UE_LOG(LogMahjongUI, Warning,
                 TEXT("Rejected stale room camera relative transform; using reference composition"));
@@ -391,7 +391,7 @@ void UGuiyangClientControllerBridgeImpl::ApplyRoomPresentationViewTarget()
             : FVector(0.0f, 0.0f, 3.5f);
         // The requested 60-degree tabletop-normal angle is a -30 degree UE pitch.
         // This keeps the near hand visible while retaining the reference image's table depth.
-        const FVector CameraLocation = TableCenter + FVector(0.0f, -164.6795f, 110.0f);
+        const FVector CameraLocation = TableCenter + FVector(0.0f, -160.3494f, 107.5f);
         const FRotator CameraRotation(-30.0f, 90.0f, 0.0f);
         RoomCameraActor->SetActorLocationAndRotation(CameraLocation, CameraRotation);
         RuntimeCamera->SetCurrentFocalLength(30.0f);

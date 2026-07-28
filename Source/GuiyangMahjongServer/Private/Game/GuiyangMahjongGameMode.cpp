@@ -218,6 +218,25 @@ FString AGuiyangMahjongGameMode::InitNewPlayer(APlayerController* NewPlayerContr
     return FString();
 }
 
+void AGuiyangMahjongGameMode::GetConnectedAuthorizedPlayerIds(
+    TArray<FString>& OutPlayerIds) const
+{
+    OutPlayerIds.Reset();
+    TSet<FString> UniquePlayerIds;
+    for (const TPair<TObjectPtr<APlayerController>, FString>& Entry
+        : AuthorizedPlayerIdsByController)
+    {
+        const APlayerController* Controller = Entry.Key.Get();
+        if (!IsValid(Controller) || !Controller->GetNetConnection()
+            || Entry.Value.IsEmpty() || UniquePlayerIds.Contains(Entry.Value))
+        {
+            continue;
+        }
+        UniquePlayerIds.Add(Entry.Value);
+        OutPlayerIds.Add(Entry.Value);
+    }
+}
+
 void AGuiyangMahjongGameMode::PostLogin(APlayerController* NewPlayer)
 {
     Super::PostLogin(NewPlayer);

@@ -89,7 +89,7 @@ if rim:
     rim.set_editor_property("cast_shadows", False)
 
 camera.set_editor_property(
-    "relative_location", unreal.Vector(0.0, -164.6795, 110.0)
+    "relative_location", unreal.Vector(0.0, -160.3494, 107.5)
 )
 camera.set_editor_property(
     "relative_rotation", unreal.Rotator(0.0, -30.0, 90.0)
