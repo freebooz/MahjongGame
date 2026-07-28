@@ -2,9 +2,16 @@
 
 #include "Camera/CameraComponent.h"
 #include "Components/ChildActorComponent.h"
+#include "Components/ModelComponent.h"
+#include "Components/SkyLightComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Game/Mahjong3DTableActor.h"
+#include "Engine/Level.h"
 #include "Engine/StaticMesh.h"
+#include "Engine/StaticMeshActor.h"
+#include "Engine/Brush.h"
+#include "GameFramework/Volume.h"
+#include "EngineUtils.h"
 #include "GuiyangMahjong.h"
 
 const FName AMahjongRoomPresentationActor::PresentationTag(TEXT("MahjongRoomPresentation"));
@@ -21,6 +28,18 @@ void AMahjongRoomPresentationActor::BeginPlay()
 {
     Super::BeginPlay();
 
+    // The room is an enclosed tabletop scene and deliberately owns no sky dome.
+    // Disable real-time sky capture even for an older cooked Blueprint, which
+    // removes the missing-atmosphere warning without creating replacement geometry.
+    TInlineComponentArray<USkyLightComponent*> SkyLightComponents(this);
+    for (USkyLightComponent* SkyLight : SkyLightComponents)
+    {
+        if (SkyLight)
+        {
+            SkyLight->SetRealTimeCaptureEnabled(false);
+        }
+    }
+
     // Older presentation assets were authored for a 115 cm prototype and some saved component
     // hierarchies still carry a 10x parent scale. Normalize the two runtime visual branches from
     // their actual mesh bounds so stale Blueprint transforms cannot hide the 300 cm table.
@@ -28,10 +47,93 @@ void AMahjongRoomPresentationActor::BeginPlay()
     TInlineComponentArray<UStaticMeshComponent*> StaticMeshComponents(this);
     for (UStaticMeshComponent* Component : StaticMeshComponents)
     {
-        if (Component && Component->GetName() == TEXT("MahjongTableMesh"))
+        if (!Component)
+        {
+            continue;
+        }
+
+        if (Component->GetName() == TEXT("MahjongTableMesh"))
         {
             TableMeshComponent = Component;
-            break;
+            continue;
+        }
+
+        const bool bAllowedPresentationGeometry =
+            Component->GetName() == TEXT("RoomBackdropPlane");
+        if (Component->GetStaticMesh() && !bAllowedPresentationGeometry)
+        {
+            const FString GeometryIdentity =
+                Component->GetName() + TEXT(" ") + Component->GetStaticMesh()->GetPathName();
+            UE_LOG(LogMahjongUI, Warning,
+                TEXT("Removed non-whitelisted room presentation geometry: %s"),
+                *GeometryIdentity);
+            Component->DestroyComponent();
+        }
+    }
+
+    // Some old room-map revisions placed the obsolete sky dome as an
+    // independent StaticMeshActor rather than a presentation component. Remove
+    // only explicit sphere/dome assets; the Mahjong table and tile child actor
+    // are never selected by this guard.
+    if (UWorld* World = GetWorld())
+    {
+        // BSP rendering is owned by ULevel::ModelComponents after geometry is
+        // built. Cooked maps no longer contain the source ABrush actors, so
+        // destroying Brush_0 alone cannot remove a stale compiled dome. This
+        // room intentionally uses no BSP; suppress every compiled model
+        // component before the first room frame as a defense against old maps.
+        if (ULevel* Level = World->PersistentLevel)
+        {
+            for (UModelComponent* ModelComponent : Level->ModelComponents)
+            {
+                if (!ModelComponent)
+                {
+                    continue;
+                }
+                UE_LOG(LogMahjongUI, Warning,
+                    TEXT("Disabled obsolete compiled room BSP component: %s bounds=%s"),
+                    *ModelComponent->GetPathName(),
+                    *ModelComponent->Bounds.BoxExtent.ToCompactString());
+                ModelComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+                ModelComponent->SetVisibility(false, true);
+                ModelComponent->SetHiddenInGame(true, true);
+            }
+        }
+
+        for (TActorIterator<ABrush> It(World); It; ++It)
+        {
+            ABrush* BrushActor = *It;
+            if (!BrushActor || Cast<AVolume>(BrushActor))
+            {
+                continue;
+            }
+            UE_LOG(LogMahjongUI, Warning,
+                TEXT("Destroyed obsolete room BSP geometry: %s"),
+                *BrushActor->GetPathName());
+            BrushActor->Destroy();
+        }
+
+        for (TActorIterator<AStaticMeshActor> It(World); It; ++It)
+        {
+            AStaticMeshActor* MeshActor = *It;
+            UStaticMeshComponent* MeshComponent =
+                MeshActor ? MeshActor->GetStaticMeshComponent() : nullptr;
+            UStaticMesh* Mesh = MeshComponent ? MeshComponent->GetStaticMesh() : nullptr;
+            if (!Mesh)
+            {
+                continue;
+            }
+            const FString GeometryIdentity =
+                MeshActor->GetName() + TEXT(" ") + Mesh->GetPathName();
+            if (GeometryIdentity.Contains(TEXT("Sphere"), ESearchCase::IgnoreCase)
+                || GeometryIdentity.Contains(TEXT("Dome"), ESearchCase::IgnoreCase)
+                || GeometryIdentity.Contains(TEXT("Hemisphere"), ESearchCase::IgnoreCase))
+            {
+                UE_LOG(LogMahjongUI, Warning,
+                    TEXT("Destroyed obsolete room-map sky geometry: %s"),
+                    *GeometryIdentity);
+                MeshActor->Destroy();
+            }
         }
     }
 

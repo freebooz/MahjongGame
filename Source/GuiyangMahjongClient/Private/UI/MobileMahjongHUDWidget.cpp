@@ -10,6 +10,7 @@
 #include "Blueprint/WidgetTree.h"
 #include "Game/GuiyangMahjongPlayerState.h"
 #include "Components/Button.h"
+#include "Components/CanvasPanel.h"
 #include "Components/CanvasPanelSlot.h"
 #include "Components/HorizontalBox.h"
 #include "Components/HorizontalBoxSlot.h"
@@ -59,6 +60,31 @@ void UMobileMahjongHUDWidget::NativeConstruct()
     SetCanvasY(Btn_Ready, 760.0f);
     SetCanvasY(Txt_ReadyStatus, 850.0f);
     ApplyPlaceholderAvatars();
+    EnsureSeatIndicators();
+    if (Txt_RoomId)
+    {
+        if (UCanvasPanelSlot* RoomSlot = Cast<UCanvasPanelSlot>(Txt_RoomId->Slot))
+        {
+            RoomSlot->SetAnchors(FAnchors(0.0f, 0.0f));
+            RoomSlot->SetAlignment(FVector2D::ZeroVector);
+            RoomSlot->SetPosition(FVector2D(20.0f, 20.0f));
+            RoomSlot->SetSize(FVector2D(420.0f, 56.0f));
+            RoomSlot->SetZOrder(100);
+        }
+    }
+    // Keep the upper-left room header deliberately minimal. Older serialized
+    // widget assets may still carry these labels, so collapse them at runtime.
+    for (const FName HeaderWidgetName : {
+        FName(TEXT("Txt_GameTitle")),
+        FName(TEXT("Txt_RoundInfo")),
+        FName(TEXT("Txt_BaseScore"))})
+    {
+        if (UWidget* HeaderWidget =
+            WidgetTree ? WidgetTree->FindWidget(HeaderWidgetName) : nullptr)
+        {
+            HeaderWidget->SetVisibility(ESlateVisibility::Collapsed);
+        }
+    }
     for (const FName LayerName : {FName(TEXT("Scale_BackgroundFill")),
         FName(TEXT("Background_ComponentSlot"))})
     {
@@ -69,6 +95,20 @@ void UMobileMahjongHUDWidget::NativeConstruct()
             LegacyLayer->SetVisibility(ESlateVisibility::Collapsed);
             UE_LOG(LogMahjongUI, Log, TEXT("Collapsed legacy room HUD backing layer: %s (%s)"),
                 *LayerName.ToString(), *LegacyLayer->GetClass()->GetName());
+        }
+    }
+    if (Txt_CurrentTurnPlayer)
+    {
+        Txt_CurrentTurnPlayer->SetVisibility(ESlateVisibility::Collapsed);
+    }
+    for (const FName LegacyCallWidgetName : {
+        FName(TEXT("Border_ReferenceTing")),
+        FName(TEXT("Txt_ReferenceTing"))})
+    {
+        if (UWidget* LegacyCallWidget =
+            WidgetTree ? WidgetTree->FindWidget(LegacyCallWidgetName) : nullptr)
+        {
+            LegacyCallWidget->SetVisibility(ESlateVisibility::Collapsed);
         }
     }
     if (Table3DViewport)
@@ -159,6 +199,104 @@ void UMobileMahjongHUDWidget::ApplyPlaceholderAvatars()
     SetAvatar(TEXT("Img_Seat_Right"), PlaceholderAvatarB);
 }
 
+void UMobileMahjongHUDWidget::EnsureSeatIndicators()
+{
+    if (!WidgetTree || TurnIndicatorRings.Num() == 4)
+    {
+        return;
+    }
+
+    UTexture2D* RingTexture = LoadObject<UTexture2D>(nullptr,
+        TEXT("/Game/UI/Textures/Avatars/T_AvatarFrame_CurrentTurn."
+             "T_AvatarFrame_CurrentTurn"));
+    const FName AvatarNames[] = {
+        TEXT("Img_Seat_Self"), TEXT("Img_Seat_Right"),
+        TEXT("Img_Seat_Top"), TEXT("Img_Seat_Left")
+    };
+    for (int32 RelativeSeat = 0; RelativeSeat < 4; ++RelativeSeat)
+    {
+        UImage* Avatar = Cast<UImage>(WidgetTree->FindWidget(AvatarNames[RelativeSeat]));
+        UCanvasPanel* ParentCanvas = Avatar ? Cast<UCanvasPanel>(Avatar->GetParent()) : nullptr;
+        UCanvasPanelSlot* AvatarSlot = Avatar ? Cast<UCanvasPanelSlot>(Avatar->Slot) : nullptr;
+        if (!ParentCanvas || !AvatarSlot)
+        {
+            TurnIndicatorRings.Add(nullptr);
+            DealerBadges.Add(nullptr);
+            continue;
+        }
+
+        UImage* Ring = WidgetTree->ConstructWidget<UImage>(
+            UImage::StaticClass(),
+            *FString::Printf(TEXT("Img_TurnRing_%d"), RelativeSeat));
+        FSlateBrush RingBrush;
+        RingBrush.SetResourceObject(RingTexture);
+        RingBrush.DrawAs = ESlateBrushDrawType::Image;
+        Ring->SetBrush(RingBrush);
+        Ring->SetVisibility(ESlateVisibility::Collapsed);
+        Ring->SetRenderTransformPivot(FVector2D(0.5f, 0.5f));
+        UCanvasPanelSlot* RingSlot = ParentCanvas->AddChildToCanvas(Ring);
+        RingSlot->SetAnchors(AvatarSlot->GetAnchors());
+        RingSlot->SetAlignment(AvatarSlot->GetAlignment());
+        RingSlot->SetPosition(AvatarSlot->GetPosition());
+        RingSlot->SetSize(AvatarSlot->GetSize() + FVector2D(18.0f, 18.0f));
+        RingSlot->SetZOrder(AvatarSlot->GetZOrder() + 2);
+        TurnIndicatorRings.Add(Ring);
+
+        UTextBlock* DealerBadge = WidgetTree->ConstructWidget<UTextBlock>(
+            UTextBlock::StaticClass(),
+            *FString::Printf(TEXT("Txt_DealerBadge_%d"), RelativeSeat));
+        DealerBadge->SetText(FText::FromString(TEXT("庄")));
+        DealerBadge->SetColorAndOpacity(FSlateColor(
+            FLinearColor(1.0f, 0.72f, 0.18f, 1.0f)));
+        DealerBadge->SetJustification(ETextJustify::Center);
+        FSlateFontInfo DealerFont = DealerBadge->GetFont();
+        DealerFont.Size = 24;
+        DealerFont.OutlineSettings.OutlineSize = 2;
+        DealerBadge->SetFont(DealerFont);
+        DealerBadge->SetVisibility(ESlateVisibility::Collapsed);
+        UCanvasPanelSlot* DealerSlot = ParentCanvas->AddChildToCanvas(DealerBadge);
+        DealerSlot->SetAnchors(AvatarSlot->GetAnchors());
+        DealerSlot->SetAlignment(AvatarSlot->GetAlignment());
+        const FVector2D AvatarPosition = AvatarSlot->GetPosition();
+        const FVector2D AvatarSize = AvatarSlot->GetSize();
+        DealerSlot->SetPosition(FVector2D(
+            AvatarPosition.X + (AvatarSize.X - 48.0f) * 0.5f,
+            AvatarPosition.Y - 34.0f));
+        DealerSlot->SetSize(FVector2D(48.0f, 34.0f));
+        DealerSlot->SetZOrder(AvatarSlot->GetZOrder() + 3);
+        DealerBadges.Add(DealerBadge);
+    }
+}
+
+void UMobileMahjongHUDWidget::RefreshSeatIndicators(
+    const int32 CurrentTurnSeat, const int32 LocalSeat)
+{
+    EnsureSeatIndicators();
+    const int32 CurrentRelativeSeat =
+        GetRelativeSeatIndex(CurrentTurnSeat, LocalSeat);
+    const int32 DealerRelativeSeat =
+        GetRelativeSeatIndex(CachedDealerSeat, LocalSeat);
+    for (int32 RelativeSeat = 0; RelativeSeat < 4; ++RelativeSeat)
+    {
+        if (TurnIndicatorRings.IsValidIndex(RelativeSeat)
+            && TurnIndicatorRings[RelativeSeat])
+        {
+            TurnIndicatorRings[RelativeSeat]->SetVisibility(
+                RelativeSeat == CurrentRelativeSeat
+                    ? ESlateVisibility::HitTestInvisible
+                    : ESlateVisibility::Collapsed);
+        }
+        if (DealerBadges.IsValidIndex(RelativeSeat)
+            && DealerBadges[RelativeSeat])
+        {
+            DealerBadges[RelativeSeat]->SetVisibility(
+                RelativeSeat == DealerRelativeSeat
+                    ? ESlateVisibility::HitTestInvisible
+                    : ESlateVisibility::Collapsed);
+        }
+    }
+}
+
 void UMobileMahjongHUDWidget::NativeDestruct()
 {
     // The table belongs to the room world and survives HUD screen transitions.
@@ -214,20 +352,13 @@ void UMobileMahjongHUDWidget::RefreshRoomState(const FMahjongRoomState& State, c
 {
     CachedDealerSeat = State.RoomInfo.DealerSeat;
     Txt_RoomId->SetText(FText::FromString(FString::Printf(
-        TEXT("|  房间号  %s"), *State.RoomInfo.RoomId)));
-    if (UTextBlock* RoundInfo = Cast<UTextBlock>(WidgetTree->FindWidget(TEXT("Txt_RoundInfo"))))
+        TEXT("房间号  %s"), *State.RoomInfo.RoomId)));
+    RefreshSeatIndicators(CachedPublicState.CurrentTurnSeat, LocalSeat);
+    if (SettlementInstance
+        && (State.Lifecycle == EMahjongRoomLifecycle::Starting
+            || State.Lifecycle == EMahjongRoomLifecycle::Playing))
     {
-        RoundInfo->SetText(FText::FromString(FString::Printf(TEXT("|  局数  %d/%d局"),
-            FMath::Max(1, State.RoomInfo.CurrentRound), State.RoomInfo.RoundCount)));
-    }
-    if (UTextBlock* BaseScore = Cast<UTextBlock>(WidgetTree->FindWidget(TEXT("Txt_BaseScore"))))
-    {
-        BaseScore->SetText(FText::FromString(FString::Printf(
-            TEXT("|  底分  %d"), State.RoomInfo.BaseScore)));
-    }
-    if (UTextBlock* GameTitle = Cast<UTextBlock>(WidgetTree->FindWidget(TEXT("Txt_GameTitle"))))
-    {
-        GameTitle->SetText(FText::FromString(TEXT("贵州捉鸡麻将")));
+        SettlementInstance->SetVisibility(ESlateVisibility::Collapsed);
     }
 
     const bool bReadyStage = State.Lifecycle == EMahjongRoomLifecycle::Creating
@@ -287,6 +418,15 @@ void UMobileMahjongHUDWidget::RefreshRoomState(const FMahjongRoomState& State, c
 void UMobileMahjongHUDWidget::NativeTick(const FGeometry& MyGeometry, const float InDeltaTime)
 {
     Super::NativeTick(MyGeometry, InDeltaTime);
+    TurnIndicatorAngle = FMath::Fmod(
+        TurnIndicatorAngle + InDeltaTime * 90.0f, 360.0f);
+    for (UImage* Ring : TurnIndicatorRings)
+    {
+        if (Ring && Ring->GetVisibility() != ESlateVisibility::Collapsed)
+        {
+            Ring->SetRenderTransformAngle(TurnIndicatorAngle);
+        }
+    }
     if (!Table3DActor)
     {
         // The client presentation Blueprint is loaded asynchronously. Public/private state may
@@ -327,29 +467,12 @@ void UMobileMahjongHUDWidget::RefreshTableState(const FMahjongPublicTableState& 
     if (const AGuiyangMahjongGameState* GS = GetWorld() ? GetWorld()->GetGameState<AGuiyangMahjongGameState>() : nullptr)
     {
         Txt_RoomId->SetText(FText::FromString(FString::Printf(
-            TEXT("|  房间号  %s"), *GS->RoomState.RoomInfo.RoomId)));
-        if (UTextBlock* RoundInfo = Cast<UTextBlock>(WidgetTree->FindWidget(TEXT("Txt_RoundInfo"))))
-        {
-            RoundInfo->SetText(FText::FromString(FString::Printf(TEXT("|  局数  %d/%d局"),
-                FMath::Max(1, GS->RoomState.RoomInfo.CurrentRound),
-                GS->RoomState.RoomInfo.RoundCount)));
-        }
-        if (UTextBlock* BaseScore = Cast<UTextBlock>(WidgetTree->FindWidget(TEXT("Txt_BaseScore"))))
-        {
-            BaseScore->SetText(FText::FromString(FString::Printf(
-                TEXT("|  底分  %d"), GS->RoomState.RoomInfo.BaseScore)));
-        }
+            TEXT("房间号  %s"), *GS->RoomState.RoomInfo.RoomId)));
     }
     Txt_RemainingTileCount->SetText(FText::FromString(FString::Printf(TEXT("剩余：%d"), State.RemainingTileCount)));
     Txt_CurrentPhase->SetText(FText::FromString(FString::Printf(TEXT("阶段：%s"), *GetPhaseDisplayText(State.Phase))));
 
-    const FMahjongSeatInfo* TurnSeat = State.Seats.FindByPredicate([&State](const FMahjongSeatInfo& Seat)
-    {
-        return Seat.SeatIndex == State.CurrentTurnSeat;
-    });
-    Txt_CurrentTurnPlayer->SetText(FText::FromString(TurnSeat
-        ? FString::Printf(TEXT("当前：%s"), *TurnSeat->PlayerName)
-        : TEXT("当前：--")));
+    RefreshSeatIndicators(State.CurrentTurnSeat, LocalSeat);
 
     UTextBlock* SeatWidgets[] = {Seat_Self, Seat_Right, Seat_Top, Seat_Left};
     for (int32 RelativeSeat = 0; RelativeSeat < 4; ++RelativeSeat)
@@ -360,20 +483,11 @@ void UMobileMahjongHUDWidget::RefreshTableState(const FMahjongPublicTableState& 
     {
         const int32 RelativeSeat = GetRelativeSeatIndex(Seat.SeatIndex, LocalSeat);
         if (RelativeSeat == INDEX_NONE) continue;
-        FString StatusText;
-        if (Seat.SeatIndex == CachedDealerSeat)
-        {
-            StatusText += TEXT("  [庄]");
-        }
-        if (Seat.SeatIndex == State.CurrentTurnSeat)
-        {
-            StatusText += TEXT("  ▶ 当前出牌");
-        }
         const FString ScoreText = FMath::Abs(Seat.Score) >= 10000
             ? FString::Printf(TEXT("%.2f万"), static_cast<double>(Seat.Score) / 10000.0)
             : FString::Printf(TEXT("%d"), Seat.Score);
         SeatWidgets[RelativeSeat]->SetText(FText::FromString(FString::Printf(
-            TEXT("%s%s\n      %s"), *Seat.PlayerName, *StatusText, *ScoreText)));
+            TEXT("%s\n      %s"), *Seat.PlayerName, *ScoreText)));
     }
     RefreshOpponentHands(LocalSeat);
     RefreshDiscards(LocalSeat);

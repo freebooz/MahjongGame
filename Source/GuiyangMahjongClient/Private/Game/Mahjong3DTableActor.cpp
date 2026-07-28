@@ -365,8 +365,11 @@ void AMahjong3DTableActor::AddRemainingWall()
         // Draw the upper tile first, then the lower tile. A partially consumed
         // stack may leave its lower tile, but can never leave an upper tile floating.
         const int32 Level = 1 - IndexWithinSide % 2;
+        // The camera's screen-right axis is world -X. Start at the owning
+        // player's physical right end and advance leftward, matching the
+        // server's "从右往左数墩、顺时针连续抓牌" cursor.
         const FVector Base(
-            HalfWallSpan - StackFromRight * TilePitch,
+            -HalfWallSpan + StackFromRight * TilePitch,
             -WallDistanceFromCenter,
             TileDepth * 0.5f + Level * TileDepth);
         AddTile(nullptr, false, false, RotateAroundTable(Base, RelativeWallSide),
@@ -465,8 +468,13 @@ void AMahjong3DTableActor::AddDiscards()
             -0.5f * static_cast<float>(SafeDiscardColumns - 1) * TilePitch;
         const FVector Base(DiscardStartX + Column * TilePitch,
             -DiscardFirstRowDistanceFromCenter - Row * TileLongPitch, 1.4f);
+        FRotator DiscardRotation =
+            RotateAroundTable(FRotator::ZeroRotator, RelativeSeat);
+        // A discard belongs visually to the player who placed it. Turn its
+        // face 180 degrees so the glyph is upright from that player's seat.
+        DiscardRotation.Yaw += 180.0f;
         AddTile(&Record.Tile, true, false, RotateAroundTable(Base, RelativeSeat),
-            RotateAroundTable(FRotator::ZeroRotator, RelativeSeat),
+            DiscardRotation,
             Record.Sequence == CachedPublicState.Discards.Last().Sequence);
     }
 }

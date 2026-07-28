@@ -248,14 +248,15 @@ void AGuiyangMahjongGameMode::GetConnectedAuthorizedPlayerIds(
 void AGuiyangMahjongGameMode::PostLogin(APlayerController* NewPlayer)
 {
     Super::PostLogin(NewPlayer);
-    if (const FString* PlayerId = AuthorizedPlayerIdsByController.Find(NewPlayer))
+    if (const FString* AuthorizedPlayerId = AuthorizedPlayerIdsByController.Find(NewPlayer))
     {
+        const FString PlayerId = *AuthorizedPlayerId;
         if (UGameInstance* GameInstance = GetGameInstance())
         {
             if (UGuiyangAgonesLifecycleSubsystem* Lifecycle =
                 GameInstance->GetSubsystem<UGuiyangAgonesLifecycleSubsystem>())
             {
-                Lifecycle->NotifyPlayerConnected(*PlayerId);
+                Lifecycle->NotifyPlayerConnected(PlayerId);
             }
         }
 
@@ -263,15 +264,16 @@ void AGuiyangMahjongGameMode::PostLogin(APlayerController* NewPlayer)
         // managed GameServer. Complete the server session and room admission here instead of
         // waiting for a second client profile RPC. This keeps direct/reconnect travel from
         // getting stuck on the creating-room screen when the client login UI has no lobby token.
-        const FString* DisplayName = AuthorizedDisplayNamesByController.Find(NewPlayer);
+        const FString* AuthorizedDisplayName = AuthorizedDisplayNamesByController.Find(NewPlayer);
+        const FString DisplayName = AuthorizedDisplayName ? *AuthorizedDisplayName : FString();
         AGuiyangMahjongPlayerController* MahjongController =
             Cast<AGuiyangMahjongPlayerController>(NewPlayer);
         AGuiyangMahjongPlayerState* MahjongPlayer = MahjongController
             ? MahjongController->GetPlayerState<AGuiyangMahjongPlayerState>()
             : nullptr;
-        if (!DisplayName || !MahjongPlayer
+        if (DisplayName.IsEmpty() || !MahjongPlayer
             || !MahjongPlayer->AuthenticateServer(
-                *PlayerId, *DisplayName, EGuiyangLoginProvider::Guest))
+                PlayerId, DisplayName, EGuiyangLoginProvider::Guest))
         {
             if (MahjongController)
             {
@@ -281,18 +283,22 @@ void AGuiyangMahjongGameMode::PostLogin(APlayerController* NewPlayer)
         }
 
         FMahjongRoomState State;
-        EMahjongRoomError Error;
-        if (!RoomManager || ManagedRoomCode.IsEmpty()
-            || !RoomManager->AdmitManagedPlayer(
-                ManagedRoomCode, *PlayerId, *DisplayName, State, Error))
+        if (!RoomManager || ManagedRoomCode.IsEmpty())
+        {
+            MahjongController->Client_ShowErrorMessage(TEXT("托管房间尚未就绪"));
+            return;
+        }
+        EMahjongRoomError Error = EMahjongRoomError::None;
+        if (!RoomManager->AdmitManagedPlayer(
+                ManagedRoomCode, PlayerId, DisplayName, State, Error))
         {
             MahjongController->Client_ShowErrorMessage(ErrorToMessage(Error));
             return;
         }
         const FMahjongSeatInfo* Seat = State.Seats.FindByPredicate(
-            [PlayerId](const FMahjongSeatInfo& Item)
+            [&PlayerId](const FMahjongSeatInfo& Item)
             {
-                return Item.bOccupied && Item.PlayerId == *PlayerId;
+                return Item.bOccupied && Item.PlayerId == PlayerId;
             });
         MahjongPlayer->EnterRoomServer(
             State.RoomInfo.RoomId,

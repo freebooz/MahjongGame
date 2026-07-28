@@ -7,7 +7,7 @@ BLUEPRINT_PATH = "/Game/Client/Room/Presentation/BP_MahjongRoomPresentation"
 TABLE_MESH_PATH = "/Game/Art/Mahjong/Table/Meshes/SM_StandardMahjongTable"
 TABLE_CLASS_PATH = "/Script/GuiyangMahjongClient.Mahjong3DTableActor"
 SCHEMA_METADATA_TAG = "MahjongPresentationSchemaVersion"
-SCHEMA_VERSION = "6"
+SCHEMA_VERSION = "7"
 
 
 def find_component_template(subsystem, blueprint, variable_name):
@@ -136,7 +136,7 @@ set_properties(
         "intensity": 0.025,
         "light_color": unreal.Color(r=165, g=190, b=230, a=255),
         "cast_shadows": True,
-        "real_time_capture": True,
+        "real_time_capture": False,
         "lower_hemisphere_is_black": False,
         "lower_hemisphere_color": unreal.LinearColor(
             r=0.012, g=0.010, b=0.009, a=1.0

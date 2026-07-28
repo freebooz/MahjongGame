@@ -12,7 +12,7 @@ MAP_PATH = "/Game/Maps/MahjongRoomVisualPreviewMap"
 NATIVE_CLASS_PATH = "/Script/GuiyangMahjongClient.MahjongRoomPresentationActor"
 TABLE_CLASS_PATH = "/Script/GuiyangMahjongClient.Mahjong3DTableActor"
 SCHEMA_METADATA_TAG = "MahjongPresentationSchemaVersion"
-SCHEMA_VERSION = "6"
+SCHEMA_VERSION = "7"
 TABLE_MESH_PATH = (
     "/Game/Art/Mahjong/Table/Meshes/"
     "SM_StandardMahjongTable.SM_StandardMahjongTable"
@@ -142,7 +142,7 @@ root_handle, root_component, root_created = add_component(
     subsystem, blueprint, actor_handle, unreal.SceneComponent, "PresentationRoot"
 )
 
-# Schema 6 replaces the old weak Directional/Sky + two Spot Light rig. Delete
+# Schema 7 replaces the old weak Directional/Sky + two Spot Light rig. Delete
 # those component templates rather than hiding or stacking them, then create the
 # authored four-Rect-Light setup from a clean slate.
 needs_lighting_rebuild = (
@@ -300,7 +300,9 @@ if sky_created:
     configure_supported(
         sky,
         {
-            "real_time_capture": True,
+            # This enclosed room has no sky-atmosphere geometry. Capture once
+            # instead of generating a real-time sky representation.
+            "real_time_capture": False,
             "lower_hemisphere_is_black": False,
             "lower_hemisphere_color": unreal.LinearColor(
                 r=0.012, g=0.010, b=0.009, a=1.0

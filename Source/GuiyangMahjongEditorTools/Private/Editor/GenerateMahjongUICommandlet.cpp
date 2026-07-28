@@ -737,7 +737,7 @@ int32 UGenerateMahjongUICommandlet::Main(const FString& Params)
     Finish(Room);
 
     UWidgetBlueprint* Settlement = Create(TEXT("Dialogs"), TEXT("WBP_Settlement"), UMobileSettlementWidget::StaticClass());
-    { UCanvasPanel* C=Root(Settlement); UBorder* B=Border(Settlement,TEXT("Panel_Dialog9Slice"),PanelGreen); Place(C,B,{0,0},{980,720},FAnchors(0.5f,0.5f),{0.5f,0.5f}); UCanvasPanel* D=Settlement->WidgetTree->ConstructWidget<UCanvasPanel>(UCanvasPanel::StaticClass(),TEXT("Panel_SettlementContent")); MarkVariable(Settlement,D); B->AddChild(D); Place(D,Text(Settlement,TEXT("Txt_ResultTitle"),TEXT("本局结算"),42),{50,30},{880,64}); Place(D,Text(Settlement,TEXT("Txt_HuType"),TEXT("自摸"),28),{50,105},{880,48}); Place(D,Text(Settlement,TEXT("Txt_JiResult"),TEXT("鸡牌：0 张"),24),{50,160},{880,90}); Place(D,Vertical(Settlement,TEXT("Panel_PlayerScores")),{50,255},{880,250}); Place(D,Button(Settlement,TEXT("Btn_NextRound"),TEXT("再来一局")),{230,555},{240,76}); Place(D,Button(Settlement,TEXT("Btn_BackLobby"),TEXT("返回大厅")),{510,555},{240,76}); }
+    { UCanvasPanel* C=Root(Settlement); UBorder* B=Border(Settlement,TEXT("Panel_Dialog9Slice"),PanelGreen); Place(C,B,{0,0},{980,720},FAnchors(0.5f,0.5f),{0.5f,0.5f}); UCanvasPanel* D=Settlement->WidgetTree->ConstructWidget<UCanvasPanel>(UCanvasPanel::StaticClass(),TEXT("Panel_SettlementContent")); MarkVariable(Settlement,D); B->AddChild(D); Place(D,Text(Settlement,TEXT("Txt_ResultTitle"),TEXT("本局结算"),42),{50,30},{880,64}); Place(D,Text(Settlement,TEXT("Txt_HuType"),TEXT("自摸"),28),{50,105},{880,48}); Place(D,Text(Settlement,TEXT("Txt_JiResult"),TEXT("鸡牌：0 张"),24),{50,160},{880,90}); Place(D,Vertical(Settlement,TEXT("Panel_PlayerScores")),{50,255},{880,250}); Place(D,Button(Settlement,TEXT("Btn_NextRound"),TEXT("确定")),{230,555},{240,76}); Place(D,Button(Settlement,TEXT("Btn_BackLobby"),TEXT("返回大厅")),{510,555},{240,76}); }
     Finish(Settlement);
 
     UWidgetBlueprint* Reconnect = Create(TEXT("Dialogs"), TEXT("WBP_ReconnectOverlay"), UMobileReconnectOverlayWidget::StaticClass());
@@ -753,7 +753,7 @@ int32 UGenerateMahjongUICommandlet::Main(const FString& Params)
         Table3DViewport->SetBackgroundColor(FLinearColor::Transparent);
         Table3DViewport->SetVisibility(ESlateVisibility::HitTestInvisible);
         Place(C, Table3DViewport, {0,0}, {1920,1080});
-        Place(C, Text(HUD, TEXT("Txt_RoomId"), TEXT("房间：100001"), 20), {30,24}, {360,36});
+        Place(C, Text(HUD, TEXT("Txt_RoomId"), TEXT("房间号  100001"), 20), {30,24}, {360,36});
         Place(C, Text(HUD, TEXT("Txt_CurrentPhase"), TEXT("阶段：玩家回合"), 20), {30,62}, {420,36});
         Place(C, Text(HUD, TEXT("Txt_RemainingTileCount"), TEXT("剩余：83"), 26), {820,20}, {250,44});
         Place(C, Text(HUD, TEXT("Txt_CurrentTurnPlayer"), TEXT("当前：玩家"), 20), {790,62}, {360,36});

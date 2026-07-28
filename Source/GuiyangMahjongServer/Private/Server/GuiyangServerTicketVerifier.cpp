@@ -131,6 +131,7 @@ bool FGuiyangJoinTicketValidator::ValidateAndConsume(const FString& Ticket, cons
         OutError = TEXT("JOIN_TICKET_SCOPE_MISMATCH");
         return false;
     }
+    OutClaims.DisplayName.TrimStartAndEndInline();
     // 除了过期检查，也拒绝有效期异常长的票据，限制密钥泄露后的攻击窗口。
     if (OutClaims.ExpiresAtUnixSeconds <= NowUnixSeconds
         || OutClaims.ExpiresAtUnixSeconds > NowUnixSeconds + 120)
