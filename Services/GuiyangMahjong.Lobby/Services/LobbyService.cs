@@ -846,7 +846,11 @@ public sealed class LobbyService
                 StatusCodes.Status503ServiceUnavailable,
                 1000);
         }
-        var issued = joinTicketIssuer.Issue(player.PlayerId, room, room.Route.ServerInstanceId);
+        var issued = joinTicketIssuer.Issue(
+            player.PlayerId,
+            player.DisplayName,
+            room,
+            room.Route.ServerInstanceId);
         return room.Route with
         {
             RequestId = requestId,

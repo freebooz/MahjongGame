@@ -187,6 +187,14 @@ void UMobileRootHUDWidget::NativeConstruct()
         {
             if (IsAwaitingAllocatedRoomState(GetWorld())) ShowCreatingRoom(); else ShowLobby();
         }
+        else if (IsAwaitingAllocatedRoomState(GetWorld()))
+        {
+            // A managed GameServer validates the signed, single-use JoinTicket in PreLogin.
+            // Direct and reconnect travel may therefore reach MahjongRoomMap without carrying
+            // the lobby access token in the local login subsystem. Keep the protected loading
+            // screen visible until the authoritative PlayerState/RoomState arrives.
+            ShowCreatingRoom();
+        }
         else
         {
             ShowLogin();
@@ -421,7 +429,7 @@ void UMobileRootHUDWidget::RouteFromRoomState(const FMahjongRoomState& State)
 {
     // 根据权威房间生命周期选择大厅、等待房间或直接覆盖在三维关卡上的游戏 HUD。
     const UGuiyangLoginSubsystem* Login = GetGameInstance()->GetSubsystem<UGuiyangLoginSubsystem>();
-    if (!Login || !Login->IsSessionValid())
+    if ((!Login || !Login->IsSessionValid()) && !IsAwaitingAllocatedRoomState(GetWorld()))
     {
         ShowLogin();
         return;

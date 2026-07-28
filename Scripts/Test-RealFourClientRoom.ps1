@@ -136,31 +136,32 @@ try {
         }
     }
 
-    $failurePattern = 'NetChecksumMismatch|Connection failed|BroadcastNetworkFailure|Network Failure:|ConnectionLost'
+    $failurePattern = 'NetChecksumMismatch|Connection failed|BroadcastNetworkFailure|Network Failure:|ConnectionLost|入场票据与玩家身份不匹配'
     $connectedPattern = 'UPendingNetGame::TravelCompleted Pending net game travel completed'
+    $roomReadyPattern = 'Root HUD backing layer collapsed for screen /Game/UI/Screens/WBP_GameHUD'
     $deadline = [DateTimeOffset]::Now.AddSeconds($ConnectTimeoutSeconds)
     do {
-        $allConnected = $true
+        $allConnectedAndReady = $true
         foreach ($entry in $processes) {
             if ($entry.Process.HasExited) {
                 throw "Client $($entry.Number) exited before joining the room."
             }
             if (!(Test-Path -LiteralPath $entry.LogPath)) {
-                $allConnected = $false
+                $allConnectedAndReady = $false
                 continue
             }
             $text = Get-Content -LiteralPath $entry.LogPath -Raw
             if ($text -match $failurePattern) {
                 throw "Client $($entry.Number) reported a network failure. See $($entry.LogPath)"
             }
-            if ($text -notmatch $connectedPattern) {
-                $allConnected = $false
+            if ($text -notmatch $connectedPattern -or $text -notmatch $roomReadyPattern) {
+                $allConnectedAndReady = $false
             }
         }
-        if (!$allConnected) { Start-Sleep -Milliseconds 500 }
-    } while (!$allConnected -and [DateTimeOffset]::Now -lt $deadline)
-    if (!$allConnected) {
-        throw "Not all clients completed network travel within $ConnectTimeoutSeconds seconds."
+        if (!$allConnectedAndReady) { Start-Sleep -Milliseconds 500 }
+    } while (!$allConnectedAndReady -and [DateTimeOffset]::Now -lt $deadline)
+    if (!$allConnectedAndReady) {
+        throw "Not all clients entered the visible Mahjong room within $ConnectTimeoutSeconds seconds."
     }
 
     Start-Sleep -Seconds $StableSeconds
@@ -185,6 +186,7 @@ try {
                 processId = $_.Process.Id
                 log = $_.LogPath
                 travelCompleted = $true
+                roomUiReady = $true
                 networkFailure = $false
             }
         })

@@ -65,9 +65,11 @@ private:
     /** 玩家会话摘要及登录前已由票据授权的短期缓存。 */
     TMap<FString, FString> SessionTokenDigestsByPlayer;
     TMap<FString, FString> PendingAuthorizedPlayersByTicketDigest;
+    TMap<FString, FString> PendingAuthorizedDisplayNamesByTicketDigest;
     TMap<FString, int64> PendingTicketExpiryByDigest;
     /** 已完成身份绑定的网络连接到玩家 ID 映射。 */
     TMap<TObjectPtr<APlayerController>, FString> AuthorizedPlayerIdsByController;
+    TMap<TObjectPtr<APlayerController>, FString> AuthorizedDisplayNamesByController;
     /** 当前编排模式及托管世界初始化状态。 */
     bool bManagedGameServer = false;
     bool bAgonesGameServer = false;

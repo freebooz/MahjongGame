@@ -9,6 +9,8 @@ struct GUIYANGMAHJONGSERVER_API FGuiyangJoinTicketClaims
 {
     /** 被允许进入房间的玩家标识。 */
     FString PlayerId;
+    /** Auth/Lobby-verified display name bound into the signed ticket. */
+    FString DisplayName;
     /** 票据限定的房间、比赛和服务器实例范围。 */
     FString RoomId;
     FString MatchId;
