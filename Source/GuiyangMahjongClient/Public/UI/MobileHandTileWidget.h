@@ -27,6 +27,11 @@ protected:
     UPROPERTY(BlueprintReadOnly) FMahjongTile TileData;
     UPROPERTY(BlueprintReadOnly) bool bSelected = false;
     UPROPERTY(BlueprintReadOnly) bool bCanPlay = false;
+    /** Shared desktop double-click / mobile double-tap interval. */
+    UPROPERTY(EditDefaultsOnly, Category="Mahjong|Input",
+        meta=(ClampMin="0.20", ClampMax="0.60"))
+    float DoubleClickIntervalSeconds = 0.35f;
+    double LastClickTimeSeconds = -1.0;
 public:
     UPROPERTY(BlueprintAssignable, Category="麻将|UI") FMahjongHandTileSelected OnTileSelected;
     UPROPERTY(BlueprintAssignable, Category="Mahjong|UI") FMahjongHandTilePlayRequested OnPlayRequested;

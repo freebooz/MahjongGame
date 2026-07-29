@@ -177,10 +177,17 @@ int32 AMahjong3DTableActor::GetLocalHandTileUnderCursor(
     }
 
     const FVector2D Cursor(MouseX, MouseY);
-    int32 ClosestContainedTileId = INDEX_NONE;
-    double ClosestContainedDistanceSquared = TNumericLimits<double>::Max();
-    int32 ClosestTileId = INDEX_NONE;
-    double ClosestDistanceSquared = TNumericLimits<double>::Max();
+    struct FProjectedHandTile
+    {
+        int32 UniqueId = INDEX_NONE;
+        FVector2D Center = FVector2D::ZeroVector;
+        double MinY = TNumericLimits<double>::Max();
+        double MaxY = TNumericLimits<double>::Lowest();
+    };
+    TArray<FProjectedHandTile> ProjectedTiles;
+    ProjectedTiles.Reserve(LocalHandTileComponents.Num());
+    double HandMinY = TNumericLimits<double>::Max();
+    double HandMaxY = TNumericLimits<double>::Lowest();
 
     for (const TPair<int32, UStaticMeshComponent*>& Pair :
          LocalHandTileComponents)
@@ -198,26 +205,11 @@ int32 AMahjong3DTableActor::GetLocalHandTileUnderCursor(
             continue;
         }
 
-        const double CenterDistanceSquared =
-            FVector2D::DistSquared(Cursor, ProjectedCenter);
-        if (CenterDistanceSquared < ClosestDistanceSquared)
-        {
-            ClosestDistanceSquared = CenterDistanceSquared;
-            ClosestTileId = Pair.Key;
-        }
-
-        // Static-mesh simple collision can overlap the adjacent tile after the
-        // authored tilt/scale is applied. Project the visible world bounds
-        // instead, then choose the closest centre among overlapping boxes.
+        FProjectedHandTile ProjectedTile;
+        ProjectedTile.UniqueId = Pair.Key;
+        ProjectedTile.Center = ProjectedCenter;
         const FVector Origin = Component->Bounds.Origin;
         const FVector Extent = Component->Bounds.BoxExtent;
-        FVector2D MinScreen(
-            TNumericLimits<double>::Max(),
-            TNumericLimits<double>::Max());
-        FVector2D MaxScreen(
-            TNumericLimits<double>::Lowest(),
-            TNumericLimits<double>::Lowest());
-        bool bProjectedAnyCorner = false;
         for (int32 CornerIndex = 0; CornerIndex < 8; ++CornerIndex)
         {
             const FVector Corner = Origin + FVector(
@@ -228,39 +220,67 @@ int32 AMahjong3DTableActor::GetLocalHandTileUnderCursor(
             if (PlayerController->ProjectWorldLocationToScreen(
                 Corner, ProjectedCorner, true))
             {
-                MinScreen.X = FMath::Min(MinScreen.X, ProjectedCorner.X);
-                MinScreen.Y = FMath::Min(MinScreen.Y, ProjectedCorner.Y);
-                MaxScreen.X = FMath::Max(MaxScreen.X, ProjectedCorner.X);
-                MaxScreen.Y = FMath::Max(MaxScreen.Y, ProjectedCorner.Y);
-                bProjectedAnyCorner = true;
+                ProjectedTile.MinY =
+                    FMath::Min(ProjectedTile.MinY, ProjectedCorner.Y);
+                ProjectedTile.MaxY =
+                    FMath::Max(ProjectedTile.MaxY, ProjectedCorner.Y);
             }
         }
-
-        constexpr float ScreenHitMargin = 3.0f;
-        if (bProjectedAnyCorner
-            && Cursor.X >= MinScreen.X - ScreenHitMargin
-            && Cursor.X <= MaxScreen.X + ScreenHitMargin
-            && Cursor.Y >= MinScreen.Y - ScreenHitMargin
-            && Cursor.Y <= MaxScreen.Y + ScreenHitMargin
-            && CenterDistanceSquared < ClosestContainedDistanceSquared)
+        if (ProjectedTile.MinY <= ProjectedTile.MaxY)
         {
-            ClosestContainedDistanceSquared = CenterDistanceSquared;
-            ClosestContainedTileId = Pair.Key;
+            HandMinY = FMath::Min(HandMinY, ProjectedTile.MinY);
+            HandMaxY = FMath::Max(HandMaxY, ProjectedTile.MaxY);
+            ProjectedTiles.Add(ProjectedTile);
         }
     }
 
-    if (ClosestContainedTileId != INDEX_NONE)
+    if (ProjectedTiles.IsEmpty())
     {
-        return ClosestContainedTileId;
+        return INDEX_NONE;
     }
 
-    // Small fallback tolerance covers anti-aliased edges while preventing a
-    // click in the operation-button area from selecting a hand tile.
-    constexpr double MaxFallbackDistancePixels = 54.0;
-    return ClosestDistanceSquared
-            <= MaxFallbackDistancePixels * MaxFallbackDistancePixels
-        ? ClosestTileId
-        : INDEX_NONE;
+    // The local hand is one horizontal row. Partition it at the exact
+    // midpoints between projected mesh centres instead of testing overlapping
+    // physics/AABB bounds. Therefore one cursor X can resolve to only one
+    // physical UniqueId, including when the previously selected tile is raised.
+    ProjectedTiles.Sort([](
+        const FProjectedHandTile& Left,
+        const FProjectedHandTile& Right)
+    {
+        return Left.Center.X < Right.Center.X;
+    });
+
+    constexpr double ScreenHitMargin = 6.0;
+    if (Cursor.Y < HandMinY - ScreenHitMargin
+        || Cursor.Y > HandMaxY + ScreenHitMargin)
+    {
+        return INDEX_NONE;
+    }
+
+    for (int32 Index = 0; Index < ProjectedTiles.Num(); ++Index)
+    {
+        const double LeftBoundary = Index == 0
+            ? ProjectedTiles[Index].Center.X
+                - 0.5 * FMath::Abs(
+                    ProjectedTiles[FMath::Min(1, ProjectedTiles.Num() - 1)]
+                        .Center.X
+                    - ProjectedTiles[Index].Center.X)
+            : 0.5 * (ProjectedTiles[Index - 1].Center.X
+                + ProjectedTiles[Index].Center.X);
+        const double RightBoundary = Index == ProjectedTiles.Num() - 1
+            ? ProjectedTiles[Index].Center.X
+                + 0.5 * FMath::Abs(
+                    ProjectedTiles[Index].Center.X
+                    - ProjectedTiles[FMath::Max(0, Index - 1)].Center.X)
+            : 0.5 * (ProjectedTiles[Index].Center.X
+                + ProjectedTiles[Index + 1].Center.X);
+        if (Cursor.X >= LeftBoundary - ScreenHitMargin
+            && Cursor.X < RightBoundary + ScreenHitMargin)
+        {
+            return ProjectedTiles[Index].UniqueId;
+        }
+    }
+    return INDEX_NONE;
 }
 
 FRotator AMahjong3DTableActor::ResolveTileMeshRotation(
@@ -333,12 +353,12 @@ void AMahjong3DTableActor::ApplyLocalHandTileVisualState(const int32 UniqueId)
     // The Mahjong50 material exposes a Fresnel rim-emissive parameter. It
     // produces a real mesh-aligned glow without spawning helper geometry.
     Component->SetScalarParameterValueOnMaterials(
-        TEXT("SelectionGlow"), bSelected ? 50.0f : (bHovered ? 1.6f : 0.0f));
+        TEXT("SelectionGlow"), bSelected ? 20.0f : (bHovered ? 1.6f : 0.0f));
     Component->SetVectorParameterValueOnMaterials(
         TEXT("SelectionGlowColor"),
         bSelected
-            ? FVector(1.0f, 0.46f, 0.04f)
-            : FVector(0.10f, 0.82f, 0.42f));
+            ? FVector(0.04f, 1.0f, 0.18f)
+            : FVector(0.04f, 0.35f, 1.0f));
 }
 
 UStaticMeshComponent* AMahjong3DTableActor::AddBox(const FVector& Location, const FVector& Size,
@@ -437,12 +457,12 @@ UStaticMeshComponent* AMahjong3DTableActor::AddTile(
 
         Component->SetScalarParameterValueOnMaterials(
             TEXT("SelectionGlow"),
-            bSelectionOutline ? 50.0f : (bHoverOutline ? 1.6f : 0.0f));
+            bSelectionOutline ? 20.0f : (bHoverOutline ? 1.6f : 0.0f));
         Component->SetVectorParameterValueOnMaterials(
             TEXT("SelectionGlowColor"),
             bSelectionOutline
-                ? FVector(1.0f, 0.46f, 0.04f)
-                : FVector(0.10f, 0.82f, 0.42f));
+                ? FVector(0.04f, 1.0f, 0.18f)
+                : FVector(0.04f, 0.35f, 1.0f));
         return Component;
     }
     const FVector Size = (bUpright
@@ -635,9 +655,13 @@ void AMahjong3DTableActor::AddDiscards()
         // A discard belongs visually to the player who placed it. Turn its
         // face 180 degrees so the glyph is upright from that player's seat.
         DiscardRotation.Yaw += 180.0f;
-        AddTile(&Record.Tile, true, false, RotateAroundTable(Base, RelativeSeat),
-            DiscardRotation,
-            Record.Sequence == CachedPublicState.Discards.Last().Sequence);
+        // Discards never inherit the local-hand selection state. Highlighting
+        // the latest record with bSelected also applies SelectedTileLift,
+        // which made another player's discard appear to rise after clicking
+        // a local hand tile.
+        AddTile(&Record.Tile, true, false,
+            RotateAroundTable(Base, RelativeSeat), DiscardRotation,
+            false, false);
     }
 }
 

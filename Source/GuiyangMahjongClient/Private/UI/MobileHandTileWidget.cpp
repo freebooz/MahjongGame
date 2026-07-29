@@ -18,6 +18,7 @@ void UMobileHandTileWidget::SetTile(const FMahjongTile& Tile, const bool bInCanP
 {
     TileData = Tile;
     bCanPlay = bInCanPlay;
+    LastClickTimeSeconds = -1.0;
     SetSelected(false);
     FSlateBrush NormalBrush;
     if (UMahjongTileVisualLibrary::ConfigureFaceBrush(Tile, NormalBrush))
@@ -50,24 +51,30 @@ void UMobileHandTileWidget::SetSelected(const bool bInSelected)
     bSelected = bInSelected;
     // The visible hand is the 3D table model. Keep this transparent UMG hit
     // target fixed so selecting a tile does not move the clickable area onto a
-    // neighbouring tile; AMahjong3DTableActor performs the visible 5 cm lift.
+    // neighbouring tile; AMahjong3DTableActor performs the visible 2.5 cm lift.
     SetRenderTranslation(FVector2D::ZeroVector);
 }
 
 void UMobileHandTileWidget::HandleTileClicked()
 {
-    if (bSelected)
+    const double NowSeconds = FPlatformTime::Seconds();
+    const bool bDoubleClick = LastClickTimeSeconds >= 0.0
+        && NowSeconds - LastClickTimeSeconds
+            <= static_cast<double>(DoubleClickIntervalSeconds);
+    LastClickTimeSeconds = bDoubleClick ? -1.0 : NowSeconds;
+
+    // Double-click is a play gesture only for the current player. For every
+    // other player, both quick clicks must remain ordinary selection toggles:
+    // first click raises the south-hand tile, second click restores it.
+    if (bDoubleClick && bCanPlay)
     {
-        if (bCanPlay)
+        if (!bSelected)
         {
-            UMahjongUISoundLibrary::PlayUISound(this, EMahjongUISound::TilePlay);
-            OnPlayRequested.Broadcast(this);
+            SetSelected(true);
+            OnTileSelected.Broadcast(this);
         }
-        else
-        {
-            SetSelected(false);
-            OnTileSelected.Broadcast(nullptr);
-        }
+        UMahjongUISoundLibrary::PlayUISound(this, EMahjongUISound::TilePlay);
+        OnPlayRequested.Broadcast(this);
         return;
     }
 
@@ -79,6 +86,10 @@ void UMobileHandTileWidget::HandleTileClicked()
         UE_LOG(LogMahjongUI, Log, TEXT("选中手牌：%s"), *TileData.ToDebugString());
         return;
     }
+
+    // Single click/tap on the already-selected south hand tile restores it.
+    SetSelected(false);
+    OnTileSelected.Broadcast(nullptr);
 }
 
 void UMobileHandTileWidget::HandleTileHovered()

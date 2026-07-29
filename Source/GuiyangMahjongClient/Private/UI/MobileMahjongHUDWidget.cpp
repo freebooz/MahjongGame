@@ -907,10 +907,32 @@ void UMobileMahjongHUDWidget::RefreshJiDisplay()
 
 void UMobileMahjongHUDWidget::HandleTileSelected(UMobileHandTileWidget* TileWidget)
 {
-    SelectedHandTile = TileWidget;
-    SelectedHandTileId = TileWidget
+    const int32 NewSelectedTileId = TileWidget
         ? TileWidget->GetTileData().UniqueId
         : INDEX_NONE;
+    const bool bBelongsToLocalSouthHand = TileWidget == nullptr
+        || CachedPrivateState.Hand.Tiles.ContainsByPredicate(
+            [NewSelectedTileId](const FMahjongTile& Tile)
+            {
+                return Tile.UniqueId == NewSelectedTileId;
+            });
+    if (!bBelongsToLocalSouthHand)
+    {
+        UE_LOG(LogMahjongUI, Warning,
+            TEXT("Ignored stale/non-local hand selection UniqueId=%d"),
+            NewSelectedTileId);
+        return;
+    }
+
+    // Restore the previously selected physical tile before applying the new
+    // selection. This guarantees that exactly the latest clicked south-hand
+    // tile is raised, while clicking the same tile again restores every tile.
+    if (Table3DActor)
+    {
+        Table3DActor->SetSelectedTile(INDEX_NONE);
+    }
+    SelectedHandTile = TileWidget;
+    SelectedHandTileId = NewSelectedTileId;
     for (int32 ChildIndex = 0; ChildIndex < Panel_SelfHandTiles->GetChildrenCount(); ++ChildIndex)
     {
         if (UMobileHandTileWidget* Child = Cast<UMobileHandTileWidget>(Panel_SelfHandTiles->GetChildAt(ChildIndex)))
@@ -920,11 +942,7 @@ void UMobileMahjongHUDWidget::HandleTileSelected(UMobileHandTileWidget* TileWidg
     }
     if (Table3DActor && TileWidget)
     {
-        Table3DActor->SetSelectedTile(TileWidget->GetTileData().UniqueId);
-    }
-    else if (Table3DActor)
-    {
-        Table3DActor->SetSelectedTile(INDEX_NONE);
+        Table3DActor->SetSelectedTile(NewSelectedTileId);
     }
 }
 
@@ -941,11 +959,31 @@ void UMobileMahjongHUDWidget::HandleTilePlayRequested(UMobileHandTileWidget* Til
     {
         return;
     }
+    const int32 PlayedTileId = TileWidget->GetTileData().UniqueId;
+    SelectedHandTile = nullptr;
+    SelectedHandTileId = INDEX_NONE;
+    for (int32 ChildIndex = 0;
+         ChildIndex < Panel_SelfHandTiles->GetChildrenCount();
+         ++ChildIndex)
+    {
+        if (UMobileHandTileWidget* Child =
+            Cast<UMobileHandTileWidget>(
+                Panel_SelfHandTiles->GetChildAt(ChildIndex)))
+        {
+            Child->SetSelected(false);
+        }
+    }
+    if (Table3DActor)
+    {
+        // Clear immediately rather than waiting for replicated hand/discard
+        // snapshots, so the played tile cannot carry lift/glow into a discard.
+        Table3DActor->SetHoveredTile(INDEX_NONE);
+        Table3DActor->SetSelectedTile(INDEX_NONE);
+    }
     if (AGuiyangMahjongPlayerController* PC =
         Cast<AGuiyangMahjongPlayerController>(GetOwningPlayer()))
     {
-        PC->RequestTableAction(EMahjongActionType::Play,
-            TileWidget->GetTileData().UniqueId);
+        PC->RequestTableAction(EMahjongActionType::Play, PlayedTileId);
     }
 }
 
