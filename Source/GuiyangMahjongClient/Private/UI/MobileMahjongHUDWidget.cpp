@@ -224,9 +224,12 @@ void UMobileMahjongHUDWidget::NativeConstruct()
         Btn_ReturnLobby->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleReturnLobby);
     }
 
-    // The old 2D tiles remain only as the transparent local-hand hit target. All visuals are 3D.
+    // The old 2D tiles remain only as transparent local-hand hit targets. The
+    // panel itself must not intercept input, but its tile-button children must
+    // stay hit-testable so preview mouse/touch events reach this HUD and can be
+    // resolved against the exact projected 3D south-hand mesh.
     Panel_SelfHandTiles->SetRenderOpacity(0.0f);
-    Panel_SelfHandTiles->SetVisibility(ESlateVisibility::HitTestInvisible);
+    Panel_SelfHandTiles->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
     Panel_TopHandTiles->SetVisibility(ESlateVisibility::Collapsed);
     Panel_LeftHandTiles->SetVisibility(ESlateVisibility::Collapsed);
     Panel_RightHandTiles->SetVisibility(ESlateVisibility::Collapsed);
@@ -529,17 +532,29 @@ void UMobileMahjongHUDWidget::NativeTick(const FGeometry& MyGeometry, const floa
     }
     if (bVisualReviewMode)
     {
+        Txt_Countdown->SetVisibility(ESlateVisibility::HitTestInvisible);
         Txt_Countdown->SetText(FText::AsNumber(12));
         return;
     }
     const AGuiyangMahjongGameState* GS = GetWorld() ? GetWorld()->GetGameState<AGuiyangMahjongGameState>() : nullptr;
     if (!GS || GS->PublicTableState.ActionDeadlineServerTimeSeconds <= 0.0)
     {
-        Txt_Countdown->SetText(FText::FromString(TEXT("--")));
+        Txt_Countdown->SetVisibility(ESlateVisibility::Collapsed);
         return;
     }
-    const int32 RemainingSeconds = FMath::Max(0, FMath::CeilToInt(
-        GS->PublicTableState.ActionDeadlineServerTimeSeconds - GS->GetServerWorldTimeSeconds()));
+    const double RemainingTimeSeconds =
+        GS->PublicTableState.ActionDeadlineServerTimeSeconds - GS->GetServerWorldTimeSeconds();
+    const int32 VisibleCountdownSeconds =
+        FMath::Max(0, GS->PublicTableState.ActionTimeoutSeconds);
+    if (RemainingTimeSeconds > static_cast<double>(VisibleCountdownSeconds))
+    {
+        // The server has armed the complete 45-second turn window, but the
+        // stopwatch becomes visible only after the first 15 seconds expire.
+        Txt_Countdown->SetVisibility(ESlateVisibility::Collapsed);
+        return;
+    }
+    Txt_Countdown->SetVisibility(ESlateVisibility::HitTestInvisible);
+    const int32 RemainingSeconds = FMath::Max(0, FMath::CeilToInt(RemainingTimeSeconds));
     Txt_Countdown->SetText(FText::AsNumber(RemainingSeconds));
 }
 

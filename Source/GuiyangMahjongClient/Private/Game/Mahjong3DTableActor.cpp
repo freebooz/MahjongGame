@@ -457,7 +457,7 @@ UStaticMeshComponent* AMahjong3DTableActor::AddTile(
 
         Component->SetScalarParameterValueOnMaterials(
             TEXT("SelectionGlow"),
-            bSelectionOutline ? 20.0f : (bHoverOutline ? 1.6f : 0.0f));
+            bSelectionOutline ? 20.0f : (bHoverOutline ? 10.0f : 0.0f));
         Component->SetVectorParameterValueOnMaterials(
             TEXT("SelectionGlowColor"),
             bSelectionOutline

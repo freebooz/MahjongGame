@@ -23,6 +23,11 @@
 namespace
 {
     constexpr float NextRoundAutoStartDelaySeconds = 10.0f;
+    // A player gets a quiet grace period before the clock becomes visible.
+    // The authoritative timeout fires only after the complete grace + countdown
+    // window, so hiding the first phase on the client cannot shorten a turn.
+    constexpr int32 PlayerTurnGraceSeconds = 15;
+    constexpr int32 PlayerTurnVisibleCountdownSeconds = 30;
 
     bool IsFullMatchIntegrationEnabled()
     {
@@ -848,13 +853,21 @@ void AGuiyangMahjongGameMode::RefreshActionTimeoutTimer()
     ArmedTimeoutRoundId = State.RoundId;
     ArmedTimeoutTurnId = State.TurnId;
     ArmedTimeoutPhase = State.Phase;
-    const int32 TimeoutSeconds = State.Phase == EMahjongTablePhase::PlayerTurn
-        ? TableEngine->GetLockedRuleSnapshot().Config.TurnTimeoutSeconds
+    const bool bPlayerTurn = State.Phase == EMahjongTablePhase::PlayerTurn;
+    const int32 VisibleTimeoutSeconds = bPlayerTurn
+        ? PlayerTurnVisibleCountdownSeconds
         : TableEngine->GetLockedRuleSnapshot().Config.ReactionTimeoutSeconds;
-    // 仅显式完整对局集成模式使用快速计时器；正式游戏仍严格采用规则快照秒数。
-    const float TimerDelay = IsFullMatchIntegrationEnabled() ? 0.05f : static_cast<float>(TimeoutSeconds);
+    const int32 TotalTimeoutSeconds = bPlayerTurn
+        ? PlayerTurnGraceSeconds + PlayerTurnVisibleCountdownSeconds
+        : VisibleTimeoutSeconds;
+    // Only the explicit full-match integration mode uses a fast timer.
+    // Production turns use a hidden 15-second grace period followed by the
+    // replicated 30-second visible countdown.
+    const float TimerDelay = IsFullMatchIntegrationEnabled()
+        ? 0.05f
+        : static_cast<float>(TotalTimeoutSeconds);
     TableEngine->SetActionDeadlineForServer(GetWorld()->GetTimeSeconds() + TimerDelay,
-        IsFullMatchIntegrationEnabled() ? 1 : TimeoutSeconds);
+        IsFullMatchIntegrationEnabled() ? 1 : VisibleTimeoutSeconds);
     FTimerDelegate Delegate;
     Delegate.BindUObject(this, &ThisClass::HandleActionTimeout, State.RoundId, State.TurnId, State.Phase);
     GetWorldTimerManager().SetTimer(ActionTimeoutHandle, Delegate, TimerDelay, false);
