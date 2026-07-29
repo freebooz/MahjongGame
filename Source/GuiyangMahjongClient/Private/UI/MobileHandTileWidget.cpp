@@ -63,16 +63,12 @@ void UMobileHandTileWidget::HandleTileClicked()
             <= static_cast<double>(DoubleClickIntervalSeconds);
     LastClickTimeSeconds = bDoubleClick ? -1.0 : NowSeconds;
 
-    // Double-click is a play gesture only for the current player. For every
-    // other player, both quick clicks must remain ordinary selection toggles:
-    // first click raises the south-hand tile, second click restores it.
-    if (bDoubleClick && bCanPlay)
+    // A double-click is a play gesture only when this exact tile is already
+    // selected (and therefore visibly raised) and it is the local player's
+    // turn. An unselected tile can never be played by the double-click itself.
+    // For every other player both clicks remain ordinary selection toggles.
+    if (bDoubleClick && bCanPlay && bSelected)
     {
-        if (!bSelected)
-        {
-            SetSelected(true);
-            OnTileSelected.Broadcast(this);
-        }
         UMahjongUISoundLibrary::PlayUISound(this, EMahjongUISound::TilePlay);
         OnPlayRequested.Broadcast(this);
         return;
