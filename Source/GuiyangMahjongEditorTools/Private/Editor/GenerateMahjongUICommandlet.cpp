@@ -261,10 +261,9 @@ namespace MahjongUIBuilder
         {
             return TEXT("/Game/UI/Textures/Backgrounds/T_BG_Settings_GuiyangPattern.T_BG_Settings_GuiyangPattern");
         }
-        if (BPName == TEXT("WBP_Settlement"))
-        {
-            return TEXT("/Game/UI/Textures/Backgrounds/T_BG_Settlement_GuiyangRiver.T_BG_Settlement_GuiyangRiver");
-        }
+        // Settlement is shown above the live 3D table and intentionally has
+        // no full-screen background image.
+        if (BPName == TEXT("WBP_Settlement")) return nullptr;
         // Root HUD, Game HUD, popup-only dialogs and reusable components are transparent.
         return nullptr;
     }
@@ -805,7 +804,8 @@ int32 UGenerateMahjongUICommandlet::Main(const FString& Params)
         Place(C, Text(HUD, TEXT("Seat_Right"), TEXT("玩家\n13张\n0分"), 20), {1710,285}, {180,96});
 
         // 等待玩家和准备操作直接覆盖在三维牌桌上，不再使用独立 WBP_Room 页面。
-        Place(C, Button(HUD, TEXT("Btn_ReturnLobby"), TEXT("返回大厅")), {1640,40}, {230,64});
+        Place(C, Button(HUD, TEXT("Btn_ReturnLobby"), TEXT("返回大厅")),
+            {-8,8}, {96,112}, FAnchors(1,0), FVector2D(1,0));
         Place(C, Button(HUD, TEXT("Btn_Ready"), TEXT("准备")), {840,770}, {240,72});
         UTextBlock* ReadyStatus = Text(HUD, TEXT("Txt_ReadyStatus"), TEXT("点击准备，满四人后自动开始"), 22);
         ReadyStatus->SetJustification(ETextJustify::Center);

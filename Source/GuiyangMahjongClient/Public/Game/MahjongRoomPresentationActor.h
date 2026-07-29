@@ -29,4 +29,9 @@ public:
 
 private:
     virtual void BeginPlay() override;
+    virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+    void SuppressUnexpectedRoomGeometry();
+
+    /** Keeps older deployed servers from showing late-replicated fallback pawns. */
+    FTimerHandle UnexpectedGeometryTimer;
 };

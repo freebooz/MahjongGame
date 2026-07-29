@@ -10,6 +10,8 @@ class USceneComponent;
 class UStaticMesh;
 class UStaticMeshComponent;
 class UMaterialInterface;
+class UPrimitiveComponent;
+class APlayerController;
 
 /**
  * UMG Viewport 中的三维牌桌表现层。
@@ -29,6 +31,9 @@ public:
         const FMahjongPrivatePlayerState& PrivateState, bool bHasPrivateState, int32 LocalSeat);
     /** 高亮指定唯一牌 ID，不改变权威手牌。 */
     void SetSelectedTile(int32 UniqueId);
+    void SetHoveredTile(int32 UniqueId);
+    /** Resolve the exact visible local-hand mesh below the mouse cursor. */
+    int32 GetLocalHandTileUnderCursor(APlayerController* PlayerController) const;
     /** 将服务端绝对牌墙方位转换为当前客户端以自己为南方的相对方位。 */
     static int32 GetRelativeWallSide(int32 AbsoluteWallSide, int32 LocalSeat);
     /** 判断物理牌墙槽位是否仍存在；抓牌从开门处沿顺时针连续推进。 */
@@ -71,8 +76,8 @@ private:
     float MeldDistanceFromCenter = 82.0f;
     UPROPERTY(EditAnywhere, Category="Mahjong|Layout", meta=(ClampMin="18.0", ClampMax="45.0"))
     float DiscardFirstRowDistanceFromCenter = 25.0f;
-    UPROPERTY(EditAnywhere, Category="Mahjong|Layout", meta=(ClampMin="5", ClampMax="9"))
-    int32 DiscardColumns = 6;
+    UPROPERTY(EditAnywhere, Category="Mahjong|Layout", meta=(ClampMin="8", ClampMax="12"))
+    int32 DiscardColumns = 8;
     /** 只读缓存快照及布局版本状态。 */
     UPROPERTY() FMahjongPublicTableState CachedPublicState;
     UPROPERTY() FMahjongPrivatePlayerState CachedPrivateState;
@@ -80,18 +85,23 @@ private:
     bool bLayoutInitialized = false;
     int32 CachedLocalSeat = 0;
     int32 SelectedTileId = INDEX_NONE;
+    int32 HoveredTileId = INDEX_NONE;
+    TMap<UPrimitiveComponent*, int32> LocalHandTileIds;
+    TMap<int32, UStaticMeshComponent*> LocalHandTileComponents;
+    TMap<int32, FVector> LocalHandTileBaseLocations;
 
     /** 加载客户端美术资源并按快照重建所有运行时组件。 */
     void InitializePresentationAssets();
     void RebuildLayout();
     void ClearRuntimeComponents();
+    void ApplyLocalHandTileVisualState(int32 UniqueId);
     /** 创建桌体辅助方盒或一张有正反面的麻将牌。 */
     class UStaticMeshComponent* AddBox(const FVector& Location, const FVector& Size,
         const FRotator& Rotation, const FLinearColor& Color);
     UStaticMesh* ResolveTileMesh(const FMahjongTile* Tile, bool bFaceUp) const;
-    void AddTile(const FMahjongTile* Tile, bool bFaceUp, bool bUpright,
+    class UStaticMeshComponent* AddTile(const FMahjongTile* Tile, bool bFaceUp, bool bUpright,
         const FVector& Location, const FRotator& Rotation, bool bSelected = false,
-        float ScaleMultiplier = 1.0f);
+        bool bHovered = false, float ScaleMultiplier = 1.0f);
     /** 分别生成剩余牌墙、四家手牌、弃牌与副露。 */
     void AddRemainingWall();
     void AddHands();

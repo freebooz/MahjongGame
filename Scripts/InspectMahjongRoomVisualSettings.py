@@ -49,6 +49,18 @@ for name, component in components:
         "MAHJONG_VISUAL_COMPONENT "
         f"name={name} class={component.get_class().get_name()}"
     )
+    if isinstance(component, unreal.StaticMeshComponent):
+        mesh = component.get_editor_property("static_mesh")
+        unreal.log_warning(
+            "MAHJONG_VISUAL_STATIC_MESH "
+            f"name={name} "
+            f"mesh={mesh.get_path_name() if mesh else 'None'} "
+            f"location={component.get_editor_property('relative_location')} "
+            f"rotation={component.get_editor_property('relative_rotation')} "
+            f"scale={component.get_editor_property('relative_scale3d')} "
+            f"visible={component.get_editor_property('visible')} "
+            f"hidden_in_game={component.get_editor_property('hidden_in_game')}"
+        )
     if name == "MahjongRoomCamera":
         settings = component.get_editor_property("post_process_settings")
         focus = component.get_editor_property("focus_settings")

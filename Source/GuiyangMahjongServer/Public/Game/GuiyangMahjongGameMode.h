@@ -78,6 +78,8 @@ private:
     FGuiyangGameServerLaunchConfig PendingManagedConfig;
     /** 带局/回合/阶段版本的动作超时定时器。 */
     FTimerHandle ActionTimeoutHandle;
+    /** Intermediate settlement auto-advance fallback shared by all clients. */
+    FTimerHandle NextRoundAutoStartHandle;
     int32 ArmedTimeoutRoundId = INDEX_NONE;
     int32 ArmedTimeoutTurnId = INDEX_NONE;
     EMahjongTablePhase ArmedTimeoutPhase = EMahjongTablePhase::WaitingForPlayers;
@@ -88,6 +90,8 @@ private:
     void TryStartTable(const FMahjongRoomState& StartingRoomState);
     void PublishTableSnapshots();
     void FinalizeRoundIfNeeded();
+    void ArmNextRoundAutoStart(const FMahjongRoomState& WaitingRoomState);
+    void HandleNextRoundAutoStart(FString ExpectedRoomCode);
     void RefreshActionTimeoutTimer();
     void HandleActionTimeout(int32 ExpectedRoundId, int32 ExpectedTurnId, EMahjongTablePhase ExpectedPhase);
     void PublishReconnectSnapshot(class AGuiyangMahjongPlayerController* Controller,

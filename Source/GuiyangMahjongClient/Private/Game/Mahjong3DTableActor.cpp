@@ -3,6 +3,7 @@
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
+#include "GameFramework/PlayerController.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
 #include "UI/MahjongTileVisualLibrary.h"
@@ -14,6 +15,7 @@ namespace
     constexpr float TileWidth = 4.4f;
     constexpr float TileHeight = 6.2f;
     constexpr float TileDepth = 3.0f;
+    constexpr float SelectedTileLift = 2.5f;
     // Adjacent wall, hand, discard, and meld tiles touch directly.
     constexpr float TileSpacing = 0.0f;
     constexpr float TilePitch = TileWidth + TileSpacing;
@@ -145,8 +147,38 @@ void AMahjong3DTableActor::UpdateLayout(const FMahjongPublicTableState& PublicSt
 void AMahjong3DTableActor::SetSelectedTile(const int32 UniqueId)
 {
     if (SelectedTileId == UniqueId) return;
+    const int32 PreviousSelectedTileId = SelectedTileId;
     SelectedTileId = UniqueId;
-    RebuildLayout();
+    ApplyLocalHandTileVisualState(PreviousSelectedTileId);
+    ApplyLocalHandTileVisualState(SelectedTileId);
+}
+
+void AMahjong3DTableActor::SetHoveredTile(const int32 UniqueId)
+{
+    if (HoveredTileId == UniqueId) return;
+    const int32 PreviousHoveredTileId = HoveredTileId;
+    HoveredTileId = UniqueId;
+    ApplyLocalHandTileVisualState(PreviousHoveredTileId);
+    ApplyLocalHandTileVisualState(HoveredTileId);
+}
+
+int32 AMahjong3DTableActor::GetLocalHandTileUnderCursor(
+    APlayerController* PlayerController) const
+{
+    if (!PlayerController)
+    {
+        return INDEX_NONE;
+    }
+    FHitResult Hit;
+    if (!PlayerController->GetHitResultUnderCursor(ECC_Visibility, false, Hit))
+    {
+        return INDEX_NONE;
+    }
+    if (const int32* UniqueId = LocalHandTileIds.Find(Hit.GetComponent()))
+    {
+        return *UniqueId;
+    }
+    return INDEX_NONE;
 }
 
 FRotator AMahjong3DTableActor::ResolveTileMeshRotation(
@@ -183,11 +215,48 @@ void AMahjong3DTableActor::RebuildLayout()
 
 void AMahjong3DTableActor::ClearRuntimeComponents()
 {
+    LocalHandTileIds.Reset();
+    LocalHandTileComponents.Reset();
+    LocalHandTileBaseLocations.Reset();
     for (UActorComponent* Component : RuntimeComponents)
     {
         if (IsValid(Component)) Component->DestroyComponent();
     }
     RuntimeComponents.Reset();
+}
+
+void AMahjong3DTableActor::ApplyLocalHandTileVisualState(const int32 UniqueId)
+{
+    UStaticMeshComponent** ComponentPtr = LocalHandTileComponents.Find(UniqueId);
+    const FVector* BaseLocation = LocalHandTileBaseLocations.Find(UniqueId);
+    if (!ComponentPtr || !IsValid(*ComponentPtr) || !BaseLocation)
+    {
+        return;
+    }
+
+    UStaticMeshComponent* Component = *ComponentPtr;
+    const bool bSelected = UniqueId == SelectedTileId;
+    const bool bHovered = UniqueId == HoveredTileId && !bSelected;
+
+    // Move the exact hit-tested component rather than rebuilding the whole
+    // hand. This keeps the cursor target, selected UniqueId and visible tile
+    // permanently in sync.
+    Component->SetRelativeLocation(
+        *BaseLocation + (bSelected
+            ? FVector(0.0f, 0.0f, SelectedTileLift)
+            : FVector::ZeroVector));
+    Component->SetRenderCustomDepth(bSelected || bHovered);
+    Component->SetCustomDepthStencilValue(bSelected ? 252 : 251);
+
+    // The Mahjong50 material exposes a Fresnel rim-emissive parameter. It
+    // produces a real mesh-aligned glow without spawning helper geometry.
+    Component->SetScalarParameterValueOnMaterials(
+        TEXT("SelectionGlow"), bSelected ? 5.0f : (bHovered ? 1.6f : 0.0f));
+    Component->SetVectorParameterValueOnMaterials(
+        TEXT("SelectionGlowColor"),
+        bSelected
+            ? FVector(1.0f, 0.46f, 0.04f)
+            : FVector(0.10f, 0.82f, 0.42f));
 }
 
 UStaticMeshComponent* AMahjong3DTableActor::AddBox(const FVector& Location, const FVector& Size,
@@ -211,18 +280,23 @@ UStaticMeshComponent* AMahjong3DTableActor::AddBox(const FVector& Location, cons
         {
             DynamicMaterial->SetVectorParameterValue(TEXT("Color"), Color);
             DynamicMaterial->SetVectorParameterValue(TEXT("BaseColor"), Color);
+            DynamicMaterial->SetVectorParameterValue(TEXT("EmissiveColor"), Color * 2.0f);
+            DynamicMaterial->SetVectorParameterValue(TEXT("GlowColor"), Color * 2.0f);
         }
     }
     RuntimeComponents.Add(Component);
     return Component;
 }
 
-void AMahjong3DTableActor::AddTile(const FMahjongTile* Tile, const bool bFaceUp, const bool bUpright,
+UStaticMeshComponent* AMahjong3DTableActor::AddTile(
+    const FMahjongTile* Tile, const bool bFaceUp, const bool bUpright,
     const FVector& Location, const FRotator& Rotation, const bool bSelected,
-    const float ScaleMultiplier)
+    const bool bHovered, const float ScaleMultiplier)
 {
     FVector TileLocation = Location;
-    if (bSelected) TileLocation.Z += 4.0f;
+    // Unreal units are centimetres: raise only the matching selected tile by
+    // the requested 2.5 cm. Hover never changes the tile position.
+    if (bSelected) TileLocation.Z += SelectedTileLift;
     const float SafeScale = FMath::Max(ScaleMultiplier, 0.1f);
     UStaticMesh* Mesh = ResolveTileMesh(Tile, bFaceUp);
     if (Mesh)
@@ -248,6 +322,10 @@ void AMahjong3DTableActor::AddTile(const FMahjongTile* Tile, const bool bFaceUp,
         Component->SetRelativeRotation(MeshRotation);
         Component->SetRelativeScale3D(FVector(
             TileWidth / Mahjong50ModelWidth * SafeScale));
+        const bool bSelectionOutline = bSelected;
+        const bool bHoverOutline = bHovered && !bSelected;
+        Component->SetRenderCustomDepth(bSelectionOutline || bHoverOutline);
+        Component->SetCustomDepthStencilValue(bSelectionOutline ? 252 : 251);
         if (bFaceUp)
         {
             // The face is an 8K atlas; request its resident mip while the room is visible so
@@ -275,40 +353,21 @@ void AMahjong3DTableActor::AddTile(const FMahjongTile* Tile, const bool bFaceUp,
         }
         RuntimeComponents.Add(Component);
 
-        if (bSelected && bUpright)
-        {
-            // A thin gold frame sits just in front of the raised south tile. This is intentionally
-            // geometry-based instead of relying on a full-screen custom-depth post process, so the
-            // selection outline remains inexpensive and deterministic on mobile renderers.
-            const float Width = TileWidth * SafeScale;
-            const float Height = TileHeight * SafeScale;
-            const float FaceY = -TileDepth * SafeScale * 0.5f - 0.12f;
-            const float CenterZ = Height * 0.5f;
-            const FLinearColor Gold(0.96f, 0.62f, 0.08f, 1.0f);
-            const auto AddFrameBar = [this, &TileLocation, &Rotation, &Gold](
-                const FVector& LocalOffset, const FVector& Size)
-            {
-                AddBox(TileLocation + Rotation.RotateVector(LocalOffset),
-                    Size, Rotation, Gold);
-            };
-            AddFrameBar(FVector(0.0f, FaceY, 0.0f),
-                FVector(Width + 0.8f, 0.24f, 0.32f));
-            AddFrameBar(FVector(0.0f, FaceY, Height),
-                FVector(Width + 0.8f, 0.24f, 0.32f));
-            AddFrameBar(FVector(-Width * 0.5f - 0.24f, FaceY, CenterZ),
-                FVector(0.32f, 0.24f, Height + 0.4f));
-            AddFrameBar(FVector(Width * 0.5f + 0.24f, FaceY, CenterZ),
-                FVector(0.32f, 0.24f, Height + 0.4f));
-        }
+        Component->SetScalarParameterValueOnMaterials(
+            TEXT("SelectionGlow"),
+            bSelectionOutline ? 5.0f : (bHoverOutline ? 1.6f : 0.0f));
+        Component->SetVectorParameterValueOnMaterials(
+            TEXT("SelectionGlowColor"),
+            bSelectionOutline
+                ? FVector(1.0f, 0.46f, 0.04f)
+                : FVector(0.10f, 0.82f, 0.42f));
+        return Component;
     }
-    else
-    {
-        const FVector Size = (bUpright
-            ? FVector(TileWidth, TileDepth, TileHeight)
-            : FVector(TileHeight, TileWidth, TileDepth)) * FMath::Max(ScaleMultiplier, 0.1f);
-        AddBox(TileLocation, Size, Rotation,
-            bSelected ? FLinearColor(0.95f, 0.68f, 0.16f) : FLinearColor(0.92f, 0.88f, 0.72f));
-    }
+    const FVector Size = (bUpright
+        ? FVector(TileWidth, TileDepth, TileHeight)
+        : FVector(TileHeight, TileWidth, TileDepth)) * FMath::Max(ScaleMultiplier, 0.1f);
+    return AddBox(TileLocation, Size, Rotation,
+        bSelected ? FLinearColor(0.95f, 0.68f, 0.16f) : FLinearColor(0.92f, 0.88f, 0.72f));
 }
 
 UStaticMesh* AMahjong3DTableActor::ResolveTileMesh(const FMahjongTile* Tile, const bool bFaceUp) const
@@ -412,15 +471,33 @@ void AMahjong3DTableActor::AddHands()
     {
         const TArray<FMahjongTile>& Tiles = CachedPrivateState.Hand.Tiles;
         const float LocalHandPitch = TileWidth * LocalHandScale + TileSpacing;
-        const float StartX = -0.5f * (Tiles.Num() - 1) * LocalHandPitch;
+        // The camera's screen-right axis is world -X. Mirror the world-space
+        // sequence so the visible 3D hand has the same left-to-right UniqueId
+        // order as the transparent UMG click targets.
+        const float StartX = 0.5f * (Tiles.Num() - 1) * LocalHandPitch;
         for (int32 Index = 0; Index < Tiles.Num(); ++Index)
         {
-            AddTile(&Tiles[Index], true, true,
-                FVector(StartX + Index * LocalHandPitch, -LocalHandDistanceFromCenter,
+            UStaticMeshComponent* HandComponent = AddTile(&Tiles[Index], true, true,
+                FVector(StartX - Index * LocalHandPitch, -LocalHandDistanceFromCenter,
                     TileHeight * 0.5f + LocalHandElevation),
                 FRotator(0.0f, 0.0f, LocalHandCameraTiltDegrees),
                 Tiles[Index].UniqueId == SelectedTileId,
+                Tiles[Index].UniqueId == HoveredTileId,
                 LocalHandScale);
+            if (HandComponent)
+            {
+                HandComponent->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+                HandComponent->SetCollisionResponseToAllChannels(ECR_Ignore);
+                HandComponent->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
+                LocalHandTileIds.Add(HandComponent, Tiles[Index].UniqueId);
+                LocalHandTileComponents.Add(Tiles[Index].UniqueId, HandComponent);
+                LocalHandTileBaseLocations.Add(
+                    Tiles[Index].UniqueId,
+                        HandComponent->GetRelativeLocation()
+                            - (Tiles[Index].UniqueId == SelectedTileId
+                            ? FVector(0.0f, 0.0f, SelectedTileLift)
+                            : FVector::ZeroVector));
+            }
         }
     }
 
@@ -461,13 +538,16 @@ void AMahjong3DTableActor::AddDiscards()
             if (&Previous == &Record) break;
             if (!Previous.bClaimed && GetRelativeSeat(Previous.SeatIndex) == RelativeSeat) ++SeatSequence;
         }
-        const int32 SafeDiscardColumns = FMath::Clamp(DiscardColumns, 5, 9);
+        const int32 SafeDiscardColumns = FMath::Clamp(DiscardColumns, 8, 12);
         const int32 Column = SeatSequence % SafeDiscardColumns;
         const int32 Row = SeatSequence / SafeDiscardColumns;
+        // The room camera's screen-right axis is world -X. Start at world +X
+        // and advance toward -X so every seat's local discard row is laid out
+        // visually from left to right instead of appearing reversed.
         const float DiscardStartX =
-            -0.5f * static_cast<float>(SafeDiscardColumns - 1) * TilePitch;
-        const FVector Base(DiscardStartX + Column * TilePitch,
-            -DiscardFirstRowDistanceFromCenter - Row * TileLongPitch, 1.4f);
+            0.5f * static_cast<float>(SafeDiscardColumns - 1) * TilePitch;
+        const FVector Base(DiscardStartX - Column * TilePitch,
+            -(DiscardFirstRowDistanceFromCenter + 2.5f) - Row * TileLongPitch, 1.4f);
         FRotator DiscardRotation =
             RotateAroundTable(FRotator::ZeroRotator, RelativeSeat);
         // A discard belongs visually to the player who placed it. Turn its
@@ -482,6 +562,20 @@ void AMahjong3DTableActor::AddDiscards()
 void AMahjong3DTableActor::AddMelds()
 {
     int32 MeldTileCountBySeat[4] = {};
+    int32 ConcealedHandCountBySeat[4] = {};
+    for (const FMahjongSeatInfo& Seat : CachedPublicState.Seats)
+    {
+        const int32 RelativeSeat = GetRelativeSeat(Seat.SeatIndex);
+        if (RelativeSeat >= 0 && RelativeSeat < 4)
+        {
+            ConcealedHandCountBySeat[RelativeSeat] =
+                FMath::Clamp(Seat.HandTileCount, 0, 14);
+        }
+    }
+    if (bCachedPrivateState)
+    {
+        ConcealedHandCountBySeat[0] = CachedPrivateState.Hand.Tiles.Num();
+    }
     for (const FMahjongMeld& Meld : CachedPublicState.PublicMelds)
     {
         const int32 RelativeSeat = GetRelativeSeat(Meld.OwnerSeat);
@@ -500,13 +594,25 @@ void AMahjong3DTableActor::AddMelds()
         {
             const FMahjongTile& Tile = Meld.Tiles[TileIndex];
             const int32 PackedIndex = MeldTileIndexBySeat[RelativeSeat]++;
-            // Exposed melds use the same upright orientation and tight pitch as the player's hand.
-            // Keep them on a parallel inner row so they remain readable without overlapping the hand.
-            const float StartX = -0.5f * (MeldTileCountBySeat[RelativeSeat] - 1) * TilePitch;
-            const FVector Base(StartX + PackedIndex * TilePitch, -MeldDistanceFromCenter,
-                TileHeight * 0.5f + 0.9f);
-            AddTile(Tile.IsValid() ? &Tile : nullptr, Tile.IsValid(), true,
-                RotateAroundTable(Base, RelativeSeat), RotateAroundTable(FRotator::ZeroRotator, RelativeSeat));
+            // Put exposed melds flat on the tabletop, immediately to the
+            // screen-right side of the owner's concealed hand. The old
+            // centred upright row was hidden behind/offscreen from most seats.
+            const float HandHalfSpan = 0.5f
+                * FMath::Max(0, ConcealedHandCountBySeat[RelativeSeat] - 1)
+                * TilePitch;
+            const float VisibleMeldDistance = FMath::Min(
+                MeldDistanceFromCenter, WallDistanceFromCenter + 10.0f);
+            const FVector Base(
+                -HandHalfSpan - TilePitch - PackedIndex * TilePitch,
+                -VisibleMeldDistance,
+                TileDepth * 0.5f + 0.35f);
+            FRotator MeldRotation =
+                RotateAroundTable(FRotator::ZeroRotator, RelativeSeat);
+            MeldRotation.Yaw += 180.0f;
+            // Peng/MingGang/BuGang contain valid public tiles and render face
+            // up. AnGang uses invalid public placeholders and remains concealed.
+            AddTile(Tile.IsValid() ? &Tile : nullptr, Tile.IsValid(), false,
+                RotateAroundTable(Base, RelativeSeat), MeldRotation);
         }
     }
 }

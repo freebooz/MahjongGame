@@ -1,7 +1,6 @@
 #include "UI/MobileHandTileWidget.h"
 #include "UI/MahjongTileVisualLibrary.h"
 #include "UI/MahjongUISoundLibrary.h"
-#include "Game/GuiyangMahjongPlayerController.h"
 #include "Components/Button.h"
 #include "Components/TextBlock.h"
 #include "Engine/Texture2D.h"
@@ -11,11 +10,14 @@ void UMobileHandTileWidget::NativeConstruct()
 {
     Super::NativeConstruct();
     Btn_Tile->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleTileClicked);
+    Btn_Tile->OnHovered.AddUniqueDynamic(this, &ThisClass::HandleTileHovered);
+    Btn_Tile->OnUnhovered.AddUniqueDynamic(this, &ThisClass::HandleTileUnhovered);
 }
 
-void UMobileHandTileWidget::SetTile(const FMahjongTile& Tile, const bool bInteractive)
+void UMobileHandTileWidget::SetTile(const FMahjongTile& Tile, const bool bInCanPlay)
 {
     TileData = Tile;
+    bCanPlay = bInCanPlay;
     SetSelected(false);
     FSlateBrush NormalBrush;
     if (UMahjongTileVisualLibrary::ConfigureFaceBrush(Tile, NormalBrush))
@@ -39,17 +41,36 @@ void UMobileHandTileWidget::SetTile(const FMahjongTile& Tile, const bool bIntera
         Txt_TileName->SetText(FText::FromString(Tile.ToDebugString()));
         Txt_TileName->SetVisibility(ESlateVisibility::HitTestInvisible);
     }
-    Btn_Tile->SetIsEnabled(bInteractive);
+    // Selection is available at all times; playing is a separate, turn-gated action.
+    Btn_Tile->SetIsEnabled(Tile.IsValid());
 }
 
 void UMobileHandTileWidget::SetSelected(const bool bInSelected)
 {
     bSelected = bInSelected;
-    SetRenderTranslation(bSelected ? FVector2D(0.0, -18.0) : FVector2D::ZeroVector);
+    // The visible hand is the 3D table model. Keep this transparent UMG hit
+    // target fixed so selecting a tile does not move the clickable area onto a
+    // neighbouring tile; AMahjong3DTableActor performs the visible 5 cm lift.
+    SetRenderTranslation(FVector2D::ZeroVector);
 }
 
 void UMobileHandTileWidget::HandleTileClicked()
 {
+    if (bSelected)
+    {
+        if (bCanPlay)
+        {
+            UMahjongUISoundLibrary::PlayUISound(this, EMahjongUISound::TilePlay);
+            OnPlayRequested.Broadcast(this);
+        }
+        else
+        {
+            SetSelected(false);
+            OnTileSelected.Broadcast(nullptr);
+        }
+        return;
+    }
+
     if (!bSelected)
     {
         UMahjongUISoundLibrary::PlayUISound(this, EMahjongUISound::TileSelect);
@@ -58,9 +79,14 @@ void UMobileHandTileWidget::HandleTileClicked()
         UE_LOG(LogMahjongUI, Log, TEXT("选中手牌：%s"), *TileData.ToDebugString());
         return;
     }
-    if (AGuiyangMahjongPlayerController* PC = Cast<AGuiyangMahjongPlayerController>(GetOwningPlayer()))
-    {
-        UMahjongUISoundLibrary::PlayUISound(this, EMahjongUISound::TilePlay);
-        PC->RequestTableAction(EMahjongActionType::Play, TileData.UniqueId);
-    }
+}
+
+void UMobileHandTileWidget::HandleTileHovered()
+{
+    OnTileHovered.Broadcast(this);
+}
+
+void UMobileHandTileWidget::HandleTileUnhovered()
+{
+    OnTileUnhovered.Broadcast(this);
 }

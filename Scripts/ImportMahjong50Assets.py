@@ -322,8 +322,15 @@ def constant2(material, x_value: float, y_value: float, x: int, y: int):
     return node
 
 
-def build_face_material():
-    material = create_material("M_Mahjong50_TileUnified")
+def vector_parameter(material, name: str, value, x: int, y: int):
+    node = expr(material, unreal.MaterialExpressionVectorParameter, x, y)
+    set_prop(node, "parameter_name", name)
+    set_prop(node, "default_value", value)
+    return node
+
+
+def build_face_material(name: str = "M_Mahjong50_TileUnified"):
+    material = create_material(name)
     vertex_color = expr(material, unreal.MaterialExpressionVertexColor, -1450, -520)
 
     specular = expr(material, unreal.MaterialExpressionConstant, 180, 560)
@@ -342,19 +349,32 @@ def build_face_material():
     column_scale = expr(material, unreal.MaterialExpressionMultiply, -1160, 80)
     set_prop(column_scale, "const_b", 896.0 / 8192.0)
     connect(column, "", column_scale, "A")
-    u_offset = expr(material, unreal.MaterialExpressionAdd, -900, 80)
-    set_prop(u_offset, "const_b", 160.0 / 8192.0)
-    connect(column_scale, "", u_offset, "A")
+    cell_u_offset = expr(material, unreal.MaterialExpressionAdd, -900, 80)
+    set_prop(cell_u_offset, "const_b", 160.0 / 8192.0)
+    connect(column_scale, "", cell_u_offset, "A")
+
+    # Keep the printed/engraved face artwork centred on the authored UV.
+    # The parameter remains available for deliberate future art-direction
+    # adjustments, but the production default must not translate the face.
+    face_shift_mm = scalar_parameter(
+        material, "FaceShiftMillimeters", 0.0, -1160, 360
+    )
+    face_shift_u = expr(material, unreal.MaterialExpressionMultiply, -900, 350)
+    set_prop(face_shift_u, "const_b", -(704.0 / 8192.0) / 44.0)
+    connect(face_shift_mm, "", face_shift_u, "A")
+    u_offset = expr(material, unreal.MaterialExpressionAdd, -650, 80)
+    connect(cell_u_offset, "", u_offset, "A")
+    connect(face_shift_u, "", u_offset, "B")
 
     row = scalar_parameter(material, "RowFromBottom", 0.0, -1450, 240)
     row_scale = expr(material, unreal.MaterialExpressionMultiply, -1160, 230)
     set_prop(row_scale, "const_b", 1024.0 / 4096.0)
     connect(row, "", row_scale, "A")
 
-    uv_offset = expr(material, unreal.MaterialExpressionAppendVector, -650, 140)
+    uv_offset = expr(material, unreal.MaterialExpressionAppendVector, -430, 140)
     connect(u_offset, "", uv_offset, "A")
     connect(row_scale, "", uv_offset, "B")
-    atlas_uv = expr(material, unreal.MaterialExpressionAdd, -400, -80)
+    atlas_uv = expr(material, unreal.MaterialExpressionAdd, -180, -80)
     connect(uv_scaled, "", atlas_uv, "A")
     connect(uv_offset, "", atlas_uv, "B")
 
@@ -496,6 +516,34 @@ def build_face_material():
     set_prop(metallic, "r", 0.0)
     unreal.MaterialEditingLibrary.connect_material_property(
         metallic, "", unreal.MaterialProperty.MP_METALLIC
+    )
+
+    # Runtime local-hand selection uses a material Fresnel rim, so the glow
+    # remains aligned with the exact clicked mesh and requires no generated
+    # outline geometry. SelectionGlow is zero for all normal tiles.
+    selection_glow = scalar_parameter(
+        material, "SelectionGlow", 0.0, 980, 610
+    )
+    selection_glow_color = vector_parameter(
+        material,
+        "SelectionGlowColor",
+        unreal.LinearColor(1.0, 0.46, 0.04, 1.0),
+        980,
+        720,
+    )
+    fresnel = expr(material, unreal.MaterialExpressionFresnel, 980, 830)
+    set_prop(fresnel, "exponent", 3.2)
+    set_prop(fresnel, "base_reflect_fraction", 0.04)
+    glow_color_strength = expr(
+        material, unreal.MaterialExpressionMultiply, 1240, 650
+    )
+    connect(selection_glow_color, "", glow_color_strength, "A")
+    connect(selection_glow, "", glow_color_strength, "B")
+    rim_emissive = expr(material, unreal.MaterialExpressionMultiply, 1480, 720)
+    connect(glow_color_strength, "", rim_emissive, "A")
+    connect(fresnel, "", rim_emissive, "B")
+    unreal.MaterialEditingLibrary.connect_material_property(
+        rim_emissive, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR
     )
 
     unreal.MaterialEditingLibrary.recompile_material(material)

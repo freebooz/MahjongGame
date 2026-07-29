@@ -1,8 +1,11 @@
 #include "Game/MahjongRoomPresentationActor.h"
 
 #include "Camera/CameraComponent.h"
+#include "Components/BrushComponent.h"
 #include "Components/ChildActorComponent.h"
 #include "Components/ModelComponent.h"
+#include "Components/PrimitiveComponent.h"
+#include "Components/ShapeComponent.h"
 #include "Components/SkyLightComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Game/Mahjong3DTableActor.h"
@@ -10,9 +13,11 @@
 #include "Engine/StaticMesh.h"
 #include "Engine/StaticMeshActor.h"
 #include "Engine/Brush.h"
+#include "GameFramework/DefaultPawn.h"
 #include "GameFramework/Volume.h"
 #include "EngineUtils.h"
 #include "GuiyangMahjong.h"
+#include "TimerManager.h"
 
 const FName AMahjongRoomPresentationActor::PresentationTag(TEXT("MahjongRoomPresentation"));
 
@@ -137,6 +142,19 @@ void AMahjongRoomPresentationActor::BeginPlay()
         }
     }
 
+    SuppressUnexpectedRoomGeometry();
+    if (UWorld* World = GetWorld())
+    {
+        // Player actors can arrive several seconds after room travel and new
+        // players can join at any time. Keep this compatibility guard active
+        // for the room lifetime so an older server cannot reintroduce its
+        // visible fallback DefaultPawn sphere.
+        World->GetTimerManager().SetTimer(
+            UnexpectedGeometryTimer, this,
+            &AMahjongRoomPresentationActor::SuppressUnexpectedRoomGeometry,
+            0.25f, true);
+    }
+
     if (TableMeshComponent && TableMeshComponent->GetStaticMesh())
     {
         const FVector MeshSize =
@@ -185,6 +203,84 @@ void AMahjongRoomPresentationActor::BeginPlay()
             TEXT("Normalized Mahjong tile layout: location=%s world-scale=%s"),
             *Component->GetComponentLocation().ToCompactString(),
             *Component->GetComponentScale().ToCompactString());
+    }
+}
+
+void AMahjongRoomPresentationActor::EndPlay(
+    const EEndPlayReason::Type EndPlayReason)
+{
+    if (UWorld* World = GetWorld())
+    {
+        World->GetTimerManager().ClearTimer(UnexpectedGeometryTimer);
+    }
+    Super::EndPlay(EndPlayReason);
+}
+
+void AMahjongRoomPresentationActor::SuppressUnexpectedRoomGeometry()
+{
+    UWorld* World = GetWorld();
+    if (!World)
+    {
+        return;
+    }
+
+    for (TActorIterator<AActor> ActorIt(World); ActorIt; ++ActorIt)
+    {
+        AActor* Actor = *ActorIt;
+        if (!Actor)
+        {
+            continue;
+        }
+
+        const bool bFallbackEnginePawn = Actor->IsA<ADefaultPawn>();
+        if (bFallbackEnginePawn)
+        {
+            Actor->SetActorEnableCollision(false);
+            Actor->SetActorHiddenInGame(true);
+        }
+
+        TInlineComponentArray<UPrimitiveComponent*> PrimitiveComponents(Actor);
+        for (UPrimitiveComponent* Primitive : PrimitiveComponents)
+        {
+            if (!Primitive || Primitive->GetWorld() != World)
+            {
+                continue;
+            }
+
+            const bool bAllowedPresentationComponent =
+                (Actor == this
+                    && (Primitive->GetName() == TEXT("MahjongTableMesh")
+                        || Primitive->GetName() == TEXT("RoomBackdropPlane")))
+                || Actor->IsA<AMahjong3DTableActor>();
+            if (bAllowedPresentationComponent)
+            {
+                continue;
+            }
+
+            const FVector Extent = Primitive->Bounds.BoxExtent;
+            const bool bOversizedCentralGeometry =
+                Extent.X >= 80.0f && Extent.Y >= 80.0f && Extent.Z >= 40.0f
+                && Primitive->GetComponentLocation().Size2D() <= 80.0f;
+            const bool bDebugShape =
+                Primitive->IsA<UShapeComponent>() || Primitive->IsA<UBrushComponent>();
+            if (!bFallbackEnginePawn && !bOversizedCentralGeometry && !bDebugShape)
+            {
+                continue;
+            }
+
+            if (Primitive->IsVisible())
+            {
+                UE_LOG(LogMahjongUI, Warning,
+                    TEXT("Suppressed non-gameplay room primitive: owner=%s component=%s class=%s bounds=%s"),
+                    *Actor->GetPathName(),
+                    *Primitive->GetPathName(),
+                    *Primitive->GetClass()->GetPathName(),
+                    *Extent.ToCompactString());
+            }
+            Primitive->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+            Primitive->SetVisibility(false, true);
+            Primitive->SetHiddenInGame(true, true);
+        }
     }
 }
 

@@ -9,8 +9,10 @@ class UButton; class UTextBlock;
 class UMobileHandTileWidget;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FMahjongHandTileSelected, UMobileHandTileWidget*, TileWidget);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FMahjongHandTileHovered, UMobileHandTileWidget*, TileWidget);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FMahjongHandTilePlayRequested, UMobileHandTileWidget*, TileWidget);
 
-/** 可点击手牌组件。首次点击选中上浮，再次点击才发送出牌请求。 */
+/** 可交互手牌组件：悬停高亮，首次点击上浮，再次点击恢复。 */
 UCLASS(Abstract, BlueprintType)
 class GUIYANGMAHJONGCLIENT_API UMobileHandTileWidget : public UUserWidget
 {
@@ -20,11 +22,18 @@ protected:
     UPROPERTY(meta=(BindWidget)) TObjectPtr<UButton> Btn_Tile;
     UPROPERTY(meta=(BindWidget)) TObjectPtr<UTextBlock> Txt_TileName;
     UFUNCTION() void HandleTileClicked();
+    UFUNCTION() void HandleTileHovered();
+    UFUNCTION() void HandleTileUnhovered();
     UPROPERTY(BlueprintReadOnly) FMahjongTile TileData;
     UPROPERTY(BlueprintReadOnly) bool bSelected = false;
+    UPROPERTY(BlueprintReadOnly) bool bCanPlay = false;
 public:
     UPROPERTY(BlueprintAssignable, Category="麻将|UI") FMahjongHandTileSelected OnTileSelected;
-    UFUNCTION(BlueprintCallable, Category="麻将|UI") void SetTile(const FMahjongTile& Tile, bool bInteractive);
+    UPROPERTY(BlueprintAssignable, Category="Mahjong|UI") FMahjongHandTilePlayRequested OnPlayRequested;
+    UFUNCTION(BlueprintCallable, Category="麻将|UI") void SetTile(const FMahjongTile& Tile, bool bInCanPlay);
     UFUNCTION(BlueprintCallable, Category="麻将|UI") void SetSelected(bool bInSelected);
+    void TriggerTableHitClick() { HandleTileClicked(); }
+    UPROPERTY(BlueprintAssignable, Category="Mahjong|UI") FMahjongHandTileHovered OnTileHovered;
+    UPROPERTY(BlueprintAssignable, Category="Mahjong|UI") FMahjongHandTileHovered OnTileUnhovered;
     const FMahjongTile& GetTileData() const { return TileData; }
 };

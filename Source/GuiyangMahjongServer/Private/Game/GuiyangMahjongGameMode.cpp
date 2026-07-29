@@ -20,6 +20,8 @@
 
 namespace
 {
+    constexpr float NextRoundAutoStartDelaySeconds = 10.0f;
+
     bool IsFullMatchIntegrationEnabled()
     {
         return FParse::Param(FCommandLine::Get(), TEXT("MahjongEnableIntegrationHooks"))
@@ -32,6 +34,16 @@ AGuiyangMahjongGameMode::AGuiyangMahjongGameMode()
     GameStateClass = AGuiyangMahjongGameState::StaticClass();
     PlayerControllerClass = AGuiyangMahjongPlayerController::StaticClass();
     PlayerStateClass = AGuiyangMahjongPlayerState::StaticClass();
+
+    // Mahjong is driven entirely by the authoritative table state and the
+    // client-owned fixed room camera. AGameModeBase otherwise spawns an
+    // ADefaultPawn for every connected player; its built-in visible sphere
+    // mesh was replicated into the middle of the table at different times on
+    // different clients. Neither a gameplay pawn nor a spectator pawn belongs
+    // in this room.
+    DefaultPawnClass = nullptr;
+    SpectatorClass = nullptr;
+    bStartPlayersAsSpectators = true;
 }
 
 void AGuiyangMahjongGameMode::InitGame(const FString& MapName, const FString& Options, FString& ErrorMessage)
@@ -351,6 +363,8 @@ void AGuiyangMahjongGameMode::Logout(AController* Exiting)
 
 void AGuiyangMahjongGameMode::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+    GetWorldTimerManager().ClearTimer(ActionTimeoutHandle);
+    GetWorldTimerManager().ClearTimer(NextRoundAutoStartHandle);
     if (UGameInstance* GameInstance = GetGameInstance())
     {
         if (UGuiyangAgonesLifecycleSubsystem* Lifecycle =
@@ -654,6 +668,7 @@ void AGuiyangMahjongGameMode::TryStartTable(const FMahjongRoomState& StartingRoo
 {
     // 房间生命周期进入 Starting 后，使用规则快照和服务器种子创建权威牌桌。
     if (!RoomManager || (TableEngine && TableEngine->GetPublicState().Phase != EMahjongTablePhase::Settlement)) return;
+    GetWorldTimerManager().ClearTimer(NextRoundAutoStartHandle);
     UMahjongTableEngine* RoundEngine = TableEngine ? TableEngine.Get() : NewObject<UMahjongTableEngine>(this);
     FString Error;
     // 只在权威服务端、且紧邻 StartRound 发牌前生成洗牌种子。组合系统
@@ -723,7 +738,11 @@ void AGuiyangMahjongGameMode::HandleNextRound(AGuiyangMahjongPlayerController* C
         Player->EnterRoomServer(State.RoomInfo.RoomId, Seat->SeatIndex, Seat->bReady);
     }
     PublishRoomState(State);
-    if (State.Lifecycle == EMahjongRoomLifecycle::Starting) TryStartTable(State);
+    if (State.Lifecycle == EMahjongRoomLifecycle::Starting)
+    {
+        GetWorldTimerManager().ClearTimer(NextRoundAutoStartHandle);
+        TryStartTable(State);
+    }
 }
 
 void AGuiyangMahjongGameMode::HandleTableAction(AGuiyangMahjongPlayerController* Controller, const FMahjongActionRequest& Request)
@@ -851,9 +870,96 @@ void AGuiyangMahjongGameMode::FinalizeRoundIfNeeded()
             Player->EnterRoomServer(State.RoomInfo.RoomId, Player->SeatIndex, false);
     }
     PublishRoomState(State);
+    if (State.Lifecycle == EMahjongRoomLifecycle::WaitingNextRound)
+    {
+        ArmNextRoundAutoStart(State);
+    }
     if (State.Lifecycle == EMahjongRoomLifecycle::Settlement
         && State.RoomInfo.CurrentRound >= State.RoomInfo.RoundCount)
         PublishFinalSettlement(State);
+}
+
+void AGuiyangMahjongGameMode::ArmNextRoundAutoStart(const FMahjongRoomState& WaitingRoomState)
+{
+    if (WaitingRoomState.Lifecycle != EMahjongRoomLifecycle::WaitingNextRound
+        || WaitingRoomState.RoomInfo.RoomId.IsEmpty())
+    {
+        return;
+    }
+
+    FTimerDelegate Delegate;
+    Delegate.BindUObject(this, &ThisClass::HandleNextRoundAutoStart,
+        WaitingRoomState.RoomInfo.RoomId);
+    GetWorldTimerManager().SetTimer(NextRoundAutoStartHandle, Delegate,
+        NextRoundAutoStartDelaySeconds, false);
+    UE_LOG(LogMahjongServer, Display,
+        TEXT("Round settlement auto-advance armed: room=%s delay=%.1fs"),
+        *WaitingRoomState.RoomInfo.RoomId, NextRoundAutoStartDelaySeconds);
+}
+
+void AGuiyangMahjongGameMode::HandleNextRoundAutoStart(FString ExpectedRoomCode)
+{
+    if (!RoomManager || ExpectedRoomCode.IsEmpty())
+    {
+        return;
+    }
+
+    FMahjongRoomState State;
+    if (!RoomManager->GetRoomState(ExpectedRoomCode, State)
+        || State.Lifecycle != EMahjongRoomLifecycle::WaitingNextRound)
+    {
+        return;
+    }
+
+    TArray<FString> PendingPlayerIds;
+    for (const FMahjongSeatInfo& Seat : State.Seats)
+    {
+        if (Seat.bOccupied && !Seat.bReady && !Seat.PlayerId.IsEmpty())
+        {
+            PendingPlayerIds.Add(Seat.PlayerId);
+        }
+    }
+
+    int32 AutoAcknowledgedPlayers = 0;
+    for (const FString& PlayerId : PendingPlayerIds)
+    {
+        EMahjongRoomError Error = EMahjongRoomError::None;
+        FMahjongRoomState UpdatedState;
+        if (RoomManager->RequestNextRound(PlayerId, UpdatedState, Error))
+        {
+            State = MoveTemp(UpdatedState);
+            ++AutoAcknowledgedPlayers;
+        }
+    }
+
+    for (TActorIterator<AGuiyangMahjongPlayerController> It(GetWorld()); It; ++It)
+    {
+        AGuiyangMahjongPlayerState* Player =
+            It->GetPlayerState<AGuiyangMahjongPlayerState>();
+        if (!Player)
+        {
+            continue;
+        }
+        if (const FMahjongSeatInfo* Seat = State.Seats.FindByPredicate(
+            [Player](const FMahjongSeatInfo& Item)
+            {
+                return Item.PlayerId == Player->MahjongPlayerId;
+            }))
+        {
+            Player->EnterRoomServer(State.RoomInfo.RoomId, Seat->SeatIndex,
+                Seat->bReady);
+        }
+    }
+
+    UE_LOG(LogMahjongServer, Display,
+        TEXT("Round settlement auto-advance fired: room=%s acknowledged=%d lifecycle=%d"),
+        *ExpectedRoomCode, AutoAcknowledgedPlayers,
+        static_cast<int32>(State.Lifecycle));
+    PublishRoomState(State);
+    if (State.Lifecycle == EMahjongRoomLifecycle::Starting)
+    {
+        TryStartTable(State);
+    }
 }
 
 void AGuiyangMahjongGameMode::PublishReconnectSnapshot(AGuiyangMahjongPlayerController* Controller,

@@ -10,6 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from ImportMahjong50Assets import (  # noqa: E402
     DEST_ROOT,
     INSTANCE_DEST,
+    UNIFIED_MATERIAL_PATH,
     build_face_material,
     configure_texture,
     load_texture,
@@ -29,6 +30,12 @@ FACE_TEXTURES = (
 for texture_name in FACE_TEXTURES:
     texture = load_texture(texture_name)
     configure_texture(texture, texture_name)
+
+if unreal.EditorAssetLibrary.does_asset_exist(UNIFIED_MATERIAL_PATH):
+    if not unreal.EditorAssetLibrary.delete_asset(UNIFIED_MATERIAL_PATH):
+        raise RuntimeError(
+            f"Could not replace face material: {UNIFIED_MATERIAL_PATH}"
+        )
 
 material = build_face_material()
 for asset_path in unreal.EditorAssetLibrary.list_assets(

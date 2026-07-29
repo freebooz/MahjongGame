@@ -87,6 +87,8 @@ public:
     UFUNCTION(BlueprintPure, Category="Mahjong|Network")
     const FString& GetPendingPlayerName() const { return PendingPlayerName; }
     void SetPendingPlayerName(const FString& PlayerName) { PendingPlayerName = PlayerName; }
+    /** Latest authoritative reaction offer, retained across HUD reconstruction. */
+    const TArray<FMahjongAction>& GetLastAvailableActions() const { return LastAvailableActions; }
     /** Dedicated Server 进程自启动以来已进入的服务端 RPC 处理器次数。 */
     static uint64 GetServerRpcReceivedCount() { return ServerRpcReceivedCount.Load(); }
 
@@ -99,6 +101,7 @@ private:
     UPROPERTY(Transient) TObjectPtr<UObject> ClientBridge;
     /** 连接迁移期间保留的玩家名。 */
     UPROPERTY() FString PendingPlayerName;
+    UPROPERTY(Transient) TArray<FMahjongAction> LastAvailableActions;
     /** 最近一次动作序号，用于服务端幂等和乱序检查。 */
     int32 LastClientActionSequence = -1;
     static TAtomic<uint64> ServerRpcReceivedCount;

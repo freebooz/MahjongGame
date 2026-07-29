@@ -235,6 +235,7 @@ void AGuiyangMahjongPlayerController::Client_UpdatePrivateHand_Implementation(
 void AGuiyangMahjongPlayerController::Client_ShowAvailableActions_Implementation(
     const TArray<FMahjongAction>& Actions)
 {
+    LastAvailableActions = Actions;
     OnAvailableActionsUpdated.Broadcast(Actions);
 }
 
@@ -253,6 +254,7 @@ void AGuiyangMahjongPlayerController::Client_RestoreReconnectSnapshot_Implementa
     const FMahjongReconnectSnapshot& Snapshot, const TArray<FMahjongAction>& AvailableActions)
 {
     LastClientActionSequence = Snapshot.PrivateState.LastAcceptedClientSequence;
+    LastAvailableActions = AvailableActions;
     if (IGuiyangClientControllerBridge* Bridge = GetClientBridge()) Bridge->NotifyReconnectRestored(Snapshot);
     OnReconnectRestored.Broadcast(Snapshot);
     OnPrivateHandUpdated.Broadcast(Snapshot.PrivateState);

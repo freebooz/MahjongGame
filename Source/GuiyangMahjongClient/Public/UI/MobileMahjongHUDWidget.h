@@ -23,6 +23,8 @@ protected:
     virtual void NativeConstruct() override;
     virtual void NativeDestruct() override;
     virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
+    virtual FReply NativeOnPreviewMouseButtonDown(
+        const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
     /** 顶部房间、牌墙、阶段、当前玩家、倒计时和翻鸡信息。 */
     UPROPERTY(meta=(BindWidget)) TObjectPtr<UTextBlock> Txt_RoomId;
     UPROPERTY(meta=(BindWidget)) TObjectPtr<UTextBlock> Txt_RemainingTileCount;
@@ -66,14 +68,16 @@ protected:
     UPROPERTY(Transient) TObjectPtr<UMobileSettlementWidget> SettlementInstance;
     /** 当前选中手牌和本地三维牌桌表现 Actor。 */
     UPROPERTY(Transient) TObjectPtr<UMobileHandTileWidget> SelectedHandTile;
+    int32 SelectedHandTileId = INDEX_NONE;
     UPROPERTY(Transient) TObjectPtr<AMahjong3DTableActor> Table3DActor;
     /** Temporary room portraits; authoritative player images can replace these brushes later. */
     UPROPERTY(Transient) TObjectPtr<UTexture2D> PlaceholderAvatarA;
     UPROPERTY(Transient) TObjectPtr<UTexture2D> PlaceholderAvatarB;
-    /** Avatar-attached turn rings and dealer badges, ordered Self/Right/Top/Left. */
-    UPROPERTY(Transient) TArray<TObjectPtr<UImage>> TurnIndicatorRings;
+    /** Seat avatars and dealer badges, ordered Self/Right/Top/Left. */
+    UPROPERTY(Transient) TArray<TObjectPtr<UImage>> SeatAvatarImages;
     UPROPERTY(Transient) TArray<TObjectPtr<UTextBlock>> DealerBadges;
     float TurnIndicatorAngle = 0.0f;
+    int32 CurrentTurnAvatarIndex = INDEX_NONE;
     /** 最近一次公共/私有快照；UI 重建只读取缓存，不修改权威状态。 */
     UPROPERTY() FMahjongPublicTableState CachedPublicState;
     UPROPERTY() FMahjongPrivatePlayerState CachedPrivateState;
@@ -89,6 +93,9 @@ protected:
     UFUNCTION() void HandleError(const FString& Message);
     /** 本地交互入口：选择手牌、准备和返回大厅。 */
     UFUNCTION() void HandleTileSelected(UMobileHandTileWidget* TileWidget);
+    UFUNCTION() void HandleTilePlayRequested(UMobileHandTileWidget* TileWidget);
+    UFUNCTION() void HandleTileHovered(UMobileHandTileWidget* TileWidget);
+    UFUNCTION() void HandleTileUnhovered(UMobileHandTileWidget* TileWidget);
     UFUNCTION() void HandleReady();
     UFUNCTION() void HandleReturnLobby();
 public:
