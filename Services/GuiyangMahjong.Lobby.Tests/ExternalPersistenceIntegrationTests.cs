@@ -263,6 +263,70 @@ public sealed class ExternalPersistenceIntegrationTests
         }
     }
 
+    [ExternalPersistenceFact]
+    [Trait("Category", "ExternalPersistence")]
+    public async Task PostgreSql_EventHistorySurvivesRedisExpiryAndProjectsPlayerHistory()
+    {
+        var options = CreateOptions();
+        await using var connections = new LobbyPersistenceConnections(options);
+        var store = CreateStore(options, connections);
+        await store.InitializeAsync(CancellationToken.None);
+        var monitoring = new RedisRoomMonitoringStore(connections, options);
+        var playerId = $"external-history-{Guid.NewGuid():N}";
+        var room = NewRoom(playerId, RandomRoomCode());
+        Assert.Equal(
+            CreateRoomStatus.Created,
+            (await store.TryCreateRoomAsync(room, CancellationToken.None)).Status);
+        var eventId = Guid.NewGuid().ToString();
+        var roomEvent = new RoomTimelineEvent(
+            eventId,
+            "PlayerConnectionChanged",
+            room.CreatedAtUtc.AddMinutes(1),
+            room.StateSequence,
+            "trace-history-001",
+            new Dictionary<string, object?>
+            {
+                ["playerId"] = playerId,
+                ["from"] = "Connected",
+                ["to"] = "Disconnected",
+                ["trustee"] = true
+            });
+        await monitoring.AppendEventAsync(
+            room.RoomId,
+            roomEvent,
+            CancellationToken.None);
+        await monitoring.AppendEventAsync(
+            room.RoomId,
+            roomEvent,
+            CancellationToken.None);
+        var closed = room with
+        {
+            PlayerIds = [],
+            Lifecycle = RoomLifecycle.Failed,
+            StateSequence = room.StateSequence + 1,
+            UpdatedAtUtc = room.CreatedAtUtc.AddMinutes(2)
+        };
+        Assert.True(await store.UpdateRoomAsync(closed, CancellationToken.None));
+
+        // 模拟 Redis 热数据过期；历史读取必须从 PostgreSQL 权威库恢复。
+        await connections.Redis.GetDatabase().KeyDeleteAsync(
+            $"{options.Value.Persistence.RedisKeyPrefix}:monitor:room:{room.RoomId}:events");
+        var restored = await monitoring.ListEventsAsync(
+            room.RoomId,
+            200,
+            CancellationToken.None);
+        var histories = new PostgresPlayerHistoryStore(connections);
+        var roomHistory = await histories.ListRoomsAsync(
+            playerId, 100, null, null, CancellationToken.None);
+        var connectionHistory = await histories.ListConnectionsAsync(
+            playerId, 100, null, null, CancellationToken.None);
+
+        Assert.Single(restored, item => item.EventId == eventId);
+        Assert.Single(roomHistory.Items);
+        Assert.NotNull(roomHistory.Items[0].LeftAtUtc);
+        Assert.Single(connectionHistory.Items, item => item.EventId == eventId);
+    }
+
     private static IOptions<LobbyOptions> CreateOptions()
     {
         var postgres = Environment.GetEnvironmentVariable("LOBBY_TEST_POSTGRES")!;

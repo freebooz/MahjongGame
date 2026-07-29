@@ -11,6 +11,9 @@
     <PackageReference Include="Npgsql" Version="10.0.0" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\GuiyangMahjong.Observability\GuiyangMahjong.Observability.csproj" />
+  </ItemGroup>
+  <ItemGroup>
     <Content Include="Storage\schema.sql" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

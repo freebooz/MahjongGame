@@ -10,6 +10,11 @@ Content
 Source
 **/bin
 **/obj
+# 共享可观测性源码是所有服务镜像的编译依赖，必须显式保留；仅排除其构建输出。
+!Services/GuiyangMahjong.Observability/
+!Services/GuiyangMahjong.Observability/**
+Services/GuiyangMahjong.Observability/bin
+Services/GuiyangMahjong.Observability/obj
 **/TestResults
 Deploy
 claudedocs

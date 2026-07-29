@@ -437,13 +437,93 @@ components:
       type: object
       required: [roomId, heartbeatCredential, roomLifecycle, connectedPlayers, roundId, buildVersion, sentAtUtc]
       properties:
+        telemetrySchemaVersion:
+          type: integer
+          minimum: 1
+          maximum: 1
+          default: 1
+          description: 遥测主版本；缺失时按 v1 兼容，显式未知版本由 Lobby 拒绝。
         roomId: { type: string, minLength: 1, maxLength: 80 }
         heartbeatCredential: { type: string, minLength: 32, writeOnly: true }
         roomLifecycle: { type: string }
         connectedPlayers: { type: integer, minimum: 0, maximum: 4 }
+        connectedPlayerIds:
+          type: array
+          maxItems: 4
+          uniqueItems: true
+          items: { type: string, minLength: 1, maxLength: 80 }
         roundId: { type: integer, minimum: 0 }
         buildVersion: { type: string, minLength: 1, maxLength: 80 }
         sentAtUtc: { type: string, format: date-time }
+        gameStartedAtUtc: { type: [string, 'null'], format: date-time }
+        serverTickMilliseconds: { type: [number, 'null'], minimum: 0, maximum: 10000 }
+        serverFramesPerSecond: { type: [number, 'null'], minimum: 0, maximum: 1000 }
+        rpcReceivedCount: { type: [integer, 'null'], minimum: 0 }
+        processMemoryBytes: { type: [integer, 'null'], minimum: 0 }
+        processCpuPercent: { type: [number, 'null'], minimum: 0, maximum: 100 }
+        processCpuSampleWindowMilliseconds: { type: [number, 'null'], minimum: 250, maximum: 60000 }
+        networkIngressBytes: { type: [integer, 'null'], minimum: 0 }
+        networkEgressBytes: { type: [integer, 'null'], minimum: 0 }
+        rpcMethods:
+          type: [array, 'null']
+          maxItems: 32
+          items: { $ref: '#/components/schemas/RpcMethodTelemetry' }
+        settlement:
+          oneOf:
+            - { $ref: '#/components/schemas/SettlementRuntimeTelemetry' }
+            - { type: 'null' }
+        players:
+          type: [array, 'null']
+          maxItems: 4
+          items:
+            $ref: '#/components/schemas/PlayerRuntimeTelemetry'
+    PlayerRuntimeTelemetry:
+      type: object
+      required: [playerId, seatIndex, connectionState]
+      properties:
+        playerId: { type: string, minLength: 1, maxLength: 80 }
+        seatIndex: { type: integer, minimum: -1, maximum: 3 }
+        connectionState:
+          type: string
+          enum: [Connected, Disconnected, Reconnecting]
+        latencyMilliseconds: { type: [number, 'null'], minimum: 0, maximum: 120000 }
+        disconnectedAtUtc: { type: [string, 'null'], format: date-time }
+        trustee: { type: [boolean, 'null'] }
+        trusteeChangedAtUtc: { type: [string, 'null'], format: date-time }
+        connectionChangedAtUtc: { type: [string, 'null'], format: date-time }
+        reconnectedAtUtc: { type: [string, 'null'], format: date-time }
+        disconnectReason:
+          type: [string, 'null']
+          enum: [NormalExit, NetworkInterrupted, ReconnectTimeout, Kicked, ServerShutdown, null]
+        connectionStateSequence: { type: [integer, 'null'], minimum: 0 }
+        connectionEventId: { type: [string, 'null'], format: uuid }
+    RpcMethodTelemetry:
+      type: object
+      required: [methodName, receivedCount, rejectedCount, failedCount, timeoutCount]
+      properties:
+        methodName:
+          type: string
+          pattern: '^Server\.[A-Za-z0-9.]+$'
+          maxLength: 80
+        receivedCount: { type: integer, minimum: 0 }
+        rejectedCount: { type: integer, minimum: 0 }
+        failedCount: { type: integer, minimum: 0 }
+        timeoutCount: { type: integer, minimum: 0 }
+        p95DurationMilliseconds: { type: [number, 'null'], minimum: 0, maximum: 60000 }
+        p99DurationMilliseconds: { type: [number, 'null'], minimum: 0, maximum: 60000 }
+    SettlementRuntimeTelemetry:
+      type: object
+      required: [status, matchId]
+      properties:
+        status:
+          type: string
+          enum: [Calculating, Submitted, Accepted, Failed, Compensating, Completed]
+        matchId: { type: string, format: uuid }
+        resultSequence: { type: [integer, 'null'], minimum: 1 }
+        resultHash: { type: [string, 'null'], pattern: '^[0-9a-fA-F]{64}$' }
+        submittedAtUtc: { type: [string, 'null'], format: date-time }
+        confirmedAtUtc: { type: [string, 'null'], format: date-time }
+        failureReason: { type: [string, 'null'], maxLength: 256 }
     GameServerFailure:
       type: object
       required: [serverInstanceId, roomId, reason]

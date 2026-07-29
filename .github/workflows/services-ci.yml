@@ -5,14 +5,38 @@ on:
     paths:
       - "Services/**"
       - "Contracts/OpenAPI/**"
+      - "Contracts/Monitoring/**"
+      - "Deploy/capacity/**"
       - "Deploy/linux/**"
+      - "Deploy/postgres/**"
+      - "Deploy/observability/**"
+      - "Scripts/Test-ObservabilityContracts.ps1"
+      - "Scripts/Test-MonitoringCapacityContracts.ps1"
+      - "Scripts/Test-InvestigationHistoryContracts.ps1"
+      - "Scripts/Test-SloReleaseGate.ps1"
+      - "Scripts/Test-GovernanceContracts.ps1"
+      - "Docs/RUNBOOKS/SLO_MULTI_CLUSTER_GOVERNANCE.md"
+      - "Scripts/Load/**"
+      - "Scripts/Linux/test-postgres-least-privilege.sh"
       - "Scripts/Linux/**"
       - ".github/workflows/services-ci.yml"
   pull_request:
     paths:
       - "Services/**"
       - "Contracts/OpenAPI/**"
+      - "Contracts/Monitoring/**"
+      - "Deploy/capacity/**"
       - "Deploy/linux/**"
+      - "Deploy/postgres/**"
+      - "Deploy/observability/**"
+      - "Scripts/Test-ObservabilityContracts.ps1"
+      - "Scripts/Test-MonitoringCapacityContracts.ps1"
+      - "Scripts/Test-InvestigationHistoryContracts.ps1"
+      - "Scripts/Test-SloReleaseGate.ps1"
+      - "Scripts/Test-GovernanceContracts.ps1"
+      - "Docs/RUNBOOKS/SLO_MULTI_CLUSTER_GOVERNANCE.md"
+      - "Scripts/Load/**"
+      - "Scripts/Linux/test-postgres-least-privilege.sh"
       - "Scripts/Linux/**"
       - ".github/workflows/services-ci.yml"
 
@@ -65,6 +89,22 @@ jobs:
           --no-build
           --filter "Category!=ExternalPersistence"
           --logger "trx;LogFileName=services.trx"
+      - name: Observability contract gate
+        working-directory: .
+        shell: pwsh
+        run: ./Scripts/Test-ObservabilityContracts.ps1 -SkipDockerValidation
+      - name: Pagination, SSE, and capacity contract gate
+        working-directory: .
+        shell: pwsh
+        run: ./Scripts/Test-MonitoringCapacityContracts.ps1
+      - name: Persistent history and investigation closure contract gate
+        working-directory: .
+        shell: pwsh
+        run: ./Scripts/Test-InvestigationHistoryContracts.ps1
+      - name: Multi-cluster SLO and governance contract gate
+        working-directory: .
+        shell: pwsh
+        run: ./Scripts/Test-GovernanceContracts.ps1
       - name: Auth and Lobby external persistence tests
         run: |
           dotnet test GuiyangMahjong.Auth.Tests/GuiyangMahjong.Auth.Tests.csproj --configuration Release --no-build --filter "Category=ExternalPersistence" --logger "trx;LogFileName=auth-external-persistence.trx"
@@ -73,6 +113,14 @@ jobs:
           AUTH_TEST_POSTGRES: Host=127.0.0.1;Port=5432;Database=guiyang_ci;Username=postgres;Password=postgres
           LOBBY_TEST_POSTGRES: Host=127.0.0.1;Port=5432;Database=guiyang_ci;Username=postgres;Password=postgres
           LOBBY_TEST_REDIS: 127.0.0.1:6379,abortConnect=false
+      - name: PostgreSQL least-privilege enforcement
+        working-directory: .
+        shell: bash
+        run: bash ./Scripts/Linux/test-postgres-least-privilege.sh
+        env:
+          LEAST_PRIVILEGE_ADMIN_URL: postgresql://postgres:postgres@127.0.0.1:5432/guiyang_ci
+          PGHOST: 127.0.0.1
+          PGPORT: "5432"
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
@@ -93,4 +141,6 @@ jobs:
           bash -n Scripts/Linux/smoke-deployment.sh
           bash -n Scripts/Linux/diagnose-network.sh
           bash -n Scripts/Linux/test-deployment-rollback.sh
+          bash -n Scripts/Linux/test-postgres-least-privilege.sh
           docker compose --env-file Deploy/linux/.env.example -f Deploy/linux/compose.yaml config --quiet
+          GRAFANA_ADMIN_PASSWORD=ci-observability-password-00000001 LOKI_QUERY_TOKEN=ci-loki-query-token-00000000000001 docker compose -f Deploy/observability/compose.yaml config --quiet

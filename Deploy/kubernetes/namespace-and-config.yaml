@@ -10,12 +10,21 @@ metadata:
   namespace: guiyang-mahjong
 data:
   Auth__PersistenceMode: Postgres
-  Auth__PostgresConnectionString: Host=postgres.database.svc;Port=5432;Database=mahjong;Username=mahjong
+  Auth__ApplyDatabaseMigrations: "false"
   Lobby__Persistence__Mode: RedisPostgres
+  Lobby__Persistence__ApplyDatabaseMigrations: "false"
   Lobby__Persistence__RedisConnectionString: redis.cache.svc:6379,abortConnect=false
-  Lobby__Persistence__PostgresConnectionString: Host=postgres.database.svc;Port=5432;Database=mahjong;Username=mahjong
   Lobby__Allocator__Enabled: "true"
   Lobby__Allocator__BaseUrl: http://mahjong-allocator:8080
+  Lobby__RegionId: cn-southwest
+  Lobby__ClusterId: production
+  Lobby__LobbyId: lobby-production-1
+  Lobby__NodeId: lobby-node-1
+  Lobby__TopologyRegistration__Enabled: "true"
+  Lobby__TopologyRegistration__AdminBaseUrl: http://mahjong-admin:8080
+  Lobby__TopologyRegistration__PublicBaseUrl: http://mahjong-lobby:8080
+  Lobby__TopologyRegistration__SourceId: lobby-production-1
+  Lobby__TopologyRegistration__Generation: "1"
   Admin__Lobby__Enabled: "true"
   Admin__Lobby__BaseUrl: http://mahjong-lobby:8080
   Admin__Auth__Enabled: "true"
@@ -31,56 +40,60 @@ data:
   Admin__Management__MuteHours: "24"
   Admin__Management__RiskLabelTtlDays: "30"
   Admin__Management__PersistenceMode: Postgres
+  Admin__Management__ApplyDatabaseMigrations: "false"
   Admin__EnterpriseIdentity__Enabled: "true"
   Admin__EnterpriseIdentity__Authority: https://identity.example.com/tenant
   Admin__EnterpriseIdentity__Audience: mahjong-admin
   Admin__EnterpriseIdentity__RequireHttpsMetadata: "true"
   Admin__EnterpriseIdentity__RequireMfa: "true"
+  Admin__EnterpriseIdentity__MaxTokenAgeMinutes: "10"
+  Admin__EnterpriseIdentity__RevocationSlaMinutes: "10"
+  Admin__Abac__Enabled: "true"
+  Admin__Abac__RegionClaim: mahjong_regions
+  Admin__Abac__ShiftClaim: mahjong_shift
+  Admin__Abac__CaseClaim: mahjong_cases
+  Admin__Abac__BreakGlassUntilClaim: mahjong_break_glass_until
+  Admin__Abac__HighValueCompensationThreshold: "100000"
+  Admin__Abac__BreakGlassMaximumMinutes: "15"
+  Admin__WebSecurity__RequireHttps: "true"
+  Admin__RealtimeCapacity__DefaultPageSize: "100"
+  Admin__RealtimeCapacity__MaximumPageSize: "200"
+  Admin__RealtimeCapacity__MaximumRooms: "10000"
+  Admin__RealtimeCapacity__MaximumPlayers: "100000"
+  Admin__RealtimeCapacity__MaximumInstances: "20000"
+  Admin__RealtimeCapacity__EventBacklogLimit: "20000"
+  Admin__RealtimeCapacity__SubscriberQueueLimit: "256"
+  Admin__RealtimeCapacity__SnapshotIntervalSeconds: "5"
+  Admin__RealtimeCapacity__PlayerPagesPerSnapshotCycle: "20"
+  Admin__RealtimeCapacity__SseEnabled: "true"
+  Admin__RealtimeCapacity__LegacyPollingEnabled: "true"
   Admin__AuditArchive__Enabled: "true"
   Admin__AuditArchive__AppendUrl: https://worm-archive.example.com/v1/admin-audit
   Admin__AuditArchive__PollIntervalMilliseconds: "1000"
   Admin__AuditArchive__MaxAttempts: "20"
+  Admin__AuditArchive__AnchorEnabled: "true"
+  Admin__AuditArchive__AnchorUrl: https://worm-archive.example.com/v1/admin-audit-anchor
+  Admin__AuditArchive__AnchorIntervalSeconds: "300"
+  Admin__TopologyDiscovery__Enabled: "true"
+  Admin__TopologyDiscovery__LeaseSeconds: "60"
+  Admin__TopologyDiscovery__TimeoutSeconds: "5"
+  Admin__ChatArchive__Enabled: "false"
+  Admin__ChatArchive__BaseUrl: https://chat-archive.example.com
+  Admin__ChatArchive__TimeoutSeconds: "5"
+  Admin__ChatArchive__MaxEntries: "100"
+  Admin__ReplayArchive__Enabled: "false"
+  Admin__ReplayArchive__BaseUrl: https://replay-archive.example.com
+  Admin__ReplayArchive__AccessTtlSeconds: "300"
+  Admin__ReplayArchive__MaxObjectMegabytes: "64"
   Admin__Wallet__Enabled: "true"
   Admin__Wallet__BaseUrl: http://mahjong-player-data:8080
   Admin__Wallet__TimeoutSeconds: "5"
-  Admin__Principals__0__OperatorId: room-operator
-  Admin__Principals__0__Roles__0: room.viewer
-  Admin__Principals__0__Roles__1: player.viewer
-  Admin__Principals__0__Roles__2: room.operator
-  Admin__Principals__1__OperatorId: room-approver
-  Admin__Principals__1__Roles__0: room.viewer
-  Admin__Principals__1__Roles__1: room.approver
-  Admin__Principals__1__Roles__2: audit.viewer
-  Admin__Principals__2__OperatorId: player-operator
-  Admin__Principals__2__Roles__0: player.viewer
-  Admin__Principals__2__Roles__1: player.operator
-  Admin__Principals__3__OperatorId: player-approver
-  Admin__Principals__3__Roles__0: player.viewer
-  Admin__Principals__3__Roles__1: player.approver
-  Admin__Principals__3__Roles__2: audit.viewer
-  Admin__Principals__4__OperatorId: infrastructure-operator
-  Admin__Principals__4__Roles__0: room.viewer
-  Admin__Principals__4__Roles__1: infrastructure.operator
-  Admin__Principals__5__OperatorId: sanction-operator
-  Admin__Principals__5__Roles__0: player.viewer
-  Admin__Principals__5__Roles__1: sanction.operator
-  Admin__Principals__6__OperatorId: risk-analyst
-  Admin__Principals__6__Roles__0: player.viewer
-  Admin__Principals__6__Roles__1: risk.analyst
-  Admin__Principals__7__OperatorId: support-operator
-  Admin__Principals__7__Roles__0: player.viewer
-  Admin__Principals__7__Roles__1: support.operator
-  Admin__Principals__8__OperatorId: compensation-operator
-  Admin__Principals__8__Roles__0: room.viewer
-  Admin__Principals__8__Roles__1: compensation.operator
-  Admin__Principals__9__OperatorId: chat-compliance
-  Admin__Principals__9__Roles__0: player.viewer
-  Admin__Principals__9__Roles__1: chat.compliance
   Admin__Allocators__0__Enabled: "true"
   Admin__Allocators__0__ClusterId: production
   Admin__Allocators__0__NodeId: agones
   Admin__Allocators__0__BaseUrl: http://mahjong-allocator:8080
   PlayerData__PersistenceMode: Postgres
+  PlayerData__ApplyDatabaseMigrations: "false"
   PlayerData__AuthBaseUrl: http://mahjong-auth:8080
   PlayerData__AdminProjectionBaseUrl: http://mahjong-admin:8080
   PlayerData__ProjectionEnabled: "true"
@@ -88,6 +101,15 @@ data:
   PlayerData__ProjectionMaxAttempts: "10"
   Lobby__AccessRevocationTtlMinutes: "120"
   Allocator__Backend: Agones
+  Allocator__RegionId: cn-southwest
+  Allocator__ClusterId: production
+  Allocator__NodeId: agones
+  Allocator__AllocatorId: allocator-production-1
+  Allocator__TopologyRegistration__Enabled: "true"
+  Allocator__TopologyRegistration__AdminBaseUrl: http://mahjong-admin:8080
+  Allocator__TopologyRegistration__PublicBaseUrl: http://mahjong-allocator:8080
+  Allocator__TopologyRegistration__SourceId: allocator-production-1
+  Allocator__TopologyRegistration__Generation: "1"
   Allocator__LobbyInternalUrl: http://mahjong-lobby:8080
   Allocator__Agones__Namespace: guiyang-mahjong
   Allocator__Agones__FleetName: guiyang-mahjong

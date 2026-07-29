@@ -45,8 +45,14 @@ public interface IAuthStore
         string? riskLabel,
         CancellationToken cancellationToken);
     Task RecordLoginAsync(AuthLoginEvent loginEvent, CancellationToken cancellationToken);
+    /// <summary>按不可变创建时间与 PlayerId 执行键集分页；limit 包含用于判断下一页的额外记录。</summary>
     Task<IReadOnlyList<PlayerDirectoryItem>> ListPlayersAsync(
-        string? search, int limit, DateTimeOffset now, CancellationToken cancellationToken);
+        string? search,
+        int limit,
+        DateTimeOffset? afterCreatedAtUtc,
+        string? afterPlayerId,
+        DateTimeOffset now,
+        CancellationToken cancellationToken);
     Task<PlayerDirectoryDetail?> GetPlayerDetailAsync(
         string playerId, DateTimeOffset now, CancellationToken cancellationToken);
 }

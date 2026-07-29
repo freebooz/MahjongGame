@@ -1,0 +1,12 @@
+{
+  "/admin": {
+    "target": "http://127.0.0.1:18083",
+    "secure": false,
+    "changeOrigin": false
+  },
+  "/health": {
+    "target": "http://127.0.0.1:18083",
+    "secure": false,
+    "changeOrigin": false
+  }
+}

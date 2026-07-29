@@ -1,6 +1,7 @@
 #include "Server/GuiyangGameServerBridge.h"
 
 #include "Dom/JsonObject.h"
+#include "Engine/NetDriver.h"
 #include "Engine/World.h"
 #include "Game/GuiyangMahjongGameMode.h"
 #include "Game/GuiyangMahjongGameState.h"
@@ -11,12 +12,15 @@
 #include "HttpModule.h"
 #include "HAL/PlatformFileManager.h"
 #include "HAL/PlatformMemory.h"
+#include "HAL/PlatformMisc.h"
+#include "HAL/PlatformTime.h"
 #include "Misc/DateTime.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Guid.h"
 #include "Misc/Parse.h"
 #include "Misc/Paths.h"
 #include "Room/GuiyangManagedRoomDefinition.h"
+#include "Room/GuiyangRoomManager.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
@@ -24,6 +28,9 @@
 
 namespace GuiyangGameServerPrivate
 {
+    /** 房间运行遥测主版本；变更字段单位或空值语义时必须升级该版本。 */
+    constexpr int32 RuntimeTelemetrySchemaVersion = 1;
+
     /** 读取并拒绝空白命令行值，避免“存在但不可用”的启动配置。 */
     bool ReadRequiredValue(const TCHAR* CommandLine, const TCHAR* Match, FString& OutValue)
     {
@@ -37,6 +44,45 @@ namespace GuiyangGameServerPrivate
         const TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&Body);
         FJsonSerializer::Serialize(Object, Writer);
         return Body;
+    }
+
+    /**
+     * 输出与控制面一致的单行 JSON 日志。
+     * 该入口只接受已由调用方构造的摘要，不接受凭证、原始 IP、聊天或支付正文。
+     */
+    void WriteStructuredLog(
+        const FString& Level,
+        const FString& TraceId,
+        const FString& RoomId,
+        const FString& MatchId,
+        const FString& ServerInstanceId,
+        const FString& EventId,
+        const FString& Message)
+    {
+        FString Environment = FPlatformMisc::GetEnvironmentVariable(TEXT("MAHJONG_ENVIRONMENT"));
+        if (Environment.IsEmpty())
+        {
+#if UE_BUILD_SHIPPING
+            Environment = TEXT("Production");
+#else
+            Environment = TEXT("Development");
+#endif
+        }
+        const TSharedRef<FJsonObject> Entry = MakeShared<FJsonObject>();
+        Entry->SetStringField(TEXT("Timestamp"), FDateTime::UtcNow().ToIso8601());
+        Entry->SetStringField(TEXT("Level"), Level);
+        Entry->SetStringField(TEXT("Service"), TEXT("GuiyangMahjong.DedicatedServer"));
+        Entry->SetStringField(TEXT("Environment"), Environment);
+        Entry->SetStringField(TEXT("TraceId"), TraceId);
+        Entry->SetStringField(TEXT("RoomId"), RoomId);
+        Entry->SetStringField(TEXT("PlayerId"), TEXT(""));
+        Entry->SetStringField(TEXT("MatchId"), MatchId);
+        Entry->SetStringField(TEXT("ServerInstanceId"), ServerInstanceId);
+        Entry->SetStringField(TEXT("EventId"), EventId);
+        Entry->SetStringField(TEXT("Category"), TEXT("ManagedGameServer"));
+        Entry->SetStringField(TEXT("Message"), Message);
+        Entry->SetObjectField(TEXT("Properties"), MakeShared<FJsonObject>());
+        UE_LOG(LogMahjongServer, Log, TEXT("%s"), *SerializeJson(Entry));
     }
 }
 
@@ -217,6 +263,18 @@ void UGuiyangGameServerBridge::QueueFinalSettlement(
     PendingMatchResultBody = GuiyangGameServerPrivate::SerializeJson(Body);
     PendingMatchId = Result.MatchId;
     PendingResultSequence = ResultSequence;
+    SettlementResultSequence = ResultSequence;
+    SettlementStatus = TEXT("Submitted");
+    SettlementSubmittedAtUtc = FDateTime::UtcNow();
+    SettlementConfirmedAtUtc = FDateTime();
+    SettlementFailureReason.Reset();
+    const FTCHARToUTF8 ResultUtf8(*PendingMatchResultBody);
+    FSHA256Signature ResultSignature;
+    if (FPlatformMisc::GetSHA256Signature(
+        ResultUtf8.Get(), static_cast<uint32>(ResultUtf8.Length()), ResultSignature))
+    {
+        SettlementResultHash = ResultSignature.ToString().ToLower();
+    }
     MatchResultAttempt = 0;
     SendPendingMatchResult();
 }
@@ -246,8 +304,10 @@ void UGuiyangGameServerBridge::SendRegistration()
 void UGuiyangGameServerBridge::HandleRegistrationResponse(
     FHttpRequestPtr Request, FHttpResponsePtr Response, const bool bSucceeded)
 {
-    (void)Request;
     if (bShuttingDown) return;
+    const FString TraceId = Request.IsValid()
+        ? Request->GetHeader(TEXT("X-Request-Id"))
+        : FString();
     TSharedPtr<FJsonObject> Body;
     const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(
         Response.IsValid() ? Response->GetContentAsString() : FString());
@@ -264,6 +324,10 @@ void UGuiyangGameServerBridge::HandleRegistrationResponse(
         UE_LOG(LogMahjongServer, Error,
             TEXT("Managed GameServer registration failed InstanceId=%s RoomId=%s Status=%d"),
             *Config.ServerInstanceId, *Config.RoomId, Response.IsValid() ? Response->GetResponseCode() : 0);
+        GuiyangGameServerPrivate::WriteStructuredLog(
+            TEXT("Error"), TraceId, Config.RoomId, Config.MatchId,
+            Config.ServerInstanceId, TraceId,
+            TEXT("Dedicated Server 注册失败"));
         return;
     }
 
@@ -285,6 +349,10 @@ void UGuiyangGameServerBridge::HandleRegistrationResponse(
             TEXT("Managed GameServer bootstrap rejected InstanceId=%s RoomId=%s Reason=%s"),
             *Config.ServerInstanceId, *Config.RoomId,
             BootstrapError.IsEmpty() ? TEXT("ROOM_BOOTSTRAP_INVALID") : *BootstrapError);
+        GuiyangGameServerPrivate::WriteStructuredLog(
+            TEXT("Error"), TraceId, Config.RoomId, Config.MatchId,
+            Config.ServerInstanceId, TraceId,
+            TEXT("Dedicated Server 房间 Bootstrap 校验失败"));
         return;
     }
 
@@ -302,6 +370,10 @@ void UGuiyangGameServerBridge::HandleRegistrationResponse(
     UE_LOG(LogMahjongServer, Display,
         TEXT("Managed GameServer registered InstanceId=%s RoomId=%s Port=%d"),
         *Config.ServerInstanceId, *Config.RoomId, Config.Port);
+    GuiyangGameServerPrivate::WriteStructuredLog(
+        TEXT("Information"), TraceId, Config.RoomId, Config.MatchId,
+        Config.ServerInstanceId, TraceId,
+        TEXT("Dedicated Server 注册并绑定房间成功"));
 }
 
 void UGuiyangGameServerBridge::SendHeartbeat()
@@ -324,6 +396,10 @@ void UGuiyangGameServerBridge::SendHeartbeat()
         ConnectedPlayerIds.Add(MakeShared<FJsonValueString>(PlayerId));
     }
     const TSharedRef<FJsonObject> Body = MakeShared<FJsonObject>();
+    // 显式携带版本便于 Lobby 拒绝未知语义；旧构建未携带时仍按 v1 兼容。
+    Body->SetNumberField(
+        TEXT("telemetrySchemaVersion"),
+        GuiyangGameServerPrivate::RuntimeTelemetrySchemaVersion);
     Body->SetStringField(TEXT("roomId"), Config.RoomId);
     Body->SetStringField(TEXT("heartbeatCredential"), HeartbeatCredential);
     Body->SetNumberField(TEXT("connectedPlayers"), ConnectedPlayerIds.Num());
@@ -348,16 +424,45 @@ void UGuiyangGameServerBridge::SendHeartbeat()
     Body->SetNumberField(
         TEXT("rpcReceivedCount"),
         static_cast<double>(AGuiyangMahjongPlayerController::GetServerRpcReceivedCount()));
+    TArray<TSharedPtr<FJsonValue>> RpcMethods;
+    for (const FGuiyangRpcMethodTelemetry& Metric :
+        AGuiyangMahjongPlayerController::GetServerRpcTelemetry())
+    {
+        const TSharedRef<FJsonObject> Method = MakeShared<FJsonObject>();
+        Method->SetStringField(TEXT("methodName"), Metric.MethodName);
+        Method->SetNumberField(TEXT("receivedCount"), static_cast<double>(Metric.ReceivedCount));
+        Method->SetNumberField(TEXT("rejectedCount"), static_cast<double>(Metric.RejectedCount));
+        Method->SetNumberField(TEXT("failedCount"), static_cast<double>(Metric.FailedCount));
+        Method->SetNumberField(TEXT("timeoutCount"), static_cast<double>(Metric.TimeoutCount));
+        Method->SetNumberField(TEXT("p95DurationMilliseconds"), Metric.P95DurationMilliseconds);
+        Method->SetNumberField(TEXT("p99DurationMilliseconds"), Metric.P99DurationMilliseconds);
+        RpcMethods.Add(MakeShared<FJsonValueObject>(Method));
+    }
+    Body->SetArrayField(TEXT("rpcMethods"), RpcMethods);
+
+    // UE 在 Windows 返回进程 WorkingSetSize，在 Linux 返回 /proc/self/status 的 VmRSS，
+    // 两端均是当前 Dedicated Server 的 RSS/工作集，不是节点总已用内存。
     const FPlatformMemoryStats MemoryStats = FPlatformMemory::GetStats();
     Body->SetNumberField(
         TEXT("processMemoryBytes"),
         static_cast<double>(MemoryStats.UsedPhysical));
+    // CPUTimePct 已按节点全部逻辑 CPU 容量归一化到 0～100，CPUTimePctRelative 才是单核口径。
+    const FCPUTime CpuTime = FPlatformTime::GetCPUTime();
+    Body->SetNumberField(
+        TEXT("processCpuPercent"),
+        static_cast<double>(FMath::Clamp(CpuTime.CPUTimePct, 0.0f, 100.0f)));
+    Body->SetNumberField(TEXT("processCpuSampleWindowMilliseconds"), 250.0);
+    UpdateNetworkTelemetry();
+    Body->SetNumberField(TEXT("networkIngressBytes"), static_cast<double>(NetworkIngressBytes));
+    Body->SetNumberField(TEXT("networkEgressBytes"), static_cast<double>(NetworkEgressBytes));
 
     TArray<TSharedPtr<FJsonValue>> Players;
     const AGuiyangMahjongGameState* GameState =
         World->GetGameState<AGuiyangMahjongGameState>();
     if (GameState)
     {
+        const AGuiyangMahjongGameMode* GameMode =
+            World->GetAuthGameMode<AGuiyangMahjongGameMode>();
         for (const FMahjongSeatInfo& Seat : GameState->RoomState.Seats)
         {
             if (!Seat.bOccupied || Seat.PlayerId.IsEmpty()) continue;
@@ -370,10 +475,63 @@ void UGuiyangGameServerBridge::SendHeartbeat()
             Player->SetNumberField(
                 TEXT("latencyMilliseconds"),
                 FMath::Max(0, Seat.PingMilliseconds));
+            if (GameMode)
+            {
+                FGuiyangPlayerConnectionTelemetry Connection;
+                if (GameMode->GetPlayerConnectionTelemetry(Seat.PlayerId, Connection))
+                {
+                    Player->SetStringField(
+                        TEXT("connectionChangedAtUtc"), Connection.ChangedAtUtc.ToIso8601());
+                    Player->SetNumberField(
+                        TEXT("connectionStateSequence"), static_cast<double>(Connection.Sequence));
+                    Player->SetStringField(TEXT("connectionEventId"), Connection.EventId);
+                    if (Connection.bDisconnected)
+                    {
+                        Player->SetStringField(
+                            TEXT("disconnectedAtUtc"), Connection.DisconnectedAtUtc.ToIso8601());
+                        Player->SetStringField(TEXT("disconnectReason"), Connection.DisconnectReason);
+                    }
+                    if (Connection.ReconnectedAtUtc.GetTicks() > 0)
+                    {
+                        Player->SetStringField(
+                            TEXT("reconnectedAtUtc"), Connection.ReconnectedAtUtc.ToIso8601());
+                    }
+                }
+                bool bTrustee = false;
+                FDateTime TrusteeChangedAtUtc;
+                if (GameMode->GetPlayerTrusteeTelemetry(
+                    Seat.PlayerId, bTrustee, TrusteeChangedAtUtc))
+                {
+                    Player->SetBoolField(TEXT("trustee"), bTrustee);
+                    Player->SetStringField(
+                        TEXT("trusteeChangedAtUtc"), TrusteeChangedAtUtc.ToIso8601());
+                }
+            }
             Players.Add(MakeShared<FJsonValueObject>(Player));
         }
     }
     Body->SetArrayField(TEXT("players"), Players);
+    if (Lifecycle == TEXT("Settling") && SettlementStatus.IsEmpty())
+    {
+        SettlementStatus = TEXT("Calculating");
+    }
+    if (!SettlementStatus.IsEmpty())
+    {
+        const TSharedRef<FJsonObject> Settlement = MakeShared<FJsonObject>();
+        Settlement->SetStringField(TEXT("status"), SettlementStatus);
+        Settlement->SetStringField(TEXT("matchId"), Config.MatchId);
+        if (SettlementResultSequence > 0)
+            Settlement->SetNumberField(TEXT("resultSequence"), static_cast<double>(SettlementResultSequence));
+        if (!SettlementResultHash.IsEmpty())
+            Settlement->SetStringField(TEXT("resultHash"), SettlementResultHash);
+        if (SettlementSubmittedAtUtc.GetTicks() > 0)
+            Settlement->SetStringField(TEXT("submittedAtUtc"), SettlementSubmittedAtUtc.ToIso8601());
+        if (SettlementConfirmedAtUtc.GetTicks() > 0)
+            Settlement->SetStringField(TEXT("confirmedAtUtc"), SettlementConfirmedAtUtc.ToIso8601());
+        if (!SettlementFailureReason.IsEmpty())
+            Settlement->SetStringField(TEXT("failureReason"), SettlementFailureReason);
+        Body->SetObjectField(TEXT("settlement"), Settlement);
+    }
     Body->SetStringField(TEXT("buildVersion"), Config.BuildVersion);
     Body->SetStringField(TEXT("sentAtUtc"), FDateTime::UtcNow().ToIso8601());
 
@@ -391,13 +549,19 @@ void UGuiyangGameServerBridge::SendHeartbeat()
 void UGuiyangGameServerBridge::HandleHeartbeatResponse(
     FHttpRequestPtr Request, FHttpResponsePtr Response, const bool bSucceeded)
 {
-    (void)Request;
     if (!bShuttingDown && (!bSucceeded || !Response.IsValid()
         || Response->GetResponseCode() < 200 || Response->GetResponseCode() >= 300))
     {
         UE_LOG(LogMahjongServer, Warning,
             TEXT("Managed GameServer heartbeat failed InstanceId=%s Status=%d"),
             *Config.ServerInstanceId, Response.IsValid() ? Response->GetResponseCode() : 0);
+        const FString TraceId = Request.IsValid()
+            ? Request->GetHeader(TEXT("X-Request-Id"))
+            : FString();
+        GuiyangGameServerPrivate::WriteStructuredLog(
+            TEXT("Warning"), TraceId, Config.RoomId, Config.MatchId,
+            Config.ServerInstanceId, TraceId,
+            TEXT("Dedicated Server 心跳上报失败"));
     }
 }
 
@@ -408,6 +572,9 @@ void UGuiyangGameServerBridge::SendPendingMatchResult()
         || PendingMatchResultBody.IsEmpty() || ResultCredential.Len() < 32)
         return;
     bMatchResultRequestInFlight = true;
+    // 每次实际重试进入 Submitted；只有启动失败或回执失败才转为 Failed。
+    SettlementStatus = TEXT("Submitted");
+    SettlementFailureReason.Reset();
     const TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = FHttpModule::Get().CreateRequest();
     Request->SetURL(Config.LobbyInternalUrl + TEXT("/internal/matches/")
         + PendingMatchId + TEXT("/result"));
@@ -425,6 +592,8 @@ void UGuiyangGameServerBridge::SendPendingMatchResult()
     {
         Request->OnProcessRequestComplete().Unbind();
         bMatchResultRequestInFlight = false;
+        SettlementStatus = TEXT("Failed");
+        SettlementFailureReason = TEXT("RequestStartFailed");
         ScheduleMatchResultRetry();
     }
 }
@@ -453,6 +622,9 @@ void UGuiyangGameServerBridge::HandleMatchResultResponse(
             TEXT("Final settlement acknowledged InstanceId=%s MatchId=%s Sequence=%lld"),
             *Config.ServerInstanceId, *PendingMatchId, PendingResultSequence);
         DeletePersistedMatchResult();
+        SettlementStatus = TEXT("Accepted");
+        SettlementConfirmedAtUtc = FDateTime::UtcNow();
+        SettlementFailureReason.Reset();
         PendingMatchResultBody.Reset();
         PendingMatchId.Reset();
         PendingResultSequence = 0;
@@ -463,6 +635,10 @@ void UGuiyangGameServerBridge::HandleMatchResultResponse(
         TEXT("Final settlement report will retry InstanceId=%s MatchId=%s Sequence=%lld Status=%d"),
         *Config.ServerInstanceId, *PendingMatchId, PendingResultSequence,
         Response.IsValid() ? Response->GetResponseCode() : 0);
+    SettlementStatus = TEXT("Failed");
+    SettlementFailureReason = Response.IsValid()
+        ? FString::Printf(TEXT("LobbyHttp%d"), Response->GetResponseCode())
+        : TEXT("LobbyUnavailable");
     ScheduleMatchResultRetry();
 }
 
@@ -514,6 +690,39 @@ void UGuiyangGameServerBridge::DeletePersistedMatchResult() const
             TEXT("Acknowledged final settlement outbox could not be deleted InstanceId=%s MatchId=%s"),
             *Config.ServerInstanceId, *Config.MatchId);
     }
+}
+
+void UGuiyangGameServerBridge::UpdateNetworkTelemetry()
+{
+    UNetDriver* NetDriver = World.IsValid() ? World->GetNetDriver() : nullptr;
+    if (!NetDriver) return;
+    const uint32 CurrentIngress = NetDriver->InTotalBytes;
+    const uint32 CurrentEgress = NetDriver->OutTotalBytes;
+    if (!bNetworkBaselineInitialized)
+    {
+        // 第一次采样把驱动已累计值纳入“进程启动以来”总量。
+        SampledNetDriver = NetDriver;
+        PreviousNetworkIngressBytes = CurrentIngress;
+        PreviousNetworkEgressBytes = CurrentEgress;
+        NetworkIngressBytes = CurrentIngress;
+        NetworkEgressBytes = CurrentEgress;
+        bNetworkBaselineInitialized = true;
+        return;
+    }
+    if (SampledNetDriver.Get() != NetDriver)
+    {
+        // 新驱动只建立基线；驱动切换常伴随计数器归零，不能把旧值与新值相减。
+        SampledNetDriver = NetDriver;
+        PreviousNetworkIngressBytes = CurrentIngress;
+        PreviousNetworkEgressBytes = CurrentEgress;
+        bNetworkBaselineInitialized = true;
+        return;
+    }
+    // 同一 uint32 计数器的无符号减法天然处理单次回绕，累计结果使用 uint64 避免再次溢出。
+    NetworkIngressBytes += static_cast<uint32>(CurrentIngress - PreviousNetworkIngressBytes);
+    NetworkEgressBytes += static_cast<uint32>(CurrentEgress - PreviousNetworkEgressBytes);
+    PreviousNetworkIngressBytes = CurrentIngress;
+    PreviousNetworkEgressBytes = CurrentEgress;
 }
 
 FString UGuiyangGameServerBridge::BuildHeartbeatLifecycle(int32& OutRoundId) const

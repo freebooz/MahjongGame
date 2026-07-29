@@ -4,18 +4,21 @@ using GuiyangMahjong.Auth.Options;
 using GuiyangMahjong.Auth.Security;
 using GuiyangMahjong.Auth.Services;
 using GuiyangMahjong.Auth.Storage;
+using GuiyangMahjong.Observability;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Options;
 using Npgsql;
 using System.Net;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 
 var builder = WebApplication.CreateBuilder(new WebApplicationOptions
 {
     Args = args,
     ContentRootPath = AppContext.BaseDirectory
 });
+builder.AddMahjongObservability("GuiyangMahjong.Auth");
 
 builder.Services.AddOptions<AuthOptions>()
     .Bind(builder.Configuration.GetSection(AuthOptions.SectionName))
@@ -25,6 +28,9 @@ builder.Services.AddOptions<AuthOptions>()
     .Validate(options => options.PersistenceMode != "Postgres"
                          || !string.IsNullOrWhiteSpace(options.PostgresConnectionString),
         "Auth PostgreSQL connection string is required in Postgres mode.")
+    .Validate(options => !builder.Environment.IsProduction()
+                         || !options.ApplyDatabaseMigrations,
+        "Production Auth runtime must not execute database migrations.")
     .Validate(options => string.IsNullOrEmpty(options.MonitoringReadOnlyToken)
                          || options.MonitoringReadOnlyToken.Length >= 32,
         "Auth:MonitoringReadOnlyToken must be empty or contain at least 32 characters.")
@@ -68,6 +74,9 @@ builder.Services.AddRateLimiter(options => options.AddPolicy("auth", context =>
         })));
 
 var app = builder.Build();
+app.UseMahjongObservability(
+    "GuiyangMahjong.Auth",
+    app.Environment.EnvironmentName);
 if (app.Services.GetRequiredService<IOptions<AuthOptions>>().Value.EnableHttpsRedirection)
     app.UseHttpsRedirection();
 app.UseRateLimiter();
@@ -213,14 +222,54 @@ app.MapGet("/internal/monitoring/players", async (
     IAuthStore store,
     IOptions<AuthOptions> options,
     string? search,
+    string? cursor,
+    int? pageSize,
     int? limit,
     TimeProvider timeProvider,
     CancellationToken cancellationToken) =>
 {
     if (!HasMonitoringCredential(context, options.Value.MonitoringReadOnlyToken))
         return Results.Unauthorized();
-    return Results.Ok(await store.ListPlayersAsync(
-        search, Math.Clamp(limit ?? 500, 1, 2000), timeProvider.GetUtcNow(), cancellationToken));
+    var normalizedSearch = search?.Trim() ?? string.Empty;
+    if (!TryReadMonitoringCursor(
+            cursor,
+            normalizedSearch,
+            out var afterCreatedAtUtc,
+            out var afterPlayerId))
+    {
+        return Results.BadRequest(new
+        {
+            code = "INVALID_CURSOR",
+            message = "Cursor is invalid or belongs to another filter."
+        });
+    }
+    var safePageSize = Math.Clamp(pageSize ?? limit ?? 100, 1, 200);
+    if (limit.HasValue)
+        context.Response.Headers["Deprecation"] = "true";
+    var loaded = await store.ListPlayersAsync(
+        normalizedSearch,
+        safePageSize + 1,
+        afterCreatedAtUtc,
+        afterPlayerId,
+        timeProvider.GetUtcNow(),
+        cancellationToken);
+    var items = loaded.Take(safePageSize).ToArray();
+    var nextCursor = loaded.Count > safePageSize && items.Length > 0
+        ? WriteMonitoringCursor(
+            items[^1].CreatedAtUtc,
+            items[^1].PlayerId,
+            normalizedSearch)
+        : null;
+    // 旧 Admin 在滚动升级窗口仍可解析数组，但页大小已受 200 上限保护；新版本必须改用 pageSize/cursor。
+    if (limit.HasValue && pageSize is null && string.IsNullOrWhiteSpace(cursor))
+        return Results.Ok(items);
+    return Results.Ok(new
+    {
+        items,
+        nextCursor,
+        hasMore = nextCursor is not null,
+        pageSize = safePageSize
+    });
 });
 
 app.MapGet("/internal/monitoring/players/{playerId}", async (
@@ -328,4 +377,50 @@ static bool ValidatePlayerControlCommand(
     return riskLabel is null;
 }
 
+// 内部监控游标使用不可变创建时间和唯一 ID，并绑定搜索条件；无效或跨过滤器复用时默认拒绝。
+static bool TryReadMonitoringCursor(
+    string? cursor,
+    string filter,
+    out DateTimeOffset? createdAtUtc,
+    out string? id)
+{
+    createdAtUtc = null;
+    id = null;
+    if (string.IsNullOrWhiteSpace(cursor)) return true;
+    try
+    {
+        var payload = JsonSerializer.Deserialize<AuthMonitoringCursor>(
+            Convert.FromBase64String(cursor));
+        if (payload is null
+            || !string.Equals(payload.Filter, filter, StringComparison.Ordinal)
+            || string.IsNullOrWhiteSpace(payload.Id))
+            return false;
+        createdAtUtc = payload.CreatedAtUtc;
+        id = payload.Id;
+        return true;
+    }
+    catch (FormatException)
+    {
+        return false;
+    }
+    catch (JsonException)
+    {
+        return false;
+    }
+}
+
+// 游标内容不包含凭据或个人信息；Base64 仅作为不透明传输编码，服务端仍严格校验字段。
+static string WriteMonitoringCursor(
+    DateTimeOffset createdAtUtc,
+    string id,
+    string filter) =>
+    Convert.ToBase64String(JsonSerializer.SerializeToUtf8Bytes(
+        new AuthMonitoringCursor(createdAtUtc, id, filter)));
+
 public partial class Program;
+
+/// <summary>Auth 玩家键集分页游标；创建时间与 PlayerId 共同形成确定性排序边界。</summary>
+internal sealed record AuthMonitoringCursor(
+    DateTimeOffset CreatedAtUtc,
+    string Id,
+    string Filter);

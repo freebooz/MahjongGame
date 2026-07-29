@@ -32,12 +32,17 @@ services:
       dockerfile: Services/GuiyangMahjong.Auth/Dockerfile
     environment:
       ASPNETCORE_ENVIRONMENT: Production
+      # 本地控制面按需向宿主机 Collector 输出 OTLP；未部署 Collector 时保持关闭。
+      Observability__Enabled: ${OBSERVABILITY_ENABLED:-false}
+      Observability__OtlpEndpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://host.docker.internal:4317}
       Auth__PersistenceMode: Postgres
       Auth__PostgresConnectionString: Host=postgres;Port=5432;Database=mahjong;Username=mahjong;Password=${POSTGRES_PASSWORD}
       Auth__TokenSigningKey: ${PLAYER_TOKEN_SIGNING_KEY:?set PLAYER_TOKEN_SIGNING_KEY}
       Auth__GuestIdentityPepper: ${GUEST_IDENTITY_PEPPER:?set GUEST_IDENTITY_PEPPER}
     depends_on:
       postgres: {condition: service_healthy}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports: ["18082:8080"]
     restart: unless-stopped
 
@@ -47,6 +52,8 @@ services:
       dockerfile: Services/GuiyangMahjong.Lobby/Dockerfile
     environment:
       ASPNETCORE_ENVIRONMENT: Production
+      Observability__Enabled: ${OBSERVABILITY_ENABLED:-false}
+      Observability__OtlpEndpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://host.docker.internal:4317}
       Lobby__Persistence__Mode: RedisPostgres
       Lobby__Persistence__RedisConnectionString: redis:6379,abortConnect=false
       Lobby__Persistence__PostgresConnectionString: Host=postgres;Port=5432;Database=mahjong;Username=mahjong;Password=${POSTGRES_PASSWORD}
@@ -57,6 +64,8 @@ services:
     depends_on:
       postgres: {condition: service_healthy}
       redis: {condition: service_healthy}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports: ["18080:8080"]
     restart: unless-stopped
 

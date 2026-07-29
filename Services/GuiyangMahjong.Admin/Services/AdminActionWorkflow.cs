@@ -15,6 +15,7 @@ public sealed partial class AdminActionWorkflow(
     IAdminCaseStore caseStore,
     MonitoringAggregationService monitoring,
     PlayerMonitoringService playerMonitoring,
+    AdminAbacPolicyService abacPolicy,
     IOptions<AdminOptions> options,
     TimeProvider timeProvider)
 {
@@ -174,10 +175,44 @@ public sealed partial class AdminActionWorkflow(
         string actionRequestId,
         ApproveAdminActionRequest request,
         CancellationToken cancellationToken)
+        => await ApproveCoreAsync(
+            principal,
+            actionRequestId,
+            request,
+            null,
+            cancellationToken);
+
+    /// <summary>
+    /// 处理来自 HTTP 管理入口的审批；除角色和职责分离外，还执行班次及高额补偿 ABAC 校验。
+    /// </summary>
+    public async Task<AdminActionRecord> ApproveAsync(
+        AdminPrincipal principal,
+        string actionRequestId,
+        ApproveAdminActionRequest request,
+        HttpContext context,
+        CancellationToken cancellationToken)
+        => await ApproveCoreAsync(
+            principal,
+            actionRequestId,
+            request,
+            context,
+            cancellationToken);
+
+    private async Task<AdminActionRecord> ApproveCoreAsync(
+        AdminPrincipal principal,
+        string actionRequestId,
+        ApproveAdminActionRequest request,
+        HttpContext? context,
+        CancellationToken cancellationToken)
     {
         EnsureEnabled();
         var action = await RequireActionAsync(actionRequestId, cancellationToken);
         RequireRole(principal, RequiredApproverRole(action.ActionType));
+        if (context is not null
+            && request.Decision == ApprovalDecision.Approve)
+        {
+            abacPolicy.RequireCompensationApproval(context, action);
+        }
         if (string.Equals(action.RequestedBy, principal.OperatorId, StringComparison.Ordinal))
             throw AdminOperationException.Forbidden("申请人不得审批自己的操作。");
         if (action.Status != AdminActionStatus.PendingApproval)
@@ -267,7 +302,10 @@ public sealed partial class AdminActionWorkflow(
     {
         if (IsPlayerAction(actionType))
         {
-            var player = await playerMonitoring.GetPlayerAsync(targetId, cancellationToken)
+            // 管理决策必须重新读取权威实时状态，禁止复用只读页面展示的最后成功快照。
+            var player = await playerMonitoring.GetPlayerForActionAsync(
+                    targetId,
+                    cancellationToken)
                 ?? throw AdminOperationException.NotFound("玩家不存在。");
             var controlState = JsonSerializer.SerializeToElement(new
             {
@@ -304,7 +342,7 @@ public sealed partial class AdminActionWorkflow(
 
         if (actionType == AdminManagementActionType.TerminateAbnormalServer)
         {
-            var instance = (await monitoring.ListInstancesAsync(cancellationToken))
+            var instance = (await monitoring.ListInstancesForActionAsync(cancellationToken))
                 .FirstOrDefault(item =>
                     item.Instance.ServerInstanceId.Equals(targetId, StringComparison.Ordinal));
             if (instance is null)
@@ -328,7 +366,7 @@ public sealed partial class AdminActionWorkflow(
                 ComputeStateHash(serverState));
         }
 
-        var room = await monitoring.GetRoomAsync(targetId, cancellationToken)
+        var room = await monitoring.GetRoomForActionAsync(targetId, cancellationToken)
             ?? throw AdminOperationException.NotFound("房间不存在。");
         var state = JsonSerializer.SerializeToElement(new
         {
@@ -590,7 +628,7 @@ public sealed partial class AdminActionWorkflow(
         var originalCommandId = parameters!.Value
             .GetProperty("originalCommandId")
             .GetString()!;
-        var player = await playerMonitoring.GetPlayerAsync(
+        var player = await playerMonitoring.GetPlayerForActionAsync(
             playerId,
             cancellationToken)
             ?? throw AdminOperationException.NotFound(

@@ -1,0 +1,85 @@
+groups:
+  - name: mahjong-slo-recording
+    interval: 30s
+    rules:
+      - record: mahjong:slo:admin_api_availability_30d
+        expr: 1 - (sum(increase(mahjong_http_server_failures_total{service="GuiyangMahjong.Admin"}[30d])) / clamp_min(sum(increase(mahjong_http_server_requests_total{service="GuiyangMahjong.Admin"}[30d])), 1))
+        labels: {slo: admin-api-availability, owner: admin-platform}
+      - record: mahjong:slo:admin_api_error_budget_remaining
+        expr: clamp_max(clamp_min((mahjong:slo:admin_api_availability_30d - 0.999) / 0.001, 1), 0)
+        labels: {slo: admin-api-availability, owner: admin-platform}
+      - record: mahjong:slo:admin_api_burn_rate_1h
+        expr: (sum(rate(mahjong_http_server_failures_total{service="GuiyangMahjong.Admin"}[1h])) / clamp_min(sum(rate(mahjong_http_server_requests_total{service="GuiyangMahjong.Admin"}[1h])), 0.001)) / 0.001
+        labels: {slo: admin-api-availability, owner: admin-platform}
+      - record: mahjong:slo:admin_api_burn_rate_6h
+        expr: (sum(rate(mahjong_http_server_failures_total{service="GuiyangMahjong.Admin"}[6h])) / clamp_min(sum(rate(mahjong_http_server_requests_total{service="GuiyangMahjong.Admin"}[6h])), 0.001)) / 0.001
+        labels: {slo: admin-api-availability, owner: admin-platform}
+      - record: mahjong:slo:telemetry_freshness_p95_seconds
+        expr: histogram_quantile(0.95, sum(rate(mahjong_telemetry_freshness_seconds_bucket[10m])) by (le))
+        labels: {slo: telemetry-freshness, owner: game-server-lobby}
+      - record: mahjong:slo:admin_command_start_p95_seconds
+        expr: histogram_quantile(0.95, sum(rate(mahjong_admin_command_approval_to_start_seconds_bucket[10m])) by (le))
+        labels: {slo: admin-command-start, owner: admin-platform}
+      - record: mahjong:slo:audit_worm_latency_p95_seconds
+        expr: histogram_quantile(0.95, sum(rate(mahjong_audit_archive_latency_seconds_bucket[15m])) by (le))
+        labels: {slo: audit-worm-latency, owner: security-sre}
+
+  - name: mahjong-slo-alerts
+    interval: 30s
+    rules:
+      - alert: MahjongAdminApiErrorBudgetExhausted
+        expr: mahjong:slo:admin_api_error_budget_remaining <= 0
+        for: 5m
+        labels: {severity: critical, service: admin, governance: release-block}
+        annotations:
+          summary: "Admin API 月度错误预算已耗尽，暂停非修复性发布"
+          runbook_url: "Docs/RUNBOOKS/SLO_MULTI_CLUSTER_GOVERNANCE.md#服务目标与发布门禁"
+      - alert: MahjongAdminApiFastBurn
+        expr: mahjong:slo:admin_api_burn_rate_1h > 14.4 and mahjong:slo:admin_api_burn_rate_6h > 6
+        for: 5m
+        labels: {severity: critical, service: admin, governance: release-block}
+        annotations:
+          summary: "Admin API 错误预算快速燃烧"
+          runbook_url: "Docs/RUNBOOKS/SLO_MULTI_CLUSTER_GOVERNANCE.md#服务目标与发布门禁"
+      - alert: MahjongTelemetryFreshnessSloViolated
+        expr: mahjong:slo:telemetry_freshness_p95_seconds > 10
+        for: 10m
+        labels: {severity: warning, service: lobby, governance: release-review}
+        annotations:
+          summary: "遥测端到端新鲜度 P95 超过 10 秒"
+          runbook_url: "Docs/RUNBOOKS/SLO_MULTI_CLUSTER_GOVERNANCE.md#服务目标与发布门禁"
+      - alert: MahjongAdminCommandStartSloViolated
+        expr: mahjong:slo:admin_command_start_p95_seconds > 5
+        for: 10m
+        labels: {severity: critical, service: admin, governance: release-block}
+        annotations:
+          summary: "高危命令批准到开始执行 P95 超过 5 秒"
+          runbook_url: "Docs/RUNBOOKS/SLO_MULTI_CLUSTER_GOVERNANCE.md#服务目标与发布门禁"
+      - alert: MahjongAuditWormLatencySloViolated
+        expr: mahjong:slo:audit_worm_latency_p95_seconds > 60
+        for: 10m
+        labels: {severity: critical, service: admin, governance: release-block}
+        annotations:
+          summary: "审计到 WORM 归档 P95 超过 60 秒"
+          runbook_url: "Docs/RUNBOOKS/SLO_MULTI_CLUSTER_GOVERNANCE.md#wormsiem-与审计链异常"
+      - alert: MahjongAuditChainIntegrityFailed
+        expr: increase(mahjong_audit_chain_anchor_outcomes_total{outcome="integrity_failed"}[5m]) > 0
+        for: 0s
+        labels: {severity: critical, service: admin, governance: security-incident}
+        annotations:
+          summary: "审计哈希链校验失败，立即进入安全事件流程"
+          runbook_url: "Docs/RUNBOOKS/SLO_MULTI_CLUSTER_GOVERNANCE.md#wormsiem-与审计链异常"
+      - alert: MahjongAuditChainAnchorFailed
+        expr: increase(mahjong_audit_chain_anchor_outcomes_total{outcome="failed"}[15m]) > 0
+        for: 5m
+        labels: {severity: critical, service: admin, governance: release-block}
+        annotations:
+          summary: "审计链外部锚定失败"
+          runbook_url: "Docs/RUNBOOKS/SLO_MULTI_CLUSTER_GOVERNANCE.md#wormsiem-与审计链异常"
+      - alert: MahjongAdminBreakGlassUsed
+        expr: increase(mahjong_admin_break_glass_uses_total{outcome="allowed"}[5m]) > 0
+        for: 0s
+        labels: {severity: critical, service: admin, governance: security-review}
+        annotations:
+          summary: "检测到管理端紧急访问，必须关联事件并在 24 小时内复核"
+          runbook_url: "Docs/RUNBOOKS/SLO_MULTI_CLUSTER_GOVERNANCE.md#abac-与-break-glass"

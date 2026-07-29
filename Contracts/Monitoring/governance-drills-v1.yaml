@@ -1,0 +1,73 @@
+apiVersion: mahjong.monitoring/v1
+kind: GovernanceDrillCatalog
+metadata:
+  owner: platform-governance
+  reviewCadence: quarterly
+objectives:
+  rtoSeconds: 300
+  rpoSeconds: 60
+  invariants:
+    - no-duplicate-admin-command
+    - no-duplicate-compensation
+    - audit-chain-remains-verifiable
+    - unaffected-region-remains-queryable
+scenarios:
+  - id: region-registration-expiry
+    fault: stop one region Lobby and Allocator registration refresh
+    expected:
+      detectionSeconds: 30
+      isolation: failed region only
+      recovery: lease refresh restores source without process restart
+  - id: monitoring-downstream-timeout
+    fault: inject timeout and HTTP 503 into one monitoring source
+    expected:
+      circuitBreaker: opens
+      staleData: explicitly labelled
+      managementCommands: fail-closed
+  - id: redis-partition
+    fault: isolate one Lobby from Redis
+    expected:
+      rpoSeconds: 60
+      unaffectedRegions: available
+      duplicateEvents: false
+  - id: postgres-primary-failover
+    fault: promote tested standby and fence old primary
+    expected:
+      rtoSeconds: 300
+      duplicateCommands: false
+      duplicateAssetOperations: false
+  - id: worm-endpoint-unavailable
+    fault: return timeout and 503 from WORM/SIEM
+    expected:
+      outboxRetained: true
+      alertSeconds: 60
+      chainAnchor: resumes idempotently
+  - id: audit-chain-tamper
+    fault: alter one archived audit record in isolated exercise data
+    expected:
+      integrityAlert: critical
+      automaticRepair: false
+      forensicRunbook: required
+  - id: oidc-revocation
+    fault: revoke role and active session at identity provider
+    expected:
+      revocationSlaSeconds: 600
+      newManagementActions: denied
+  - id: break-glass-expiry
+    fault: advance beyond emergency authorization deadline
+    expected:
+      subsequentReads: denied
+      usageAlert: emitted
+evidence:
+  required:
+    - exercise-id
+    - operator
+    - approved-change-ticket
+    - started-at-utc
+    - ended-at-utc
+    - trace-ids
+    - before-and-after-snapshots
+    - alert-timestamps
+    - measured-rto-rpo
+    - duplicate-command-query-result
+    - remediation-owner-and-deadline

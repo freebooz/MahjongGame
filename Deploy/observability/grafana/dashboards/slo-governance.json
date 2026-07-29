@@ -1,0 +1,46 @@
+{
+  "uid": "mahjong-slo-governance",
+  "title": "Mahjong SLO 与治理",
+  "schemaVersion": 41,
+  "time": {"from": "now-30d", "to": "now"},
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Admin API 30 天可用性",
+      "datasource": {"type": "prometheus", "uid": "mahjong-prometheus"},
+      "targets": [{"expr": "mahjong:slo:admin_api_availability_30d", "legendFormat": "availability"}],
+      "fieldConfig": {"defaults": {"unit": "percentunit", "thresholds": {"mode": "absolute", "steps": [{"color": "red"}, {"color": "green", "value": 0.999}]}}}
+    },
+    {
+      "id": 2,
+      "type": "gauge",
+      "title": "Admin API 错误预算剩余",
+      "datasource": {"type": "prometheus", "uid": "mahjong-prometheus"},
+      "targets": [{"expr": "mahjong:slo:admin_api_error_budget_remaining", "legendFormat": "remaining"}],
+      "fieldConfig": {"defaults": {"unit": "percentunit", "min": 0, "max": 1}}
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "端到端 P95",
+      "datasource": {"type": "prometheus", "uid": "mahjong-prometheus"},
+      "targets": [
+        {"expr": "mahjong:slo:telemetry_freshness_p95_seconds", "legendFormat": "遥测新鲜度"},
+        {"expr": "mahjong:slo:admin_command_start_p95_seconds", "legendFormat": "命令开始"},
+        {"expr": "mahjong:slo:audit_worm_latency_p95_seconds", "legendFormat": "WORM 归档"}
+      ],
+      "fieldConfig": {"defaults": {"unit": "s"}}
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "错误预算燃烧率",
+      "datasource": {"type": "prometheus", "uid": "mahjong-prometheus"},
+      "targets": [
+        {"expr": "mahjong:slo:admin_api_burn_rate_1h", "legendFormat": "1h"},
+        {"expr": "mahjong:slo:admin_api_burn_rate_6h", "legendFormat": "6h"}
+      ]
+    }
+  ]
+}

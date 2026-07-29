@@ -12,6 +12,9 @@
     <PackageReference Include="Npgsql" Version="10.0.0" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\GuiyangMahjong.Observability\GuiyangMahjong.Observability.csproj" />
+  </ItemGroup>
+  <ItemGroup>
     <Content Include="..\..\Contracts\OpenAPI\auth-v1.openapi.yaml"
              Link="OpenAPI\auth-v1.openapi.yaml"
              CopyToOutputDirectory="PreserveNewest"

@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using GuiyangMahjong.Admin.Options;
 using GuiyangMahjong.Admin.Storage;
+using GuiyangMahjong.Observability;
 using Microsoft.Extensions.Options;
 
 namespace GuiyangMahjong.Admin.Services;
@@ -28,6 +29,7 @@ public sealed class AuditArchiveDispatcher(
             now,
             now.AddSeconds(30),
             cancellationToken);
+        MahjongTelemetry.RecordAuditArchiveBatch(records.Count);
         foreach (var record in records)
         {
             try
@@ -61,10 +63,22 @@ public sealed class AuditArchiveDispatcher(
                 if (response.IsSuccessStatusCode
                     || response.StatusCode == HttpStatusCode.Conflict)
                 {
+                    MahjongTelemetry.RecordAuditArchiveOutcome("succeeded");
+                    var archivedAtUtc = timeProvider.GetUtcNow();
+                    if (record.Payload.TryGetProperty(
+                            "occurredAtUtc",
+                            out var occurredAt)
+                        && occurredAt.TryGetDateTimeOffset(
+                            out var occurredAtUtc))
+                    {
+                        MahjongTelemetry.RecordAuditArchiveLatency(
+                            occurredAtUtc,
+                            archivedAtUtc);
+                    }
                     await store.CompleteAsync(
                         record.AuditId,
                         workerId,
-                        timeProvider.GetUtcNow(),
+                        archivedAtUtc,
                         cancellationToken);
                     continue;
                 }
@@ -99,6 +113,8 @@ public sealed class AuditArchiveDispatcher(
     {
         var terminal =
             terminalResponse || record.AttemptCount >= archive.MaxAttempts;
+        MahjongTelemetry.RecordAuditArchiveOutcome(
+            terminal ? "failed" : "retry_scheduled");
         var delaySeconds = Math.Min(
             300,
             Math.Pow(2, Math.Min(record.AttemptCount, 8)));

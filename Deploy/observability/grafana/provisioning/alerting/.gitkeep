@@ -1,0 +1,1 @@
+# 告警由 Prometheus/Alertmanager 管理；保留目录供后续 Grafana 告警供应使用。

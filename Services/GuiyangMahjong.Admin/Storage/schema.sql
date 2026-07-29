@@ -252,6 +252,40 @@ CREATE INDEX IF NOT EXISTS ix_admin_management_cases_target
         target_type, target_id, created_at_utc DESC);
 
 ALTER TABLE admin_monitor.management_cases
+    ADD COLUMN IF NOT EXISTS closed_at_utc TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS closed_by VARCHAR(128),
+    ADD COLUMN IF NOT EXISTS resolution TEXT,
+    ADD COLUMN IF NOT EXISTS evidence_package_hash CHAR(64);
+
+-- 兼容尚未记录闭环字段的早期 Closed 数据；固定迁移摘要只标识“旧记录”，不冒充真实证据包。
+UPDATE admin_monitor.management_cases
+SET closed_at_utc = COALESCE(closed_at_utc, created_at_utc),
+    closed_by = COALESCE(closed_by, approved_by),
+    resolution = COALESCE(
+        resolution,
+        'Migrated closed case; historical resolution was unavailable.'),
+    evidence_package_hash = COALESCE(
+        evidence_package_hash,
+        repeat('0', 64))
+WHERE status = 'Closed';
+
+ALTER TABLE admin_monitor.management_cases
+    DROP CONSTRAINT IF EXISTS ck_admin_case_closure;
+ALTER TABLE admin_monitor.management_cases
+    ADD CONSTRAINT ck_admin_case_closure CHECK (
+        (status = 'Open'
+            AND closed_at_utc IS NULL
+            AND closed_by IS NULL
+            AND resolution IS NULL
+            AND evidence_package_hash IS NULL)
+        OR
+        (status = 'Closed'
+            AND closed_at_utc IS NOT NULL
+            AND closed_by IS NOT NULL
+            AND char_length(resolution) BETWEEN 10 AND 2000
+            AND evidence_package_hash ~ '^[0-9a-f]{64}$'));
+
+ALTER TABLE admin_monitor.management_cases
     DROP CONSTRAINT IF EXISTS ck_admin_case_type;
 ALTER TABLE admin_monitor.management_cases
     ADD CONSTRAINT ck_admin_case_type CHECK (case_type IN (

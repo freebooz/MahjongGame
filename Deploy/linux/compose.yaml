@@ -23,6 +23,49 @@ services:
       driver: json-file
       options: {max-size: "20m", max-file: "5"}
 
+  postgres-migration:
+    image: postgres:17-alpine
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      MIGRATION_DB_PASSWORD: ${MIGRATION_DB_PASSWORD:?MIGRATION_DB_PASSWORD is required}
+      AUTH_DB_PASSWORD: ${AUTH_DB_PASSWORD:?AUTH_DB_PASSWORD is required}
+      LOBBY_DB_PASSWORD: ${LOBBY_DB_PASSWORD:?LOBBY_DB_PASSWORD is required}
+      PLAYER_DATA_DB_PASSWORD: ${PLAYER_DATA_DB_PASSWORD:?PLAYER_DATA_DB_PASSWORD is required}
+      ADMIN_DB_PASSWORD: ${ADMIN_DB_PASSWORD:?ADMIN_DB_PASSWORD is required}
+      MONITOR_DB_PASSWORD: ${MONITOR_DB_PASSWORD:?MONITOR_DB_PASSWORD is required}
+      AUDIT_DB_PASSWORD: ${AUDIT_DB_PASSWORD:?AUDIT_DB_PASSWORD is required}
+      ARCHIVE_DB_PASSWORD: ${ARCHIVE_DB_PASSWORD:?ARCHIVE_DB_PASSWORD is required}
+    volumes:
+      - ../../Deploy/postgres/least-privilege:/migration/least-privilege:ro
+      - ../../Services/GuiyangMahjong.Auth/Storage:/migration/auth:ro
+      - ../../Services/GuiyangMahjong.Lobby/Storage:/migration/lobby:ro
+      - ../../Services/GuiyangMahjong.PlayerData/Storage:/migration/player-data:ro
+      - ../../Services/GuiyangMahjong.Admin/Storage:/migration/admin:ro
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        base="psql -h postgres -U mahjong -d mahjong -v ON_ERROR_STOP=1"
+        $$base -f /migration/least-privilege/001_roles.sql
+        $$base -f /migration/auth/schema.sql
+        $$base -f /migration/lobby/schema.sql
+        $$base -f /migration/player-data/schema.sql
+        $$base -f /migration/admin/schema.sql
+        $$base -f /migration/least-privilege/002_grants.sql
+        $$base \
+          -v migration_password="$$MIGRATION_DB_PASSWORD" \
+          -v auth_password="$$AUTH_DB_PASSWORD" \
+          -v lobby_password="$$LOBBY_DB_PASSWORD" \
+          -v player_data_password="$$PLAYER_DATA_DB_PASSWORD" \
+          -v admin_password="$$ADMIN_DB_PASSWORD" \
+          -v monitor_password="$$MONITOR_DB_PASSWORD" \
+          -v audit_password="$$AUDIT_DB_PASSWORD" \
+          -v archive_password="$$ARCHIVE_DB_PASSWORD" \
+          -f /migration/least-privilege/004_set_login_passwords.sql
+    depends_on:
+      postgres: {condition: service_healthy}
+    restart: "no"
+    security_opt: ["no-new-privileges:true"]
+
   redis:
     image: redis:8-alpine
     command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec"]
@@ -47,14 +90,21 @@ services:
       dockerfile: Services/GuiyangMahjong.Auth/Dockerfile
     environment:
       ASPNETCORE_ENVIRONMENT: Production
+      # 五个控制面服务使用同一 Collector；默认关闭，部署可观测性栈后显式开启。
+      Observability__Enabled: ${OBSERVABILITY_ENABLED:-false}
+      Observability__OtlpEndpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://host.docker.internal:4317}
+      Observability__TraceSampleRatio: ${OTEL_TRACE_SAMPLE_RATIO:-0.1}
       Auth__PersistenceMode: Postgres
-      Auth__PostgresConnectionString: Host=postgres;Port=5432;Database=mahjong;Username=mahjong;Password=${POSTGRES_PASSWORD}
+      Auth__ApplyDatabaseMigrations: "false"
+      Auth__PostgresConnectionString: Host=postgres;Port=5432;Database=mahjong;Username=mahjong_auth;Password=${AUTH_DB_PASSWORD};Options=-c role=mahjong_auth_rw
       Auth__TokenSigningKey: ${PLAYER_TOKEN_SIGNING_KEY:?PLAYER_TOKEN_SIGNING_KEY is required}
       Auth__GuestIdentityPepper: ${GUEST_IDENTITY_PEPPER:?GUEST_IDENTITY_PEPPER is required}
       Auth__MonitoringReadOnlyToken: ${MONITORING_READ_ONLY_TOKEN:?MONITORING_READ_ONLY_TOKEN is required}
       Auth__ManagementCommandToken: ${AUTH_MANAGEMENT_COMMAND_TOKEN:?AUTH_MANAGEMENT_COMMAND_TOKEN is required}
     depends_on:
-      postgres: {condition: service_healthy}
+      postgres-migration: {condition: service_completed_successfully}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports: ["${AUTH_PORT:-18082}:8080"]
     healthcheck:
       test: ["CMD", "curl", "--fail", "--silent", "--show-error", "http://127.0.0.1:8080/health/ready"]
@@ -78,6 +128,9 @@ services:
     environment:
       ASPNETCORE_URLS: http://0.0.0.0:${ALLOCATOR_PORT:-18081}
       ASPNETCORE_ENVIRONMENT: Production
+      Observability__Enabled: ${OBSERVABILITY_ENABLED:-false}
+      Observability__OtlpEndpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT_GAME_NODE:-http://127.0.0.1:4317}
+      Observability__TraceSampleRatio: ${OTEL_TRACE_SAMPLE_RATIO:-0.1}
       Allocator__PortStart: ${GAME_PORT_START:-19000}
       Allocator__PortEnd: ${GAME_PORT_END:-19099}
       Allocator__AdvertisedIp: ${ADVERTISED_IP:?ADVERTISED_IP is required}
@@ -91,10 +144,20 @@ services:
       # WSL mirrored-network address on the same machine.
       Allocator__LobbyInternalUrl: http://127.0.0.1:${LOBBY_PORT:-18080}
       Allocator__ServiceToken: ${ALLOCATOR_SERVICE_TOKEN:?ALLOCATOR_SERVICE_TOKEN is required}
-      Allocator__MonitoringReadOnlyToken: ${MONITORING_READ_ONLY_TOKEN:?MONITORING_READ_ONLY_TOKEN is required}
+      Allocator__MonitoringReadOnlyToken: ${ADMIN_TOPOLOGY_ALLOCATOR_TOKEN:?ADMIN_TOPOLOGY_ALLOCATOR_TOKEN is required}
       Allocator__ManagementCommandToken: ${ALLOCATOR_MANAGEMENT_COMMAND_TOKEN:?ALLOCATOR_MANAGEMENT_COMMAND_TOKEN is required}
       Allocator__LobbyCallbackToken: ${LOBBY_INTERNAL_TOKEN:?LOBBY_INTERNAL_TOKEN is required}
       Allocator__JoinTicketSigningKey: ${JOIN_TICKET_SIGNING_KEY:?JOIN_TICKET_SIGNING_KEY is required}
+      Allocator__RegionId: ${MAHJONG_REGION_ID:-local}
+      Allocator__ClusterId: ${MAHJONG_CLUSTER_ID:-local-linux}
+      Allocator__NodeId: ${MAHJONG_NODE_ID:-game-node}
+      Allocator__AllocatorId: ${MAHJONG_ALLOCATOR_ID:-allocator-local-1}
+      Allocator__TopologyRegistration__Enabled: ${ADMIN_TOPOLOGY_DISCOVERY_ENABLED:-true}
+      Allocator__TopologyRegistration__AdminBaseUrl: http://127.0.0.1:${ADMIN_PORT:-18083}
+      Allocator__TopologyRegistration__PublicBaseUrl: http://${ALLOCATOR_INTERNAL_HOST:-host.docker.internal}:${ALLOCATOR_PORT:-18081}
+      Allocator__TopologyRegistration__RegistrationToken: ${ADMIN_TOPOLOGY_REGISTRATION_TOKEN:?ADMIN_TOPOLOGY_REGISTRATION_TOKEN is required}
+      Allocator__TopologyRegistration__SourceId: ${MAHJONG_ALLOCATOR_ID:-allocator-local-1}
+      Allocator__TopologyRegistration__Generation: ${MAHJONG_DEPLOYMENT_GENERATION:-1}
     volumes:
       - ${MAHJONG_DATA_ROOT:-/var/lib/guiyang-mahjong}/allocator:/var/lib/guiyang-mahjong
     network_mode: host
@@ -123,21 +186,35 @@ services:
       dockerfile: Services/GuiyangMahjong.Lobby/Dockerfile
     environment:
       ASPNETCORE_ENVIRONMENT: Production
+      Observability__Enabled: ${OBSERVABILITY_ENABLED:-false}
+      Observability__OtlpEndpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://host.docker.internal:4317}
+      Observability__TraceSampleRatio: ${OTEL_TRACE_SAMPLE_RATIO:-0.1}
       Lobby__Persistence__Mode: RedisPostgres
+      Lobby__Persistence__ApplyDatabaseMigrations: "false"
       Lobby__Persistence__RedisConnectionString: redis:6379,abortConnect=false
-      Lobby__Persistence__PostgresConnectionString: Host=postgres;Port=5432;Database=mahjong;Username=mahjong;Password=${POSTGRES_PASSWORD}
+      Lobby__Persistence__PostgresConnectionString: Host=postgres;Port=5432;Database=mahjong;Username=mahjong_lobby;Password=${LOBBY_DB_PASSWORD};Options=-c role=mahjong_lobby_rw
       Lobby__TokenSigningKey: ${PLAYER_TOKEN_SIGNING_KEY:?PLAYER_TOKEN_SIGNING_KEY is required}
       Lobby__JoinTicketSigningKey: ${JOIN_TICKET_SIGNING_KEY:?JOIN_TICKET_SIGNING_KEY is required}
       Lobby__InternalServiceToken: ${LOBBY_INTERNAL_TOKEN:?LOBBY_INTERNAL_TOKEN is required}
-      Lobby__MonitoringReadOnlyToken: ${MONITORING_READ_ONLY_TOKEN:?MONITORING_READ_ONLY_TOKEN is required}
+      Lobby__MonitoringReadOnlyToken: ${ADMIN_TOPOLOGY_LOBBY_TOKEN:?ADMIN_TOPOLOGY_LOBBY_TOKEN is required}
       Lobby__ManagementCommandToken: ${LOBBY_MANAGEMENT_COMMAND_TOKEN:?LOBBY_MANAGEMENT_COMMAND_TOKEN is required}
       Lobby__AccessRevocationTtlMinutes: ${LOBBY_ACCESS_REVOCATION_TTL_MINUTES:-120}
+      Lobby__RegionId: ${MAHJONG_REGION_ID:-local}
+      Lobby__ClusterId: ${MAHJONG_CLUSTER_ID:-local-linux}
+      Lobby__LobbyId: ${MAHJONG_LOBBY_ID:-lobby-local-1}
+      Lobby__NodeId: ${MAHJONG_LOBBY_NODE_ID:-lobby-node-1}
+      Lobby__TopologyRegistration__Enabled: ${ADMIN_TOPOLOGY_DISCOVERY_ENABLED:-true}
+      Lobby__TopologyRegistration__AdminBaseUrl: http://admin:8080
+      Lobby__TopologyRegistration__PublicBaseUrl: http://lobby:8080
+      Lobby__TopologyRegistration__RegistrationToken: ${ADMIN_TOPOLOGY_REGISTRATION_TOKEN:?ADMIN_TOPOLOGY_REGISTRATION_TOKEN is required}
+      Lobby__TopologyRegistration__SourceId: ${MAHJONG_LOBBY_ID:-lobby-local-1}
+      Lobby__TopologyRegistration__Generation: ${MAHJONG_DEPLOYMENT_GENERATION:-1}
       Lobby__Allocator__Enabled: "true"
-      Lobby__Allocator__BaseUrl: http://host.docker.internal:${ALLOCATOR_PORT:-18081}
+      Lobby__Allocator__BaseUrl: http://${ALLOCATOR_INTERNAL_HOST:-host.docker.internal}:${ALLOCATOR_PORT:-18081}
       Lobby__Allocator__ServiceToken: ${ALLOCATOR_SERVICE_TOKEN:?ALLOCATOR_SERVICE_TOKEN is required}
       Lobby__Allocator__GameServerBuildVersion: ${MAHJONG_VERSION:-dev}
     depends_on:
-      postgres: {condition: service_healthy}
+      postgres-migration: {condition: service_completed_successfully}
       redis: {condition: service_healthy}
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -163,8 +240,12 @@ services:
       dockerfile: Services/GuiyangMahjong.PlayerData/Dockerfile
     environment:
       ASPNETCORE_ENVIRONMENT: Production
+      Observability__Enabled: ${OBSERVABILITY_ENABLED:-false}
+      Observability__OtlpEndpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://host.docker.internal:4317}
+      Observability__TraceSampleRatio: ${OTEL_TRACE_SAMPLE_RATIO:-0.1}
       PlayerData__PersistenceMode: Postgres
-      PlayerData__PostgresConnectionString: Host=postgres;Port=5432;Database=mahjong;Username=mahjong;Password=${POSTGRES_PASSWORD}
+      PlayerData__ApplyDatabaseMigrations: "false"
+      PlayerData__PostgresConnectionString: Host=postgres;Port=5432;Database=mahjong;Username=mahjong_player_data;Password=${PLAYER_DATA_DB_PASSWORD};Options=-c role=mahjong_player_data_rw
       PlayerData__SourceIngestionToken: ${PLAYER_DATA_SOURCE_INGESTION_TOKEN:?PLAYER_DATA_SOURCE_INGESTION_TOKEN is required}
       PlayerData__AdminCommandToken: ${PLAYER_DATA_ADMIN_COMMAND_TOKEN:?PLAYER_DATA_ADMIN_COMMAND_TOKEN is required}
       PlayerData__ChatGatewayToken: ${PLAYER_DATA_CHAT_GATEWAY_TOKEN:?PLAYER_DATA_CHAT_GATEWAY_TOKEN is required}
@@ -177,8 +258,10 @@ services:
       PlayerData__ProjectionPollMilliseconds: ${PLAYER_DATA_PROJECTION_POLL_MS:-1000}
       PlayerData__ProjectionMaxAttempts: ${PLAYER_DATA_PROJECTION_MAX_ATTEMPTS:-10}
     depends_on:
-      postgres: {condition: service_healthy}
+      postgres-migration: {condition: service_completed_successfully}
       auth: {condition: service_healthy}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports: ["${PLAYER_DATA_PORT:-18084}:8080"]
     healthcheck:
       test: ["CMD", "curl", "--fail", "--silent", "--show-error", "http://127.0.0.1:8080/health/ready"]
@@ -201,18 +284,65 @@ services:
       dockerfile: Services/GuiyangMahjong.Admin/Dockerfile
     environment:
       ASPNETCORE_ENVIRONMENT: Production
-      Admin__ReadOnlyAccessToken: ${ADMIN_READ_ONLY_TOKEN:?ADMIN_READ_ONLY_TOKEN is required}
+      Observability__Enabled: ${OBSERVABILITY_ENABLED:-false}
+      Observability__OtlpEndpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://host.docker.internal:4317}
+      Observability__TraceSampleRatio: ${OTEL_TRACE_SAMPLE_RATIO:-0.1}
+      Admin__ReadOnlyAccessToken: ""
       Admin__EvidenceIngestionToken: ${ADMIN_EVIDENCE_INGESTION_TOKEN:?ADMIN_EVIDENCE_INGESTION_TOKEN is required}
+      Admin__CentralLogs__Enabled: ${CENTRAL_LOGS_ENABLED:-false}
+      Admin__CentralLogs__BaseUrl: ${LOKI_QUERY_BASE_URL:-http://host.docker.internal:13100}
+      Admin__CentralLogs__QueryToken: ${LOKI_QUERY_TOKEN:-}
+      Admin__ChatArchive__Enabled: ${ADMIN_CHAT_ARCHIVE_ENABLED:-false}
+      Admin__ChatArchive__BaseUrl: ${ADMIN_CHAT_ARCHIVE_BASE_URL:-http://host.docker.internal:18086}
+      Admin__ChatArchive__QueryToken: ${ADMIN_CHAT_ARCHIVE_QUERY_TOKEN:-}
+      Admin__ChatArchive__TimeoutSeconds: ${ADMIN_CHAT_ARCHIVE_TIMEOUT_SECONDS:-5}
+      Admin__ChatArchive__MaxEntries: ${ADMIN_CHAT_ARCHIVE_MAX_ENTRIES:-100}
+      Admin__ReplayArchive__Enabled: ${ADMIN_REPLAY_ARCHIVE_ENABLED:-false}
+      Admin__ReplayArchive__BaseUrl: ${ADMIN_REPLAY_ARCHIVE_BASE_URL:-http://host.docker.internal:18087}
+      Admin__ReplayArchive__ReadToken: ${ADMIN_REPLAY_ARCHIVE_READ_TOKEN:-}
+      Admin__ReplayArchive__SigningKey: ${ADMIN_REPLAY_ARCHIVE_SIGNING_KEY:-}
+      Admin__ReplayArchive__AccessTtlSeconds: ${ADMIN_REPLAY_ACCESS_TTL_SECONDS:-300}
+      Admin__ReplayArchive__MaxObjectMegabytes: ${ADMIN_REPLAY_MAX_OBJECT_MEGABYTES:-64}
       Admin__EnterpriseIdentity__Enabled: ${ADMIN_ENTERPRISE_IDENTITY_ENABLED:-false}
       Admin__EnterpriseIdentity__Authority: ${ADMIN_OIDC_AUTHORITY:-}
       Admin__EnterpriseIdentity__Audience: ${ADMIN_OIDC_AUDIENCE:-}
       Admin__EnterpriseIdentity__RequireHttpsMetadata: "true"
       Admin__EnterpriseIdentity__RequireMfa: "true"
+      Admin__EnterpriseIdentity__MaxTokenAgeMinutes: "10"
+      Admin__EnterpriseIdentity__RevocationSlaMinutes: "10"
+      Admin__Abac__Enabled: ${ADMIN_ABAC_ENABLED:-true}
+      Admin__Abac__RegionClaim: ${ADMIN_ABAC_REGION_CLAIM:-mahjong_regions}
+      Admin__Abac__ShiftClaim: ${ADMIN_ABAC_SHIFT_CLAIM:-mahjong_shift}
+      Admin__Abac__CaseClaim: ${ADMIN_ABAC_CASE_CLAIM:-mahjong_cases}
+      Admin__Abac__BreakGlassUntilClaim: ${ADMIN_ABAC_BREAK_GLASS_UNTIL_CLAIM:-mahjong_break_glass_until}
+      Admin__Abac__HighValueCompensationThreshold: ${ADMIN_HIGH_VALUE_COMPENSATION_THRESHOLD:-100000}
+      Admin__Abac__BreakGlassMaximumMinutes: "15"
+      Admin__WebSecurity__RequireHttps: "true"
+      Admin__RealtimeCapacity__DefaultPageSize: ${ADMIN_DEFAULT_PAGE_SIZE:-100}
+      Admin__RealtimeCapacity__MaximumPageSize: ${ADMIN_MAXIMUM_PAGE_SIZE:-200}
+      Admin__RealtimeCapacity__MaximumRooms: ${ADMIN_MAXIMUM_ROOMS:-10000}
+      Admin__RealtimeCapacity__MaximumPlayers: ${ADMIN_MAXIMUM_PLAYERS:-100000}
+      Admin__RealtimeCapacity__MaximumInstances: ${ADMIN_MAXIMUM_INSTANCES:-20000}
+      Admin__RealtimeCapacity__EventBacklogLimit: ${ADMIN_EVENT_BACKLOG_LIMIT:-20000}
+      Admin__RealtimeCapacity__SubscriberQueueLimit: ${ADMIN_SUBSCRIBER_QUEUE_LIMIT:-256}
+      Admin__RealtimeCapacity__SnapshotIntervalSeconds: ${ADMIN_SNAPSHOT_INTERVAL_SECONDS:-5}
+      Admin__RealtimeCapacity__PlayerPagesPerSnapshotCycle: ${ADMIN_PLAYER_PAGES_PER_SNAPSHOT_CYCLE:-20}
+      Admin__RealtimeCapacity__SseEnabled: ${ADMIN_SSE_ENABLED:-true}
+      Admin__RealtimeCapacity__LegacyPollingEnabled: ${ADMIN_LEGACY_POLLING_ENABLED:-true}
       Admin__AuditArchive__Enabled: ${ADMIN_AUDIT_ARCHIVE_ENABLED:-false}
       Admin__AuditArchive__AppendUrl: ${ADMIN_AUDIT_ARCHIVE_APPEND_URL:-}
       Admin__AuditArchive__AppendToken: ${ADMIN_AUDIT_ARCHIVE_APPEND_TOKEN:-}
+      Admin__AuditArchive__PostgresConnectionString: Host=postgres;Port=5432;Database=mahjong;Username=mahjong_archive;Password=${ARCHIVE_DB_PASSWORD};Options=-c role=mahjong_archive_dispatch
       Admin__AuditArchive__PollIntervalMilliseconds: ${ADMIN_AUDIT_ARCHIVE_POLL_MS:-1000}
       Admin__AuditArchive__MaxAttempts: ${ADMIN_AUDIT_ARCHIVE_MAX_ATTEMPTS:-20}
+      Admin__AuditArchive__AnchorEnabled: ${ADMIN_AUDIT_ANCHOR_ENABLED:-false}
+      Admin__AuditArchive__AnchorUrl: ${ADMIN_AUDIT_ANCHOR_URL:-}
+      Admin__AuditArchive__AnchorIntervalSeconds: ${ADMIN_AUDIT_ANCHOR_INTERVAL_SECONDS:-300}
+      Admin__TopologyDiscovery__Enabled: ${ADMIN_TOPOLOGY_DISCOVERY_ENABLED:-true}
+      Admin__TopologyDiscovery__RegistrationToken: ${ADMIN_TOPOLOGY_REGISTRATION_TOKEN:?ADMIN_TOPOLOGY_REGISTRATION_TOKEN is required}
+      Admin__TopologyDiscovery__LobbyMonitoringToken: ${ADMIN_TOPOLOGY_LOBBY_TOKEN:?ADMIN_TOPOLOGY_LOBBY_TOKEN is required}
+      Admin__TopologyDiscovery__AllocatorMonitoringToken: ${ADMIN_TOPOLOGY_ALLOCATOR_TOKEN:?ADMIN_TOPOLOGY_ALLOCATOR_TOKEN is required}
+      Admin__TopologyDiscovery__LeaseSeconds: ${ADMIN_TOPOLOGY_LEASE_SECONDS:-60}
       Admin__Management__Enabled: ${ADMIN_MANAGEMENT_ENABLED:-false}
       Admin__Management__ExecutionEnabled: ${ADMIN_COMMAND_EXECUTION_ENABLED:-false}
       Admin__Management__PollIntervalMilliseconds: ${ADMIN_COMMAND_POLL_INTERVAL_MS:-1000}
@@ -226,65 +356,23 @@ services:
       Admin__Management__MuteHours: ${ADMIN_MUTE_HOURS:-24}
       Admin__Management__RiskLabelTtlDays: ${ADMIN_RISK_LABEL_TTL_DAYS:-30}
       Admin__Management__PersistenceMode: Postgres
-      Admin__Management__PostgresConnectionString: Host=postgres;Port=5432;Database=mahjong;Username=mahjong;Password=${POSTGRES_PASSWORD}
+      Admin__Management__ApplyDatabaseMigrations: "false"
+      Admin__Management__PostgresConnectionString: Host=postgres;Port=5432;Database=mahjong;Username=mahjong_admin;Password=${ADMIN_DB_PASSWORD};Options=-c role=mahjong_admin_rw
       Admin__Wallet__Enabled: "true"
       Admin__Wallet__BaseUrl: http://player-data:8080
       Admin__Wallet__CommandToken: ${PLAYER_DATA_ADMIN_COMMAND_TOKEN:?PLAYER_DATA_ADMIN_COMMAND_TOKEN is required}
       Admin__Wallet__TimeoutSeconds: ${ADMIN_WALLET_TIMEOUT_SECONDS:-5}
-      Admin__Principals__0__OperatorId: ${ADMIN_ROOM_OPERATOR_ID:-room-operator}
-      Admin__Principals__0__AccessToken: ${ADMIN_ROOM_OPERATOR_TOKEN:?ADMIN_ROOM_OPERATOR_TOKEN is required}
-      Admin__Principals__0__Roles__0: room.viewer
-      Admin__Principals__0__Roles__1: player.viewer
-      Admin__Principals__0__Roles__2: room.operator
-      Admin__Principals__1__OperatorId: ${ADMIN_ROOM_APPROVER_ID:-room-approver}
-      Admin__Principals__1__AccessToken: ${ADMIN_ROOM_APPROVER_TOKEN:?ADMIN_ROOM_APPROVER_TOKEN is required}
-      Admin__Principals__1__Roles__0: room.viewer
-      Admin__Principals__1__Roles__1: room.approver
-      Admin__Principals__1__Roles__2: audit.viewer
-      Admin__Principals__2__OperatorId: ${ADMIN_PLAYER_OPERATOR_ID:-player-operator}
-      Admin__Principals__2__AccessToken: ${ADMIN_PLAYER_OPERATOR_TOKEN:?ADMIN_PLAYER_OPERATOR_TOKEN is required}
-      Admin__Principals__2__Roles__0: player.viewer
-      Admin__Principals__2__Roles__1: player.operator
-      Admin__Principals__3__OperatorId: ${ADMIN_PLAYER_APPROVER_ID:-player-approver}
-      Admin__Principals__3__AccessToken: ${ADMIN_PLAYER_APPROVER_TOKEN:?ADMIN_PLAYER_APPROVER_TOKEN is required}
-      Admin__Principals__3__Roles__0: player.viewer
-      Admin__Principals__3__Roles__1: player.approver
-      Admin__Principals__3__Roles__2: audit.viewer
-      Admin__Principals__4__OperatorId: ${ADMIN_INFRASTRUCTURE_OPERATOR_ID:-infrastructure-operator}
-      Admin__Principals__4__AccessToken: ${ADMIN_INFRASTRUCTURE_OPERATOR_TOKEN:?ADMIN_INFRASTRUCTURE_OPERATOR_TOKEN is required}
-      Admin__Principals__4__Roles__0: room.viewer
-      Admin__Principals__4__Roles__1: infrastructure.operator
-      Admin__Principals__5__OperatorId: ${ADMIN_SANCTION_OPERATOR_ID:-sanction-operator}
-      Admin__Principals__5__AccessToken: ${ADMIN_SANCTION_OPERATOR_TOKEN:?ADMIN_SANCTION_OPERATOR_TOKEN is required}
-      Admin__Principals__5__Roles__0: player.viewer
-      Admin__Principals__5__Roles__1: sanction.operator
-      Admin__Principals__6__OperatorId: ${ADMIN_RISK_ANALYST_ID:-risk-analyst}
-      Admin__Principals__6__AccessToken: ${ADMIN_RISK_ANALYST_TOKEN:?ADMIN_RISK_ANALYST_TOKEN is required}
-      Admin__Principals__6__Roles__0: player.viewer
-      Admin__Principals__6__Roles__1: risk.analyst
-      Admin__Principals__7__OperatorId: ${ADMIN_SUPPORT_OPERATOR_ID:-support-operator}
-      Admin__Principals__7__AccessToken: ${ADMIN_SUPPORT_OPERATOR_TOKEN:?ADMIN_SUPPORT_OPERATOR_TOKEN is required}
-      Admin__Principals__7__Roles__0: player.viewer
-      Admin__Principals__7__Roles__1: support.operator
-      Admin__Principals__8__OperatorId: ${ADMIN_COMPENSATION_OPERATOR_ID:-compensation-operator}
-      Admin__Principals__8__AccessToken: ${ADMIN_COMPENSATION_OPERATOR_TOKEN:?ADMIN_COMPENSATION_OPERATOR_TOKEN is required}
-      Admin__Principals__8__Roles__0: room.viewer
-      Admin__Principals__8__Roles__1: compensation.operator
-      Admin__Principals__9__OperatorId: ${ADMIN_CHAT_COMPLIANCE_ID:-chat-compliance}
-      Admin__Principals__9__AccessToken: ${ADMIN_CHAT_COMPLIANCE_TOKEN:?ADMIN_CHAT_COMPLIANCE_TOKEN is required}
-      Admin__Principals__9__Roles__0: player.viewer
-      Admin__Principals__9__Roles__1: chat.compliance
       Admin__Auth__Enabled: "true"
       Admin__Auth__BaseUrl: http://auth:8080
       Admin__Auth__MonitoringToken: ${MONITORING_READ_ONLY_TOKEN:?MONITORING_READ_ONLY_TOKEN is required}
       Admin__Lobby__Enabled: "true"
       Admin__Lobby__BaseUrl: http://lobby:8080
-      Admin__Lobby__MonitoringToken: ${MONITORING_READ_ONLY_TOKEN:?MONITORING_READ_ONLY_TOKEN is required}
+      Admin__Lobby__MonitoringToken: ${ADMIN_TOPOLOGY_LOBBY_TOKEN:?ADMIN_TOPOLOGY_LOBBY_TOKEN is required}
       Admin__Allocators__0__Enabled: "true"
       Admin__Allocators__0__ClusterId: ${MAHJONG_CLUSTER_ID:-local-linux}
       Admin__Allocators__0__NodeId: ${MAHJONG_NODE_ID:-game-node}
-      Admin__Allocators__0__BaseUrl: http://host.docker.internal:${ALLOCATOR_PORT:-18081}
-      Admin__Allocators__0__MonitoringToken: ${MONITORING_READ_ONLY_TOKEN:?MONITORING_READ_ONLY_TOKEN is required}
+      Admin__Allocators__0__BaseUrl: http://${ALLOCATOR_INTERNAL_HOST:-host.docker.internal}:${ALLOCATOR_PORT:-18081}
+      Admin__Allocators__0__MonitoringToken: ${ADMIN_TOPOLOGY_ALLOCATOR_TOKEN:?ADMIN_TOPOLOGY_ALLOCATOR_TOKEN is required}
       Admin__Allocators__0__ManagementCommandToken: ${ALLOCATOR_MANAGEMENT_COMMAND_TOKEN:?ALLOCATOR_MANAGEMENT_COMMAND_TOKEN is required}
     depends_on:
       auth: {condition: service_healthy}

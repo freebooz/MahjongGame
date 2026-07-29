@@ -1,0 +1,33 @@
+version: 1
+window: 30d
+slos:
+  - id: admin-api-availability
+    owner: admin-platform
+    objective: 0.999
+    sli: 1 - sum(rate(http_5xx)) / sum(rate(http_requests))
+    errorBudget: 0.001
+    releasePolicy: block_when_budget_exhausted_or_fast_burn
+  - id: telemetry-freshness
+    owner: game-server-lobby
+    objective: p95 <= 10s
+    sli: histogram_quantile(0.95, telemetry_freshness)
+    errorBudget: 5_percent_over_10s
+    releasePolicy: block_when_fast_burn
+  - id: admin-command-start
+    owner: admin-platform
+    objective: p95 <= 5s
+    sli: histogram_quantile(0.95, approval_to_start)
+    errorBudget: 5_percent_over_5s
+    releasePolicy: block_high_risk_changes_when_fast_burn
+  - id: audit-worm-latency
+    owner: security-sre
+    objective: p95 <= 60s
+    sli: histogram_quantile(0.95, audit_archive_latency)
+    errorBudget: 5_percent_over_60s
+    releasePolicy: block_management_changes_when_fast_burn
+  - id: heartbeat-loss-detection
+    owner: game-server-sre
+    objective: alert <= 30s
+    sli: time() - last_heartbeat
+    errorBudget: 0
+    releasePolicy: block_game_server_rollout_when_alerting

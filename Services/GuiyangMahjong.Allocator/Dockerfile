@@ -1,8 +1,10 @@
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 COPY Services/GuiyangMahjong.Allocator/GuiyangMahjong.Allocator.csproj Services/GuiyangMahjong.Allocator/
+COPY Services/GuiyangMahjong.Observability/GuiyangMahjong.Observability.csproj Services/GuiyangMahjong.Observability/
 RUN dotnet restore Services/GuiyangMahjong.Allocator/GuiyangMahjong.Allocator.csproj
 COPY Contracts/ Contracts/
+COPY Services/GuiyangMahjong.Observability/ Services/GuiyangMahjong.Observability/
 COPY Services/GuiyangMahjong.Allocator/ Services/GuiyangMahjong.Allocator/
 RUN dotnet publish Services/GuiyangMahjong.Allocator/GuiyangMahjong.Allocator.csproj \
       --configuration Release --output /output/allocator --no-restore

@@ -89,6 +89,25 @@ public static class PlayerDataEndpoints
         }).WithMetadata(new RequestSizeLimitAttribute(12 * 1024));
 
         app.MapGet(
+            "/internal/monitoring/health",
+            async (
+                HttpContext context,
+                IOptions<PlayerDataOptions> options,
+                IPlayerDataStore store,
+                CancellationToken cancellationToken) =>
+            {
+                // Admin 使用只读专用凭据探测依赖，避免把公开存活端点误当成授权监控契约。
+                RequireCredential(
+                    context,
+                    options.Value.MonitoringToken);
+                return await store.CheckHealthAsync(cancellationToken)
+                    ? Results.Ok(new { status = "ready" })
+                    : Results.Json(
+                        new { status = "not-ready" },
+                        statusCode: StatusCodes.Status503ServiceUnavailable);
+            });
+
+        app.MapGet(
             "/internal/monitoring/players/{playerId}/balances",
             async (
                 string playerId,

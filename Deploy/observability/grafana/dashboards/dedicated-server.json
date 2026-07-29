@@ -1,0 +1,44 @@
+{
+  "uid": "mahjong-dedicated-server",
+  "title": "Dedicated Server 运行质量",
+  "timezone": "browser",
+  "schemaVersion": 41,
+  "refresh": "10s",
+  "tags": ["mahjong", "dedicated-server"],
+  "templating": {
+    "list": [
+      {
+        "name": "serverInstanceId",
+        "type": "query",
+        "label": "ServerInstanceId",
+        "datasource": {"type": "prometheus", "uid": "mahjong-prometheus"},
+        "query": "label_values(mahjong_room_heartbeat_last_seen_seconds, server_instance_id)",
+        "includeAll": true,
+        "multi": true
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1, "type": "timeseries", "title": "平均 Tick (ms)",
+      "datasource": {"type": "prometheus", "uid": "mahjong-prometheus"},
+      "targets": [{"refId": "A", "expr": "sum(rate(mahjong_dedicated_server_tick_milliseconds_sum[2m])) / clamp_min(sum(rate(mahjong_dedicated_server_tick_milliseconds_count[2m])), 1)"}],
+      "gridPos": {"x": 0, "y": 0, "w": 8, "h": 8}
+    },
+    {
+      "id": 2, "type": "timeseries", "title": "平均 CPU (%)",
+      "datasource": {"type": "prometheus", "uid": "mahjong-prometheus"},
+      "targets": [{"refId": "A", "expr": "sum(rate(mahjong_dedicated_server_cpu_percent_sum[5m])) / clamp_min(sum(rate(mahjong_dedicated_server_cpu_percent_count[5m])), 1)"}],
+      "gridPos": {"x": 8, "y": 0, "w": 8, "h": 8}
+    },
+    {
+      "id": 3, "type": "timeseries", "title": "RPC / 掉线速率",
+      "datasource": {"type": "prometheus", "uid": "mahjong-prometheus"},
+      "targets": [
+        {"refId": "A", "expr": "sum(rate(mahjong_dedicated_server_rpc_received_total[1m]))", "legendFormat": "RPC/s"},
+        {"refId": "B", "expr": "sum(rate(mahjong_player_disconnects_total[5m]))", "legendFormat": "掉线/s"}
+      ],
+      "gridPos": {"x": 16, "y": 0, "w": 8, "h": 8}
+    }
+  ]
+}

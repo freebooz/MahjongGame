@@ -1,0 +1,368 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TestRun id="e05f9aa5-c352-441e-974f-179c489394cc" name="Freebooz@FREEBOOZ 2026-07-29 09:37:51" runUser="FREEBOOZ\Freebooz" xmlns="http://microsoft.com/schemas/VisualStudio/TeamTest/2010">
+  <Times creation="2026-07-29T09:37:51.0204814+08:00" queuing="2026-07-29T09:37:51.0204818+08:00" start="2026-07-29T09:37:50.0786766+08:00" finish="2026-07-29T09:37:51.5008786+08:00" />
+  <TestSettings name="default" id="0ec538d6-e49c-4936-975f-538ee28cdebd">
+    <Deployment runDeploymentRoot="Freebooz_FREEBOOZ_2026-07-29_09_37_51" />
+  </TestSettings>
+  <Results>
+    <UnitTestResult executionId="8ad5c0d1-79c8-4f95-80e6-e9e6df94ab8a" testId="d250c596-cb12-01af-91b6-8e1fd1242dab" testName="GuiyangMahjong.Admin.Tests.AdminApiTests.RoomManagementRejectsReadOnlyRoleStaleStateAndResultMutationType" computerName="FREEBOOZ" duration="00:00:00.0174447" startTime="2026-07-29T09:37:51.3239502+08:00" endTime="2026-07-29T09:37:51.3416378+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="8ad5c0d1-79c8-4f95-80e6-e9e6df94ab8a" />
+    <UnitTestResult executionId="ebb7742a-7cef-4dd4-92fc-0dfa1fdeb8fa" testId="04bac883-8bdf-9772-65ff-4d262072081b" testName="GuiyangMahjong.Admin.Tests.AdminApiTests.MonitoringApiRejectsMissingCredential" computerName="FREEBOOZ" duration="00:00:00.0044482" startTime="2026-07-29T09:37:51.2367531+08:00" endTime="2026-07-29T09:37:51.2416544+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="ebb7742a-7cef-4dd4-92fc-0dfa1fdeb8fa" />
+    <UnitTestResult executionId="4c95606c-6f51-4273-a774-3aae0b6ab211" testId="34f12700-ccc0-94be-75ae-a0be546b34d3" testName="GuiyangMahjong.Admin.Tests.HttpAdminCommandExecutorTests.RetryableLobbyFailurePreservesSuccessfulAuthState" computerName="FREEBOOZ" duration="00:00:00.0011122" startTime="2026-07-29T09:37:51.1895155+08:00" endTime="2026-07-29T09:37:51.1904817+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="4c95606c-6f51-4273-a774-3aae0b6ab211" />
+    <UnitTestResult executionId="23a5e09d-dbbc-4162-a516-35a490221c0a" testId="fb122888-2b74-b047-1565-c3ab31b7cd2f" testName="GuiyangMahjong.Admin.Tests.HttpAdminCommandExecutorTests.PlayerSessionCommandCallsAuthAndLobbyWithSameIdempotencyKey" computerName="FREEBOOZ" duration="00:00:00.0051183" startTime="2026-07-29T09:37:50.9913047+08:00" endTime="2026-07-29T09:37:50.9963778+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="23a5e09d-dbbc-4162-a516-35a490221c0a" />
+    <UnitTestResult executionId="3bb9c9d4-5240-40f2-9a89-c0ef58018504" testId="93ce8f50-7ab5-8b9e-f754-994d845f88b3" testName="GuiyangMahjong.Admin.Tests.AdminApiTests.AuthorizedPlayerDirectoryIsAvailableWhenSourcesAreDisabled" computerName="FREEBOOZ" duration="00:00:00.0089474" startTime="2026-07-29T09:37:51.3874882+08:00" endTime="2026-07-29T09:37:51.3967418+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="3bb9c9d4-5240-40f2-9a89-c0ef58018504" />
+    <UnitTestResult executionId="b0f83fbe-b1be-4759-b0b9-ec36d63929ab" testId="408b06b3-5fab-c324-b618-33fadfbeacd1" testName="GuiyangMahjong.Admin.Tests.HttpAdminCommandExecutorTests.CaseActionsCreateOneIdempotentCaseWithoutDomainMutation(actionType: StartDisputeInvestigation, targetType: &quot;Room&quot;, expectedCaseType: DisputeInvestigation)" computerName="FREEBOOZ" duration="00:00:00.0002353" startTime="2026-07-29T09:37:50.9728086+08:00" endTime="2026-07-29T09:37:50.9728525+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="b0f83fbe-b1be-4759-b0b9-ec36d63929ab" />
+    <UnitTestResult executionId="56a5e590-37fc-4bed-87ea-e8d45b24ce03" testId="0b7ac540-9ced-b2da-a85a-a06ff608c943" testName="GuiyangMahjong.Admin.Tests.AuditArchiveDispatcherTests.SuccessfulDeliveryUsesAuditIdAsIdempotencyKey" computerName="FREEBOOZ" duration="00:00:00.0494405" startTime="2026-07-29T09:37:50.8169689+08:00" endTime="2026-07-29T09:37:50.8790857+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="56a5e590-37fc-4bed-87ea-e8d45b24ce03" />
+    <UnitTestResult executionId="c2fb1a71-bb81-4495-964a-608a55489e63" testId="21ca4995-ac2f-570c-b877-d7df4e9bf6d5" testName="GuiyangMahjong.Admin.Tests.PlayerEvidenceApiTests.FinancialEvidenceIsIdempotentRoleLimitedAndReadAudited" computerName="FREEBOOZ" duration="00:00:00.0280548" startTime="2026-07-29T09:37:51.2427416+08:00" endTime="2026-07-29T09:37:51.2710148+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="c2fb1a71-bb81-4495-964a-608a55489e63" />
+    <UnitTestResult executionId="5c38d22c-95b1-4523-9fde-13afbae29484" testId="ea8fc26e-7e05-07fa-878c-95d51391db70" testName="GuiyangMahjong.Admin.Tests.HttpAdminCommandExecutorTests.CaseActionsCreateOneIdempotentCaseWithoutDomainMutation(actionType: ExportRoomLogs, targetType: &quot;Room&quot;, expectedCaseType: RoomLogExport)" computerName="FREEBOOZ" duration="00:00:00.0002116" startTime="2026-07-29T09:37:50.9730487+08:00" endTime="2026-07-29T09:37:50.9730988+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="5c38d22c-95b1-4523-9fde-13afbae29484" />
+    <UnitTestResult executionId="05b87c16-d487-445d-9404-c1e453959c2c" testId="5d094081-d356-8b7b-a048-de0d976dc7a7" testName="GuiyangMahjong.Admin.Tests.AdminApiTests.RoomManagementRequiresConfirmationSeparateApprovalAndCreatesHashChainedAudit" computerName="FREEBOOZ" duration="00:00:00.0123877" startTime="2026-07-29T09:37:51.3110858+08:00" endTime="2026-07-29T09:37:51.3237464+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="05b87c16-d487-445d-9404-c1e453959c2c" />
+    <UnitTestResult executionId="64b0a96d-8f50-4b40-96ec-82aedd01a2c9" testId="e247bdcf-8390-db6f-7e97-111d5f5f46b2" testName="GuiyangMahjong.Admin.Tests.AdminApiTests.PlayerManagementRejectsChangedSessionFingerprint" computerName="FREEBOOZ" duration="00:00:00.0038100" startTime="2026-07-29T09:37:51.4228289+08:00" endTime="2026-07-29T09:37:51.4263666+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="64b0a96d-8f50-4b40-96ec-82aedd01a2c9" />
+    <UnitTestResult executionId="d1bf514c-6ccc-48e5-be48-ecb161746158" testId="2967cacb-ef3d-d559-5e9e-b98fda0400fc" testName="GuiyangMahjong.Admin.Tests.AdminApiTests.HealthDoesNotRequireAdministratorCredential" computerName="FREEBOOZ" duration="00:00:00.0064596" startTime="2026-07-29T09:37:51.3419117+08:00" endTime="2026-07-29T09:37:51.3485117+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="d1bf514c-6ccc-48e5-be48-ecb161746158" />
+    <UnitTestResult executionId="a399ef1c-e997-4b1a-bfc1-f23dc77af598" testId="b3a3e6a9-2823-df59-202c-a7e4fc520852" testName="GuiyangMahjong.Admin.Tests.AdminCommandDispatcherTests.NonRetryableFailureEndsActionWithoutRedispatch" computerName="FREEBOOZ" duration="00:00:00.0015868" startTime="2026-07-29T09:37:50.9735394+08:00" endTime="2026-07-29T09:37:50.9735855+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="a399ef1c-e997-4b1a-bfc1-f23dc77af598" />
+    <UnitTestResult executionId="600fcb89-3921-4722-9344-64387471b79f" testId="0ac0b423-b022-7bc4-0f4d-445173f471c8" testName="GuiyangMahjong.Admin.Tests.AdminApiTests.PlayerManagementUsesPlayerRbacSeparateApprovalAndMaskedStateSnapshot" computerName="FREEBOOZ" duration="00:00:00.0372669" startTime="2026-07-29T09:37:51.2419091+08:00" endTime="2026-07-29T09:37:51.2793395+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="600fcb89-3921-4722-9344-64387471b79f" />
+    <UnitTestResult executionId="123a373e-f2a8-420d-a3fb-33ed6ccb090f" testId="54bed3f6-a468-0c10-44d2-86ece5c92523" testName="GuiyangMahjong.Admin.Tests.HttpAdminCommandExecutorTests.RoomControlCallsLobbyWithApprovedStateSequence(actionType: MarkRoomAbnormal)" computerName="FREEBOOZ" duration="00:00:00.0004168" startTime="2026-07-29T09:37:51.1950413+08:00" endTime="2026-07-29T09:37:51.1950922+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="123a373e-f2a8-420d-a3fb-33ed6ccb090f" />
+    <UnitTestResult executionId="a9df171d-3ed5-419c-911e-67736416f41d" testId="9244edc1-e1ce-0742-4e0c-ab441e672aa6" testName="GuiyangMahjong.Admin.Tests.HttpAdminCommandExecutorTests.RoomControlCallsLobbyWithApprovedStateSequence(actionType: ProhibitNewPlayers)" computerName="FREEBOOZ" duration="00:00:00.0001622" startTime="2026-07-29T09:37:51.1951901+08:00" endTime="2026-07-29T09:37:51.1952238+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="a9df171d-3ed5-419c-911e-67736416f41d" />
+    <UnitTestResult executionId="f6ba9424-cab1-4610-9694-3c86440c5749" testId="80b7e0d6-a67e-b319-f6f9-778b9bc9046f" testName="GuiyangMahjong.Admin.Tests.PlayerEvidenceApiTests.ChatPermissionRequiresIndependentScopedGrantAndAuditsCheck" computerName="FREEBOOZ" duration="00:00:00.4151525" startTime="2026-07-29T09:37:50.8196380+08:00" endTime="2026-07-29T09:37:51.2426122+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="f6ba9424-cab1-4610-9694-3c86440c5749" />
+    <UnitTestResult executionId="fac2096d-1d48-4de0-b0d9-6acbbb2bd2f9" testId="54d1531d-8f51-2906-1f79-a24ccddbcc97" testName="GuiyangMahjong.Admin.Tests.HttpAdminCommandExecutorTests.InstanceTerminationRoutesToSnapshotAllocatorWithExpectedState" computerName="FREEBOOZ" duration="00:00:00.0043118" startTime="2026-07-29T09:37:50.9869458+08:00" endTime="2026-07-29T09:37:50.9911169+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="fac2096d-1d48-4de0-b0d9-6acbbb2bd2f9" />
+    <UnitTestResult executionId="59a6552c-ff57-47ed-83cf-4e9e8a8b0f5f" testId="361991e2-1b99-a29c-2f7b-a2ce9b08fdb1" testName="GuiyangMahjong.Admin.Tests.AdminCommandDispatcherTests.ExpiredLeaseCanBeReclaimedByAnotherWorker" computerName="FREEBOOZ" duration="00:00:00.0012918" startTime="2026-07-29T09:37:50.9750997+08:00" endTime="2026-07-29T09:37:50.9751560+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="59a6552c-ff57-47ed-83cf-4e9e8a8b0f5f" />
+    <UnitTestResult executionId="d5e21d37-7fc1-4d0f-9a2f-8bbfa9c134af" testId="d8bbd4ab-4d60-4cbd-22ba-bee18b42acfb" testName="GuiyangMahjong.Admin.Tests.HttpAdminCommandExecutorTests.CaseActionsCreateOneIdempotentCaseWithoutDomainMutation(actionType: ViewPlayerReplay, targetType: &quot;Player&quot;, expectedCaseType: ReplayReview)" computerName="FREEBOOZ" duration="00:00:00.0001949" startTime="2026-07-29T09:37:50.9729450+08:00" endTime="2026-07-29T09:37:50.9729809+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="d5e21d37-7fc1-4d0f-9a2f-8bbfa9c134af" />
+    <UnitTestResult executionId="0b832cb2-ea67-4b3b-872b-64a834bb9654" testId="42bf01a5-c7c2-9a4e-2faf-df89903e7226" testName="GuiyangMahjong.Admin.Tests.HttpAdminCommandExecutorTests.CaseActionsCreateOneIdempotentCaseWithoutDomainMutation(actionType: CreatePlayerSupportTicket, targetType: &quot;Player&quot;, expectedCaseType: PlayerSupport)" computerName="FREEBOOZ" duration="00:00:00.0007721" startTime="2026-07-29T09:37:50.9715156+08:00" endTime="2026-07-29T09:37:50.9715897+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="0b832cb2-ea67-4b3b-872b-64a834bb9654" />
+    <UnitTestResult executionId="58a4ebb9-87db-437b-810f-f175a0d143fa" testId="7bdbaff7-615b-28fb-45ee-977c04d9a340" testName="GuiyangMahjong.Admin.Tests.HttpAdminCommandExecutorTests.AssetActionsExecuteOneApprovedWalletOperationIdempotently(operationType: RevokeReward)" computerName="FREEBOOZ" duration="00:00:00.0433057" startTime="2026-07-29T09:37:50.9733691+08:00" endTime="2026-07-29T09:37:50.9829164+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="58a4ebb9-87db-437b-810f-f175a0d143fa" />
+    <UnitTestResult executionId="1ec4f59b-0533-4cf2-aaa7-578bd44e81e7" testId="f2959f14-135c-69a9-db6b-a7a6ad9c05b4" testName="GuiyangMahjong.Admin.Tests.AdminApiTests.ApprovedRoomCasesProduceDownloadableLogsAndScopedReplayResults" computerName="FREEBOOZ" duration="00:00:00.0307949" startTime="2026-07-29T09:37:51.2802715+08:00" endTime="2026-07-29T09:37:51.3108892+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="1ec4f59b-0533-4cf2-aaa7-578bd44e81e7" />
+    <UnitTestResult executionId="67996986-46ba-4f78-974f-db90033f47e8" testId="8fb9b3ea-cdde-f444-4f58-666b667ae262" testName="GuiyangMahjong.Admin.Tests.AdminApiTests.SanctionReversalRequiresTheMatchingOriginalCommand" computerName="FREEBOOZ" duration="00:00:00.4055487" startTime="2026-07-29T09:37:50.8187160+08:00" endTime="2026-07-29T09:37:51.2352113+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="67996986-46ba-4f78-974f-db90033f47e8" />
+    <UnitTestResult executionId="95a052d0-e756-48fa-a0a1-3d712918ac81" testId="02c400af-1080-41c8-f475-d5165c311b53" testName="GuiyangMahjong.Admin.Tests.HttpAdminCommandExecutorTests.RoomControlCallsLobbyWithApprovedStateSequence(actionType: EnableMaintenanceMode)" computerName="FREEBOOZ" duration="00:00:00.0035525" startTime="2026-07-29T09:37:51.1906525+08:00" endTime="2026-07-29T09:37:51.1941194+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="95a052d0-e756-48fa-a0a1-3d712918ac81" />
+    <UnitTestResult executionId="d7df5287-ff3a-41f0-801a-fddfc6f2e52e" testId="bbe7f0a6-f44f-e25c-3402-dce96c3438bf" testName="GuiyangMahjong.Admin.Tests.HttpAdminCommandExecutorTests.AssetActionsExecuteOneApprovedWalletOperationIdempotently(operationType: GrantCompensation)" computerName="FREEBOOZ" duration="00:00:00.0036733" startTime="2026-07-29T09:37:50.9831217+08:00" endTime="2026-07-29T09:37:50.9867076+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="d7df5287-ff3a-41f0-801a-fddfc6f2e52e" />
+    <UnitTestResult executionId="345ffb51-97fe-489b-933f-5a215a373fc0" testId="19c5c595-576e-7aad-3d9a-aeb440ca061c" testName="GuiyangMahjong.Admin.Tests.AdminApiTests.AuthorizedOverviewIsReadOnlyAndAvailable" computerName="FREEBOOZ" duration="00:00:00.0069343" startTime="2026-07-29T09:37:51.4149076+08:00" endTime="2026-07-29T09:37:51.4221421+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="345ffb51-97fe-489b-933f-5a215a373fc0" />
+    <UnitTestResult executionId="b6b99e52-d896-4f27-868b-38ec7ca2bcb0" testId="bf4b4baf-f48e-15f9-ec1b-4f13483fbed6" testName="GuiyangMahjong.Admin.Tests.PlayerEvidenceApiTests.ManagementRequestIdempotencyKeyReturnsTheSameRequest" computerName="FREEBOOZ" duration="00:00:00.0231571" startTime="2026-07-29T09:37:51.2775826+08:00" endTime="2026-07-29T09:37:51.3008849+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="b6b99e52-d896-4f27-868b-38ec7ca2bcb0" />
+    <UnitTestResult executionId="1ab1720e-8678-45dc-8ac5-be95fe1ee7f5" testId="4b5b53bf-f435-1097-51d7-cbc092ec8762" testName="GuiyangMahjong.Admin.Tests.HttpAdminCommandExecutorTests.TemporaryFreezeAppliesAuthControlThenDisconnectsLobby" computerName="FREEBOOZ" duration="00:00:00.1882270" startTime="2026-07-29T09:37:51.0157910+08:00" endTime="2026-07-29T09:37:51.1892989+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="1ab1720e-8678-45dc-8ac5-be95fe1ee7f5" />
+    <UnitTestResult executionId="ee117826-af15-4281-ac5d-3fbb09accb96" testId="bf7be55d-351d-8ee7-f2b1-0399c3d89b99" testName="GuiyangMahjong.Admin.Tests.AdminEnterpriseAuthenticationTests.EnterpriseIdentityRequiresMfaAndMapsOnlyKnownRoles" computerName="FREEBOOZ" duration="00:00:00.0610787" startTime="2026-07-29T09:37:50.8186562+08:00" endTime="2026-07-29T09:37:50.8872909+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="ee117826-af15-4281-ac5d-3fbb09accb96" />
+    <UnitTestResult executionId="fd9cc607-68c3-4e55-80f8-2713a73dc11e" testId="ab3c9c4c-e050-9280-9868-4196308a2155" testName="GuiyangMahjong.Admin.Tests.AdminExternalPersistenceTests.PostgreSql_PlayerEvidenceIsConcurrentAndIdempotent" computerName="FREEBOOZ" duration="00:00:00.0010000" startTime="2026-07-29T09:37:50.8187351+08:00" endTime="2026-07-29T09:37:50.8200715+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="NotExecuted" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="fd9cc607-68c3-4e55-80f8-2713a73dc11e">
+      <Output>
+        <ErrorInfo>
+          <Message>Set ADMIN_TEST_POSTGRES to run Admin external persistence tests.</Message>
+        </ErrorInfo>
+      </Output>
+    </UnitTestResult>
+    <UnitTestResult executionId="ecd74b71-2f28-48dd-a1c2-0d16440527f8" testId="2e5fffbf-456b-3347-7fb2-476608bd7166" testName="GuiyangMahjong.Admin.Tests.AdminApiTests.ManagementCasesAreRoleFilteredAndPreserveApprovalLinkage" computerName="FREEBOOZ" duration="00:00:00.0380690" startTime="2026-07-29T09:37:51.3486891+08:00" endTime="2026-07-29T09:37:51.3873247+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="ecd74b71-2f28-48dd-a1c2-0d16440527f8" />
+    <UnitTestResult executionId="f72e7453-a71b-4605-8760-e8c12fab38ed" testId="e9ace957-bfdc-260a-42cc-d451e84d9178" testName="GuiyangMahjong.Admin.Tests.AdminApiTests.PlayerControlHistoryRequiresSanctionRiskApprovalOrAuditRole" computerName="FREEBOOZ" duration="00:00:00.0175049" startTime="2026-07-29T09:37:51.3969249+08:00" endTime="2026-07-29T09:37:51.4146917+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="f72e7453-a71b-4605-8760-e8c12fab38ed" />
+    <UnitTestResult executionId="96cbda2a-5a18-4264-b76a-395f536f5049" testId="10f1f6f4-a6fd-b87c-c4ae-cf1d9b9bf4b6" testName="GuiyangMahjong.Admin.Tests.AdminCommandDispatcherTests.RetryableFailureIsDelayedAndThenCanSucceed" computerName="FREEBOOZ" duration="00:00:00.1126340" startTime="2026-07-29T09:37:50.8186979+08:00" endTime="2026-07-29T09:37:50.9734257+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="96cbda2a-5a18-4264-b76a-395f536f5049" />
+    <UnitTestResult executionId="75964092-0fa6-4545-ad55-89e52b89c4e7" testId="639e1348-5036-1fbc-c7e3-2a4ea91c4e18" testName="GuiyangMahjong.Admin.Tests.HttpAdminCommandExecutorTests.CaseActionsCreateOneIdempotentCaseWithoutDomainMutation(actionType: ViewReplay, targetType: &quot;Room&quot;, expectedCaseType: ReplayReview)" computerName="FREEBOOZ" duration="00:00:00.1103569" startTime="2026-07-29T09:37:50.8187570+08:00" endTime="2026-07-29T09:37:50.9375857+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="75964092-0fa6-4545-ad55-89e52b89c4e7" />
+    <UnitTestResult executionId="fc3045c0-ebfc-414f-a43e-f2bbd695cae7" testId="38426b82-f14d-964d-d7d2-f279f7e9047a" testName="GuiyangMahjong.Admin.Tests.HttpAdminCommandExecutorTests.RiskMarkUsesAuthOnlyAndCarriesApprovedAuditIdentity" computerName="FREEBOOZ" duration="00:00:00.0044599" startTime="2026-07-29T09:37:50.9966451+08:00" endTime="2026-07-29T09:37:51.0009662+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="fc3045c0-ebfc-414f-a43e-f2bbd695cae7" />
+    <UnitTestResult executionId="4b5d25bf-5f65-498d-9a66-0a9b59446824" testId="258c5ed5-c540-826e-719f-50a80587d0ad" testName="GuiyangMahjong.Admin.Tests.AdminExternalPersistenceTests.PostgreSql_ApprovalAndDispatchPersistAtomically" computerName="FREEBOOZ" duration="00:00:00.0010000" startTime="2026-07-29T09:37:50.8349212+08:00" endTime="2026-07-29T09:37:50.8349473+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="NotExecuted" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="4b5d25bf-5f65-498d-9a66-0a9b59446824">
+      <Output>
+        <ErrorInfo>
+          <Message>Set ADMIN_TEST_POSTGRES to run Admin external persistence tests.</Message>
+        </ErrorInfo>
+      </Output>
+    </UnitTestResult>
+    <UnitTestResult executionId="88640bc3-f570-42c6-b9ce-6473e7049ae8" testId="bc82e257-608e-6c73-5e37-cb39dca323a7" testName="GuiyangMahjong.Admin.Tests.PlayerEvidenceApiTests.EvidenceIngestionRequiresDedicatedCredentialAndRejectsSecrets" computerName="FREEBOOZ" duration="00:00:00.0059474" startTime="2026-07-29T09:37:51.2711838+08:00" endTime="2026-07-29T09:37:51.2773746+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="88640bc3-f570-42c6-b9ce-6473e7049ae8" />
+    <UnitTestResult executionId="19d42b80-ccef-42f7-b690-b0bfcf693d88" testId="0fce5b01-7d89-6b36-f622-3642f7e35e59" testName="GuiyangMahjong.Admin.Tests.HttpAdminCommandExecutorTests.CaseActionsCreateOneIdempotentCaseWithoutDomainMutation(actionType: TriggerCompensation, targetType: &quot;Room&quot;, expectedCaseType: CompensationReview)" computerName="FREEBOOZ" duration="00:00:00.0002311" startTime="2026-07-29T09:37:50.9731743+08:00" endTime="2026-07-29T09:37:50.9732161+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="19d42b80-ccef-42f7-b690-b0bfcf693d88" />
+    <UnitTestResult executionId="fff576a7-3f55-48f4-b281-9509f55472db" testId="1d3e298c-6b8e-bf40-63d0-4ce7d315a203" testName="GuiyangMahjong.Admin.Tests.AdminCommandDispatcherTests.SuccessfulCommandCompletesOutboxActionAndAuditAtomically" computerName="FREEBOOZ" duration="00:00:00.0043767" startTime="2026-07-29T09:37:50.9737120+08:00" endTime="2026-07-29T09:37:50.9737511+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="fff576a7-3f55-48f4-b281-9509f55472db" />
+    <UnitTestResult executionId="1ea0e743-9366-4da2-a838-c4da2148204c" testId="a9be92d8-c07a-72fd-4a20-ab1b3b3607a0" testName="GuiyangMahjong.Admin.Tests.AdminExternalPersistenceTests.PostgreSql_CaseCreationIsConcurrentAndIdempotent" computerName="FREEBOOZ" duration="00:00:00.0010000" startTime="2026-07-29T09:37:50.8336948+08:00" endTime="2026-07-29T09:37:50.8338007+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="NotExecuted" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="1ea0e743-9366-4da2-a838-c4da2148204c">
+      <Output>
+        <ErrorInfo>
+          <Message>Set ADMIN_TEST_POSTGRES to run Admin external persistence tests.</Message>
+        </ErrorInfo>
+      </Output>
+    </UnitTestResult>
+  </Results>
+  <TestDefinitions>
+    <UnitTest name="GuiyangMahjong.Admin.Tests.PlayerEvidenceApiTests.ChatPermissionRequiresIndependentScopedGrantAndAuditsCheck" storage="h:\mahjonggame\services\guiyangmahjong.admin.tests\bin\release\net10.0\guiyangmahjong.admin.tests.dll" id="80b7e0d6-a67e-b319-f6f9-778b9bc9046f">
+      <Execution id="f6ba9424-cab1-4610-9694-3c86440c5749" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Admin.Tests\bin\Release\net10.0\GuiyangMahjong.Admin.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Admin.Tests.PlayerEvidenceApiTests" name="ChatPermissionRequiresIndependentScopedGrantAndAuditsCheck" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Admin.Tests.HttpAdminCommandExecutorTests.RoomControlCallsLobbyWithApprovedStateSequence(actionType: EnableMaintenanceMode)" storage="h:\mahjonggame\services\guiyangmahjong.admin.tests\bin\release\net10.0\guiyangmahjong.admin.tests.dll" id="02c400af-1080-41c8-f475-d5165c311b53">
+      <Execution id="95a052d0-e756-48fa-a0a1-3d712918ac81" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Admin.Tests\bin\Release\net10.0\GuiyangMahjong.Admin.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Admin.Tests.HttpAdminCommandExecutorTests" name="RoomControlCallsLobbyWithApprovedStateSequence" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Admin.Tests.AdminApiTests.ApprovedRoomCasesProduceDownloadableLogsAndScopedReplayResults" storage="h:\mahjonggame\services\guiyangmahjong.admin.tests\bin\release\net10.0\guiyangmahjong.admin.tests.dll" id="f2959f14-135c-69a9-db6b-a7a6ad9c05b4">
+      <Execution id="1ec4f59b-0533-4cf2-aaa7-578bd44e81e7" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Admin.Tests\bin\Release\net10.0\GuiyangMahjong.Admin.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Admin.Tests.AdminApiTests" name="ApprovedRoomCasesProduceDownloadableLogsAndScopedReplayResults" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Admin.Tests.AdminApiTests.MonitoringApiRejectsMissingCredential" storage="h:\mahjonggame\services\guiyangmahjong.admin.tests\bin\release\net10.0\guiyangmahjong.admin.tests.dll" id="04bac883-8bdf-9772-65ff-4d262072081b">
+      <Execution id="ebb7742a-7cef-4dd4-92fc-0dfa1fdeb8fa" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Admin.Tests\bin\Release\net10.0\GuiyangMahjong.Admin.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Admin.Tests.AdminApiTests" name="MonitoringApiRejectsMissingCredential" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Admin.Tests.HttpAdminCommandExecutorTests.CaseActionsCreateOneIdempotentCaseWithoutDomainMutation(actionType: TriggerCompensation, targetType: &quot;Room&quot;, expectedCaseType: CompensationReview)" storage="h:\mahjonggame\services\guiyangmahjong.admin.tests\bin\release\net10.0\guiyangmahjong.admin.tests.dll" id="0fce5b01-7d89-6b36-f622-3642f7e35e59">
+      <Execution id="19d42b80-ccef-42f7-b690-b0bfcf693d88" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Admin.Tests\bin\Release\net10.0\GuiyangMahjong.Admin.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Admin.Tests.HttpAdminCommandExecutorTests" name="CaseActionsCreateOneIdempotentCaseWithoutDomainMutation" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Admin.Tests.AdminCommandDispatcherTests.SuccessfulCommandCompletesOutboxActionAndAuditAtomically" storage="h:\mahjonggame\services\guiyangmahjong.admin.tests\bin\release\net10.0\guiyangmahjong.admin.tests.dll" id="1d3e298c-6b8e-bf40-63d0-4ce7d315a203">
+      <Execution id="fff576a7-3f55-48f4-b281-9509f55472db" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Admin.Tests\bin\Release\net10.0\GuiyangMahjong.Admin.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Admin.Tests.AdminCommandDispatcherTests" name="SuccessfulCommandCompletesOutboxActionAndAuditAtomically" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Admin.Tests.PlayerEvidenceApiTests.ManagementRequestIdempotencyKeyReturnsTheSameRequest" storage="h:\mahjonggame\services\guiyangmahjong.admin.tests\bin\release\net10.0\guiyangmahjong.admin.tests.dll" id="bf4b4baf-f48e-15f9-ec1b-4f13483fbed6">
+      <Execution id="b6b99e52-d896-4f27-868b-38ec7ca2bcb0" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Admin.Tests\bin\Release\net10.0\GuiyangMahjong.Admin.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Admin.Tests.PlayerEvidenceApiTests" name="ManagementRequestIdempotencyKeyReturnsTheSameRequest" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Admin.Tests.HttpAdminCommandExecutorTests.RoomControlCallsLobbyWithApprovedStateSequence(actionType: ProhibitNewPlayers)" storage="h:\mahjonggame\services\guiyangmahjong.admin.tests\bin\release\net10.0\guiyangmahjong.admin.tests.dll" id="9244edc1-e1ce-0742-4e0c-ab441e672aa6">
+      <Execution id="a9df171d-3ed5-419c-911e-67736416f41d" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Admin.Tests\bin\Release\net10.0\GuiyangMahjong.Admin.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Admin.Tests.HttpAdminCommandExecutorTests" name="RoomControlCallsLobbyWithApprovedStateSequence" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Admin.Tests.HttpAdminCommandExecutorTests.CaseActionsCreateOneIdempotentCaseWithoutDomainMutation(actionType: CreatePlayerSupportTicket, targetType: &quot;Player&quot;, expectedCaseType: PlayerSupport)" storage="h:\mahjonggame\services\guiyangmahjong.admin.tests\bin\release\net10.0\guiyangmahjong.admin.tests.dll" id="42bf01a5-c7c2-9a4e-2faf-df89903e7226">
+      <Execution id="0b832cb2-ea67-4b3b-872b-64a834bb9654" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Admin.Tests\bin\Release\net10.0\GuiyangMahjong.Admin.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Admin.Tests.HttpAdminCommandExecutorTests" name="CaseActionsCreateOneIdempotentCaseWithoutDomainMutation" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Admin.Tests.AdminCommandDispatcherTests.RetryableFailureIsDelayedAndThenCanSucceed" storage="h:\mahjonggame\services\guiyangmahjong.admin.tests\bin\release\net10.0\guiyangmahjong.admin.tests.dll" id="10f1f6f4-a6fd-b87c-c4ae-cf1d9b9bf4b6">
+      <Execution id="96cbda2a-5a18-4264-b76a-395f536f5049" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Admin.Tests\bin\Release\net10.0\GuiyangMahjong.Admin.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Admin.Tests.AdminCommandDispatcherTests" name="RetryableFailureIsDelayedAndThenCanSucceed" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Admin.Tests.AdminApiTests.PlayerControlHistoryRequiresSanctionRiskApprovalOrAuditRole" storage="h:\mahjonggame\services\guiyangmahjong.admin.tests\bin\release\net10.0\guiyangmahjong.admin.tests.dll" id="e9ace957-bfdc-260a-42cc-d451e84d9178">
+      <Execution id="f72e7453-a71b-4605-8760-e8c12fab38ed" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Admin.Tests\bin\Release\net10.0\GuiyangMahjong.Admin.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Admin.Tests.AdminApiTests" name="PlayerControlHistoryRequiresSanctionRiskApprovalOrAuditRole" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Admin.Tests.AdminApiTests.RoomManagementRejectsReadOnlyRoleStaleStateAndResultMutationType" storage="h:\mahjonggame\services\guiyangmahjong.admin.tests\bin\release\net10.0\guiyangmahjong.admin.tests.dll" id="d250c596-cb12-01af-91b6-8e1fd1242dab">
+      <Execution id="8ad5c0d1-79c8-4f95-80e6-e9e6df94ab8a" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Admin.Tests\bin\Release\net10.0\GuiyangMahjong.Admin.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Admin.Tests.AdminApiTests" name="RoomManagementRejectsReadOnlyRoleStaleStateAndResultMutationType" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Admin.Tests.AdminCommandDispatcherTests.NonRetryableFailureEndsActionWithoutRedispatch" storage="h:\mahjonggame\services\guiyangmahjong.admin.tests\bin\release\net10.0\guiyangmahjong.admin.tests.dll" id="b3a3e6a9-2823-df59-202c-a7e4fc520852">
+      <Execution id="a399ef1c-e997-4b1a-bfc1-f23dc77af598" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Admin.Tests\bin\Release\net10.0\GuiyangMahjong.Admin.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Admin.Tests.AdminCommandDispatcherTests" name="NonRetryableFailureEndsActionWithoutRedispatch" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Admin.Tests.AdminApiTests.ManagementCasesAreRoleFilteredAndPreserveApprovalLinkage" storage="h:\mahjonggame\services\guiyangmahjong.admin.tests\bin\release\net10.0\guiyangmahjong.admin.tests.dll" id="2e5fffbf-456b-3347-7fb2-476608bd7166">
+      <Execution id="ecd74b71-2f28-48dd-a1c2-0d16440527f8" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Admin.Tests\bin\Release\net10.0\GuiyangMahjong.Admin.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Admin.Tests.AdminApiTests" name="ManagementCasesAreRoleFilteredAndPreserveApprovalLinkage" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Admin.Tests.HttpAdminCommandExecutorTests.AssetActionsExecuteOneApprovedWalletOperationIdempotently(operationType: RevokeReward)" storage="h:\mahjonggame\services\guiyangmahjong.admin.tests\bin\release\net10.0\guiyangmahjong.admin.tests.dll" id="7bdbaff7-615b-28fb-45ee-977c04d9a340">
+      <Execution id="58a4ebb9-87db-437b-810f-f175a0d143fa" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Admin.Tests\bin\Release\net10.0\GuiyangMahjong.Admin.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Admin.Tests.HttpAdminCommandExecutorTests" name="AssetActionsExecuteOneApprovedWalletOperationIdempotently" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Admin.Tests.AdminApiTests.PlayerManagementRejectsChangedSessionFingerprint" storage="h:\mahjonggame\services\guiyangmahjong.admin.tests\bin\release\net10.0\guiyangmahjong.admin.tests.dll" id="e247bdcf-8390-db6f-7e97-111d5f5f46b2">
+      <Execution id="64b0a96d-8f50-4b40-96ec-82aedd01a2c9" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Admin.Tests\bin\Release\net10.0\GuiyangMahjong.Admin.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Admin.Tests.AdminApiTests" name="PlayerManagementRejectsChangedSessionFingerprint" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Admin.Tests.PlayerEvidenceApiTests.EvidenceIngestionRequiresDedicatedCredentialAndRejectsSecrets" storage="h:\mahjonggame\services\guiyangmahjong.admin.tests\bin\release\net10.0\guiyangmahjong.admin.tests.dll" id="bc82e257-608e-6c73-5e37-cb39dca323a7">
+      <Execution id="88640bc3-f570-42c6-b9ce-6473e7049ae8" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Admin.Tests\bin\Release\net10.0\GuiyangMahjong.Admin.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Admin.Tests.PlayerEvidenceApiTests" name="EvidenceIngestionRequiresDedicatedCredentialAndRejectsSecrets" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Admin.Tests.AdminExternalPersistenceTests.PostgreSql_ApprovalAndDispatchPersistAtomically" storage="h:\mahjonggame\services\guiyangmahjong.admin.tests\bin\release\net10.0\guiyangmahjong.admin.tests.dll" id="258c5ed5-c540-826e-719f-50a80587d0ad">
+      <Execution id="4b5d25bf-5f65-498d-9a66-0a9b59446824" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Admin.Tests\bin\Release\net10.0\GuiyangMahjong.Admin.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Admin.Tests.AdminExternalPersistenceTests" name="PostgreSql_ApprovalAndDispatchPersistAtomically" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Admin.Tests.HttpAdminCommandExecutorTests.CaseActionsCreateOneIdempotentCaseWithoutDomainMutation(actionType: ExportRoomLogs, targetType: &quot;Room&quot;, expectedCaseType: RoomLogExport)" storage="h:\mahjonggame\services\guiyangmahjong.admin.tests\bin\release\net10.0\guiyangmahjong.admin.tests.dll" id="ea8fc26e-7e05-07fa-878c-95d51391db70">
+      <Execution id="5c38d22c-95b1-4523-9fde-13afbae29484" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Admin.Tests\bin\Release\net10.0\GuiyangMahjong.Admin.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Admin.Tests.HttpAdminCommandExecutorTests" name="CaseActionsCreateOneIdempotentCaseWithoutDomainMutation" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Admin.Tests.AdminApiTests.RoomManagementRequiresConfirmationSeparateApprovalAndCreatesHashChainedAudit" storage="h:\mahjonggame\services\guiyangmahjong.admin.tests\bin\release\net10.0\guiyangmahjong.admin.tests.dll" id="5d094081-d356-8b7b-a048-de0d976dc7a7">
+      <Execution id="05b87c16-d487-445d-9404-c1e453959c2c" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Admin.Tests\bin\Release\net10.0\GuiyangMahjong.Admin.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Admin.Tests.AdminApiTests" name="RoomManagementRequiresConfirmationSeparateApprovalAndCreatesHashChainedAudit" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Admin.Tests.AdminApiTests.HealthDoesNotRequireAdministratorCredential" storage="h:\mahjonggame\services\guiyangmahjong.admin.tests\bin\release\net10.0\guiyangmahjong.admin.tests.dll" id="2967cacb-ef3d-d559-5e9e-b98fda0400fc">
+      <Execution id="d1bf514c-6ccc-48e5-be48-ecb161746158" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Admin.Tests\bin\Release\net10.0\GuiyangMahjong.Admin.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Admin.Tests.AdminApiTests" name="HealthDoesNotRequireAdministratorCredential" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Admin.Tests.HttpAdminCommandExecutorTests.RiskMarkUsesAuthOnlyAndCarriesApprovedAuditIdentity" storage="h:\mahjonggame\services\guiyangmahjong.admin.tests\bin\release\net10.0\guiyangmahjong.admin.tests.dll" id="38426b82-f14d-964d-d7d2-f279f7e9047a">
+      <Execution id="fc3045c0-ebfc-414f-a43e-f2bbd695cae7" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Admin.Tests\bin\Release\net10.0\GuiyangMahjong.Admin.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Admin.Tests.HttpAdminCommandExecutorTests" name="RiskMarkUsesAuthOnlyAndCarriesApprovedAuditIdentity" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Admin.Tests.HttpAdminCommandExecutorTests.AssetActionsExecuteOneApprovedWalletOperationIdempotently(operationType: GrantCompensation)" storage="h:\mahjonggame\services\guiyangmahjong.admin.tests\bin\release\net10.0\guiyangmahjong.admin.tests.dll" id="bbe7f0a6-f44f-e25c-3402-dce96c3438bf">
+      <Execution id="d7df5287-ff3a-41f0-801a-fddfc6f2e52e" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Admin.Tests\bin\Release\net10.0\GuiyangMahjong.Admin.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Admin.Tests.HttpAdminCommandExecutorTests" name="AssetActionsExecuteOneApprovedWalletOperationIdempotently" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Admin.Tests.AdminApiTests.SanctionReversalRequiresTheMatchingOriginalCommand" storage="h:\mahjonggame\services\guiyangmahjong.admin.tests\bin\release\net10.0\guiyangmahjong.admin.tests.dll" id="8fb9b3ea-cdde-f444-4f58-666b667ae262">
+      <Execution id="67996986-46ba-4f78-974f-db90033f47e8" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Admin.Tests\bin\Release\net10.0\GuiyangMahjong.Admin.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Admin.Tests.AdminApiTests" name="SanctionReversalRequiresTheMatchingOriginalCommand" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Admin.Tests.HttpAdminCommandExecutorTests.TemporaryFreezeAppliesAuthControlThenDisconnectsLobby" storage="h:\mahjonggame\services\guiyangmahjong.admin.tests\bin\release\net10.0\guiyangmahjong.admin.tests.dll" id="4b5b53bf-f435-1097-51d7-cbc092ec8762">
+      <Execution id="1ab1720e-8678-45dc-8ac5-be95fe1ee7f5" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Admin.Tests\bin\Release\net10.0\GuiyangMahjong.Admin.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Admin.Tests.HttpAdminCommandExecutorTests" name="TemporaryFreezeAppliesAuthControlThenDisconnectsLobby" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Admin.Tests.AuditArchiveDispatcherTests.SuccessfulDeliveryUsesAuditIdAsIdempotencyKey" storage="h:\mahjonggame\services\guiyangmahjong.admin.tests\bin\release\net10.0\guiyangmahjong.admin.tests.dll" id="0b7ac540-9ced-b2da-a85a-a06ff608c943">
+      <Execution id="56a5e590-37fc-4bed-87ea-e8d45b24ce03" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Admin.Tests\bin\Release\net10.0\GuiyangMahjong.Admin.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Admin.Tests.AuditArchiveDispatcherTests" name="SuccessfulDeliveryUsesAuditIdAsIdempotencyKey" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Admin.Tests.AdminApiTests.AuthorizedOverviewIsReadOnlyAndAvailable" storage="h:\mahjonggame\services\guiyangmahjong.admin.tests\bin\release\net10.0\guiyangmahjong.admin.tests.dll" id="19c5c595-576e-7aad-3d9a-aeb440ca061c">
+      <Execution id="345ffb51-97fe-489b-933f-5a215a373fc0" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Admin.Tests\bin\Release\net10.0\GuiyangMahjong.Admin.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Admin.Tests.AdminApiTests" name="AuthorizedOverviewIsReadOnlyAndAvailable" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Admin.Tests.HttpAdminCommandExecutorTests.CaseActionsCreateOneIdempotentCaseWithoutDomainMutation(actionType: ViewPlayerReplay, targetType: &quot;Player&quot;, expectedCaseType: ReplayReview)" storage="h:\mahjonggame\services\guiyangmahjong.admin.tests\bin\release\net10.0\guiyangmahjong.admin.tests.dll" id="d8bbd4ab-4d60-4cbd-22ba-bee18b42acfb">
+      <Execution id="d5e21d37-7fc1-4d0f-9a2f-8bbfa9c134af" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Admin.Tests\bin\Release\net10.0\GuiyangMahjong.Admin.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Admin.Tests.HttpAdminCommandExecutorTests" name="CaseActionsCreateOneIdempotentCaseWithoutDomainMutation" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Admin.Tests.HttpAdminCommandExecutorTests.CaseActionsCreateOneIdempotentCaseWithoutDomainMutation(actionType: StartDisputeInvestigation, targetType: &quot;Room&quot;, expectedCaseType: DisputeInvestigation)" storage="h:\mahjonggame\services\guiyangmahjong.admin.tests\bin\release\net10.0\guiyangmahjong.admin.tests.dll" id="408b06b3-5fab-c324-b618-33fadfbeacd1">
+      <Execution id="b0f83fbe-b1be-4759-b0b9-ec36d63929ab" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Admin.Tests\bin\Release\net10.0\GuiyangMahjong.Admin.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Admin.Tests.HttpAdminCommandExecutorTests" name="CaseActionsCreateOneIdempotentCaseWithoutDomainMutation" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Admin.Tests.HttpAdminCommandExecutorTests.CaseActionsCreateOneIdempotentCaseWithoutDomainMutation(actionType: ViewReplay, targetType: &quot;Room&quot;, expectedCaseType: ReplayReview)" storage="h:\mahjonggame\services\guiyangmahjong.admin.tests\bin\release\net10.0\guiyangmahjong.admin.tests.dll" id="639e1348-5036-1fbc-c7e3-2a4ea91c4e18">
+      <Execution id="75964092-0fa6-4545-ad55-89e52b89c4e7" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Admin.Tests\bin\Release\net10.0\GuiyangMahjong.Admin.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Admin.Tests.HttpAdminCommandExecutorTests" name="CaseActionsCreateOneIdempotentCaseWithoutDomainMutation" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Admin.Tests.AdminApiTests.PlayerManagementUsesPlayerRbacSeparateApprovalAndMaskedStateSnapshot" storage="h:\mahjonggame\services\guiyangmahjong.admin.tests\bin\release\net10.0\guiyangmahjong.admin.tests.dll" id="0ac0b423-b022-7bc4-0f4d-445173f471c8">
+      <Execution id="600fcb89-3921-4722-9344-64387471b79f" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Admin.Tests\bin\Release\net10.0\GuiyangMahjong.Admin.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Admin.Tests.AdminApiTests" name="PlayerManagementUsesPlayerRbacSeparateApprovalAndMaskedStateSnapshot" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Admin.Tests.AdminExternalPersistenceTests.PostgreSql_CaseCreationIsConcurrentAndIdempotent" storage="h:\mahjonggame\services\guiyangmahjong.admin.tests\bin\release\net10.0\guiyangmahjong.admin.tests.dll" id="a9be92d8-c07a-72fd-4a20-ab1b3b3607a0">
+      <Execution id="1ea0e743-9366-4da2-a838-c4da2148204c" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Admin.Tests\bin\Release\net10.0\GuiyangMahjong.Admin.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Admin.Tests.AdminExternalPersistenceTests" name="PostgreSql_CaseCreationIsConcurrentAndIdempotent" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Admin.Tests.AdminEnterpriseAuthenticationTests.EnterpriseIdentityRequiresMfaAndMapsOnlyKnownRoles" storage="h:\mahjonggame\services\guiyangmahjong.admin.tests\bin\release\net10.0\guiyangmahjong.admin.tests.dll" id="bf7be55d-351d-8ee7-f2b1-0399c3d89b99">
+      <Execution id="ee117826-af15-4281-ac5d-3fbb09accb96" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Admin.Tests\bin\Release\net10.0\GuiyangMahjong.Admin.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Admin.Tests.AdminEnterpriseAuthenticationTests" name="EnterpriseIdentityRequiresMfaAndMapsOnlyKnownRoles" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Admin.Tests.HttpAdminCommandExecutorTests.RoomControlCallsLobbyWithApprovedStateSequence(actionType: MarkRoomAbnormal)" storage="h:\mahjonggame\services\guiyangmahjong.admin.tests\bin\release\net10.0\guiyangmahjong.admin.tests.dll" id="54bed3f6-a468-0c10-44d2-86ece5c92523">
+      <Execution id="123a373e-f2a8-420d-a3fb-33ed6ccb090f" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Admin.Tests\bin\Release\net10.0\GuiyangMahjong.Admin.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Admin.Tests.HttpAdminCommandExecutorTests" name="RoomControlCallsLobbyWithApprovedStateSequence" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Admin.Tests.AdminExternalPersistenceTests.PostgreSql_PlayerEvidenceIsConcurrentAndIdempotent" storage="h:\mahjonggame\services\guiyangmahjong.admin.tests\bin\release\net10.0\guiyangmahjong.admin.tests.dll" id="ab3c9c4c-e050-9280-9868-4196308a2155">
+      <Execution id="fd9cc607-68c3-4e55-80f8-2713a73dc11e" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Admin.Tests\bin\Release\net10.0\GuiyangMahjong.Admin.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Admin.Tests.AdminExternalPersistenceTests" name="PostgreSql_PlayerEvidenceIsConcurrentAndIdempotent" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Admin.Tests.HttpAdminCommandExecutorTests.RetryableLobbyFailurePreservesSuccessfulAuthState" storage="h:\mahjonggame\services\guiyangmahjong.admin.tests\bin\release\net10.0\guiyangmahjong.admin.tests.dll" id="34f12700-ccc0-94be-75ae-a0be546b34d3">
+      <Execution id="4c95606c-6f51-4273-a774-3aae0b6ab211" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Admin.Tests\bin\Release\net10.0\GuiyangMahjong.Admin.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Admin.Tests.HttpAdminCommandExecutorTests" name="RetryableLobbyFailurePreservesSuccessfulAuthState" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Admin.Tests.AdminCommandDispatcherTests.ExpiredLeaseCanBeReclaimedByAnotherWorker" storage="h:\mahjonggame\services\guiyangmahjong.admin.tests\bin\release\net10.0\guiyangmahjong.admin.tests.dll" id="361991e2-1b99-a29c-2f7b-a2ce9b08fdb1">
+      <Execution id="59a6552c-ff57-47ed-83cf-4e9e8a8b0f5f" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Admin.Tests\bin\Release\net10.0\GuiyangMahjong.Admin.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Admin.Tests.AdminCommandDispatcherTests" name="ExpiredLeaseCanBeReclaimedByAnotherWorker" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Admin.Tests.PlayerEvidenceApiTests.FinancialEvidenceIsIdempotentRoleLimitedAndReadAudited" storage="h:\mahjonggame\services\guiyangmahjong.admin.tests\bin\release\net10.0\guiyangmahjong.admin.tests.dll" id="21ca4995-ac2f-570c-b877-d7df4e9bf6d5">
+      <Execution id="c2fb1a71-bb81-4495-964a-608a55489e63" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Admin.Tests\bin\Release\net10.0\GuiyangMahjong.Admin.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Admin.Tests.PlayerEvidenceApiTests" name="FinancialEvidenceIsIdempotentRoleLimitedAndReadAudited" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Admin.Tests.AdminApiTests.AuthorizedPlayerDirectoryIsAvailableWhenSourcesAreDisabled" storage="h:\mahjonggame\services\guiyangmahjong.admin.tests\bin\release\net10.0\guiyangmahjong.admin.tests.dll" id="93ce8f50-7ab5-8b9e-f754-994d845f88b3">
+      <Execution id="3bb9c9d4-5240-40f2-9a89-c0ef58018504" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Admin.Tests\bin\Release\net10.0\GuiyangMahjong.Admin.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Admin.Tests.AdminApiTests" name="AuthorizedPlayerDirectoryIsAvailableWhenSourcesAreDisabled" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Admin.Tests.HttpAdminCommandExecutorTests.InstanceTerminationRoutesToSnapshotAllocatorWithExpectedState" storage="h:\mahjonggame\services\guiyangmahjong.admin.tests\bin\release\net10.0\guiyangmahjong.admin.tests.dll" id="54d1531d-8f51-2906-1f79-a24ccddbcc97">
+      <Execution id="fac2096d-1d48-4de0-b0d9-6acbbb2bd2f9" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Admin.Tests\bin\Release\net10.0\GuiyangMahjong.Admin.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Admin.Tests.HttpAdminCommandExecutorTests" name="InstanceTerminationRoutesToSnapshotAllocatorWithExpectedState" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Admin.Tests.HttpAdminCommandExecutorTests.PlayerSessionCommandCallsAuthAndLobbyWithSameIdempotencyKey" storage="h:\mahjonggame\services\guiyangmahjong.admin.tests\bin\release\net10.0\guiyangmahjong.admin.tests.dll" id="fb122888-2b74-b047-1565-c3ab31b7cd2f">
+      <Execution id="23a5e09d-dbbc-4162-a516-35a490221c0a" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Admin.Tests\bin\Release\net10.0\GuiyangMahjong.Admin.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Admin.Tests.HttpAdminCommandExecutorTests" name="PlayerSessionCommandCallsAuthAndLobbyWithSameIdempotencyKey" />
+    </UnitTest>
+  </TestDefinitions>
+  <TestEntries>
+    <TestEntry testId="d250c596-cb12-01af-91b6-8e1fd1242dab" executionId="8ad5c0d1-79c8-4f95-80e6-e9e6df94ab8a" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="04bac883-8bdf-9772-65ff-4d262072081b" executionId="ebb7742a-7cef-4dd4-92fc-0dfa1fdeb8fa" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="34f12700-ccc0-94be-75ae-a0be546b34d3" executionId="4c95606c-6f51-4273-a774-3aae0b6ab211" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="fb122888-2b74-b047-1565-c3ab31b7cd2f" executionId="23a5e09d-dbbc-4162-a516-35a490221c0a" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="93ce8f50-7ab5-8b9e-f754-994d845f88b3" executionId="3bb9c9d4-5240-40f2-9a89-c0ef58018504" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="408b06b3-5fab-c324-b618-33fadfbeacd1" executionId="b0f83fbe-b1be-4759-b0b9-ec36d63929ab" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="0b7ac540-9ced-b2da-a85a-a06ff608c943" executionId="56a5e590-37fc-4bed-87ea-e8d45b24ce03" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="21ca4995-ac2f-570c-b877-d7df4e9bf6d5" executionId="c2fb1a71-bb81-4495-964a-608a55489e63" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="ea8fc26e-7e05-07fa-878c-95d51391db70" executionId="5c38d22c-95b1-4523-9fde-13afbae29484" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="5d094081-d356-8b7b-a048-de0d976dc7a7" executionId="05b87c16-d487-445d-9404-c1e453959c2c" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="e247bdcf-8390-db6f-7e97-111d5f5f46b2" executionId="64b0a96d-8f50-4b40-96ec-82aedd01a2c9" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="2967cacb-ef3d-d559-5e9e-b98fda0400fc" executionId="d1bf514c-6ccc-48e5-be48-ecb161746158" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="b3a3e6a9-2823-df59-202c-a7e4fc520852" executionId="a399ef1c-e997-4b1a-bfc1-f23dc77af598" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="0ac0b423-b022-7bc4-0f4d-445173f471c8" executionId="600fcb89-3921-4722-9344-64387471b79f" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="54bed3f6-a468-0c10-44d2-86ece5c92523" executionId="123a373e-f2a8-420d-a3fb-33ed6ccb090f" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="9244edc1-e1ce-0742-4e0c-ab441e672aa6" executionId="a9df171d-3ed5-419c-911e-67736416f41d" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="80b7e0d6-a67e-b319-f6f9-778b9bc9046f" executionId="f6ba9424-cab1-4610-9694-3c86440c5749" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="54d1531d-8f51-2906-1f79-a24ccddbcc97" executionId="fac2096d-1d48-4de0-b0d9-6acbbb2bd2f9" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="361991e2-1b99-a29c-2f7b-a2ce9b08fdb1" executionId="59a6552c-ff57-47ed-83cf-4e9e8a8b0f5f" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="d8bbd4ab-4d60-4cbd-22ba-bee18b42acfb" executionId="d5e21d37-7fc1-4d0f-9a2f-8bbfa9c134af" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="42bf01a5-c7c2-9a4e-2faf-df89903e7226" executionId="0b832cb2-ea67-4b3b-872b-64a834bb9654" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="7bdbaff7-615b-28fb-45ee-977c04d9a340" executionId="58a4ebb9-87db-437b-810f-f175a0d143fa" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="f2959f14-135c-69a9-db6b-a7a6ad9c05b4" executionId="1ec4f59b-0533-4cf2-aaa7-578bd44e81e7" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="8fb9b3ea-cdde-f444-4f58-666b667ae262" executionId="67996986-46ba-4f78-974f-db90033f47e8" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="02c400af-1080-41c8-f475-d5165c311b53" executionId="95a052d0-e756-48fa-a0a1-3d712918ac81" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="bbe7f0a6-f44f-e25c-3402-dce96c3438bf" executionId="d7df5287-ff3a-41f0-801a-fddfc6f2e52e" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="19c5c595-576e-7aad-3d9a-aeb440ca061c" executionId="345ffb51-97fe-489b-933f-5a215a373fc0" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="bf4b4baf-f48e-15f9-ec1b-4f13483fbed6" executionId="b6b99e52-d896-4f27-868b-38ec7ca2bcb0" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="4b5b53bf-f435-1097-51d7-cbc092ec8762" executionId="1ab1720e-8678-45dc-8ac5-be95fe1ee7f5" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="bf7be55d-351d-8ee7-f2b1-0399c3d89b99" executionId="ee117826-af15-4281-ac5d-3fbb09accb96" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="ab3c9c4c-e050-9280-9868-4196308a2155" executionId="fd9cc607-68c3-4e55-80f8-2713a73dc11e" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="2e5fffbf-456b-3347-7fb2-476608bd7166" executionId="ecd74b71-2f28-48dd-a1c2-0d16440527f8" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="e9ace957-bfdc-260a-42cc-d451e84d9178" executionId="f72e7453-a71b-4605-8760-e8c12fab38ed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="10f1f6f4-a6fd-b87c-c4ae-cf1d9b9bf4b6" executionId="96cbda2a-5a18-4264-b76a-395f536f5049" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="639e1348-5036-1fbc-c7e3-2a4ea91c4e18" executionId="75964092-0fa6-4545-ad55-89e52b89c4e7" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="38426b82-f14d-964d-d7d2-f279f7e9047a" executionId="fc3045c0-ebfc-414f-a43e-f2bbd695cae7" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="258c5ed5-c540-826e-719f-50a80587d0ad" executionId="4b5d25bf-5f65-498d-9a66-0a9b59446824" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="bc82e257-608e-6c73-5e37-cb39dca323a7" executionId="88640bc3-f570-42c6-b9ce-6473e7049ae8" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="0fce5b01-7d89-6b36-f622-3642f7e35e59" executionId="19d42b80-ccef-42f7-b690-b0bfcf693d88" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="1d3e298c-6b8e-bf40-63d0-4ce7d315a203" executionId="fff576a7-3f55-48f4-b281-9509f55472db" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="a9be92d8-c07a-72fd-4a20-ab1b3b3607a0" executionId="1ea0e743-9366-4da2-a838-c4da2148204c" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+  </TestEntries>
+  <TestLists>
+    <TestList name="列表中未列出的结果" id="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestList name="所有已加载的结果" id="19431567-8539-422a-85d7-44ee4e166bda" />
+  </TestLists>
+  <ResultSummary outcome="Completed">
+    <Counters total="41" executed="38" passed="38" failed="0" error="0" timeout="0" aborted="0" inconclusive="0" passedButRunAborted="0" notRunnable="0" notExecuted="0" disconnected="0" warning="0" completed="0" inProgress="0" pending="0" />
+    <Output>
+      <StdOut>[xUnit.net 00:00:00.00] xUnit.net VSTest Adapter v3.1.4+50e68bbb8b (64-bit .NET 10.0.2)&#xD;
+[xUnit.net 00:00:00.10]   Discovering: GuiyangMahjong.Admin.Tests&#xD;
+[xUnit.net 00:00:00.16]   Discovered:  GuiyangMahjong.Admin.Tests&#xD;
+[xUnit.net 00:00:00.21]   Starting:    GuiyangMahjong.Admin.Tests&#xD;
+[xUnit.net 00:00:00.24]       Set ADMIN_TEST_POSTGRES to run Admin external persistence tests.&#xD;
+[xUnit.net 00:00:00.25]       Set ADMIN_TEST_POSTGRES to run Admin external persistence tests.&#xD;
+[xUnit.net 00:00:00.25]       Set ADMIN_TEST_POSTGRES to run Admin external persistence tests.&#xD;
+在测试运行中跳过测试“GuiyangMahjong.Admin.Tests.AdminExternalPersistenceTests.PostgreSql_PlayerEvidenceIsConcurrentAndIdempotent”。&#xD;
+在测试运行中跳过测试“GuiyangMahjong.Admin.Tests.AdminExternalPersistenceTests.PostgreSql_CaseCreationIsConcurrentAndIdempotent”。&#xD;
+在测试运行中跳过测试“GuiyangMahjong.Admin.Tests.AdminExternalPersistenceTests.PostgreSql_ApprovalAndDispatchPersistAtomically”。&#xD;
+info: GuiyangMahjong.Admin.Storage.AdminActionStoreInitializer[0]&#xD;
+      Admin management store initialized.&#xD;
+info: GuiyangMahjong.Admin.Storage.AdminActionStoreInitializer[0]&#xD;
+      Admin management store initialized.&#xD;
+info: Microsoft.Hosting.Lifetime[0]&#xD;
+      Application started. Press Ctrl+C to shut down.&#xD;
+info: Microsoft.Hosting.Lifetime[0]&#xD;
+      Hosting environment: Development&#xD;
+info: Microsoft.Hosting.Lifetime[0]&#xD;
+      Content root path: H:\MahjongGame\Services\GuiyangMahjong.Admin.Tests\bin\Release\net10.0\&#xD;
+info: Microsoft.Hosting.Lifetime[0]&#xD;
+      Application started. Press Ctrl+C to shut down.&#xD;
+info: Microsoft.Hosting.Lifetime[0]&#xD;
+      Hosting environment: Development&#xD;
+info: Microsoft.Hosting.Lifetime[0]&#xD;
+      Content root path: H:\MahjongGame\Services\GuiyangMahjong.Admin.Tests\bin\Release\net10.0\&#xD;
+warn: Microsoft.AspNetCore.Routing.EndpointRoutingMiddleware[9]&#xD;
+      A request body size limit could not be applied. This server does not support the IHttpMaxRequestBodySizeFeature.&#xD;
+warn: Microsoft.AspNetCore.Routing.EndpointRoutingMiddleware[9]&#xD;
+      A request body size limit could not be applied. This server does not support the IHttpMaxRequestBodySizeFeature.&#xD;
+warn: Microsoft.AspNetCore.Routing.EndpointRoutingMiddleware[9]&#xD;
+      A request body size limit could not be applied. This server does not support the IHttpMaxRequestBodySizeFeature.&#xD;
+warn: Microsoft.AspNetCore.Routing.EndpointRoutingMiddleware[9]&#xD;
+      A request body size limit could not be applied. This server does not support the IHttpMaxRequestBodySizeFeature.&#xD;
+warn: Microsoft.AspNetCore.Routing.EndpointRoutingMiddleware[9]&#xD;
+      A request body size limit could not be applied. This server does not support the IHttpMaxRequestBodySizeFeature.&#xD;
+info: Microsoft.Hosting.Lifetime[0]&#xD;
+      Application is shutting down...&#xD;
+fail: Microsoft.AspNetCore.Diagnostics.DeveloperExceptionPageMiddleware[1]&#xD;
+      An unhandled exception has occurred while executing the request.&#xD;
+      Microsoft.AspNetCore.Http.BadHttpRequestException: Failed to read parameter "CreateAdminActionRequest request" from the request body as JSON.&#xD;
+       ---&gt; System.Text.Json.JsonException: The JSON value could not be converted to GuiyangMahjong.Admin.Domain.CreateAdminActionRequest. Path: $.actionType | LineNumber: 0 | BytePositionInLine: 33.&#xD;
+         at System.Text.Json.ThrowHelper.ThrowJsonException(String message)&#xD;
+         at System.Text.Json.Serialization.Converters.EnumConverter`1.Read(Utf8JsonReader&amp; reader, Type typeToConvert, JsonSerializerOptions options)&#xD;
+         at System.Text.Json.Serialization.JsonConverter`1.TryRead(Utf8JsonReader&amp; reader, Type typeToConvert, JsonSerializerOptions options, ReadStack&amp; state, T&amp; value, Boolean&amp; isPopulatedValue)&#xD;
+         at System.Text.Json.Serialization.JsonConverter`1.TryReadAsObject(Utf8JsonReader&amp; reader, Type typeToConvert, JsonSerializerOptions options, ReadStack&amp; state, Object&amp; value)&#xD;
+         at System.Text.Json.Serialization.Converters.LargeObjectWithParameterizedConstructorConverter`1.ReadAndCacheConstructorArgument(ReadStack&amp; state, Utf8JsonReader&amp; reader, JsonParameterInfo jsonParameterInfo)&#xD;
+         at System.Text.Json.Serialization.Converters.ObjectWithParameterizedConstructorConverter`1.ReadConstructorArgumentsWithContinuation(ReadStack&amp; state, Utf8JsonReader&amp; reader, JsonSerializerOptions options)&#xD;
+         at System.Text.Json.Serialization.Converters.ObjectWithParameterizedConstructorConverter`1.OnTryRead(Utf8JsonReader&amp; reader, Type typeToConvert, JsonSerializerOptions options, ReadStack&amp; state, T&amp; value)&#xD;
+         at System.Text.Json.Serialization.JsonConverter`1.TryRead(Utf8JsonReader&amp; reader, Type typeToConvert, JsonSerializerOptions options, ReadStack&amp; state, T&amp; value, Boolean&amp; isPopulatedValue)&#xD;
+         at System.Text.Json.Serialization.JsonConverter`1.ReadCore(Utf8JsonReader&amp; reader, T&amp; value, JsonSerializerOptions options, ReadStack&amp; state)&#xD;
+         at System.Text.Json.Serialization.Metadata.JsonTypeInfo`1.ContinueDeserialize[TReadBufferState,TStream](TReadBufferState&amp; bufferState, JsonReaderState&amp; jsonReaderState, ReadStack&amp; readStack, T&amp; value)&#xD;
+         at System.Text.Json.Serialization.Metadata.JsonTypeInfo`1.DeserializeAsync[TReadBufferState,TStream](TStream utf8Json, TReadBufferState bufferState, CancellationToken cancellationToken)&#xD;
+         at System.Text.Json.Serialization.Metadata.JsonTypeInfo`1.DeserializeAsObjectAsync(PipeReader utf8Json, CancellationToken cancellationToken)&#xD;
+         at Microsoft.AspNetCore.Http.HttpRequestJsonExtensions.ReadFromJsonAsync(HttpRequest request, JsonTypeInfo jsonTypeInfo, CancellationToken cancellationToken)&#xD;
+         at Microsoft.AspNetCore.Http.HttpRequestJsonExtensions.ReadFromJsonAsync(HttpRequest request, JsonTypeInfo jsonTypeInfo, CancellationToken cancellationToken)&#xD;
+         at Microsoft.AspNetCore.Http.RequestDelegateFactory.&lt;HandleRequestBodyAndCompileRequestDelegateForJson&gt;g__TryReadBodyAsync|102_0(HttpContext httpContext, Type bodyType, String parameterTypeName, String parameterName, Boolean allowEmptyRequestBody, Boolean throwOnBadRequest, JsonTypeInfo jsonTypeInfo)&#xD;
+         --- End of inner exception stack trace ---&#xD;
+         at Microsoft.AspNetCore.Http.RequestDelegateFactory.Log.InvalidJsonRequestBody(HttpContext httpContext, String parameterTypeName, String parameterName, Exception exception, Boolean shouldThrow)&#xD;
+         at Microsoft.AspNetCore.Http.RequestDelegateFactory.&lt;HandleRequestBodyAndCompileRequestDelegateForJson&gt;g__TryReadBodyAsync|102_0(HttpContext httpContext, Type bodyType, String parameterTypeName, String parameterName, Boolean allowEmptyRequestBody, Boolean throwOnBadRequest, JsonTypeInfo jsonTypeInfo)&#xD;
+         at Microsoft.AspNetCore.Http.RequestDelegateFactory.&lt;&gt;c__DisplayClass102_2.&lt;&lt;HandleRequestBodyAndCompileRequestDelegateForJson&gt;b__2&gt;d.MoveNext()&#xD;
+      --- End of stack trace from previous location ---&#xD;
+         at GuiyangMahjong.Admin.Security.AdminAuthenticationMiddleware.InvokeAsync(HttpContext context) in H:\MahjongGame\Services\GuiyangMahjong.Admin\Security\AdminAuthenticationMiddleware.cs:line 127&#xD;
+         at Program.&lt;&gt;c.&lt;&lt;&lt;Main&gt;$&gt;b__0_32&gt;d.MoveNext() in H:\MahjongGame\Services\GuiyangMahjong.Admin\Program.cs:line 299&#xD;
+      --- End of stack trace from previous location ---&#xD;
+         at Microsoft.AspNetCore.Authentication.AuthenticationMiddleware.Invoke(HttpContext context)&#xD;
+         at Microsoft.AspNetCore.Diagnostics.DeveloperExceptionPageMiddlewareImpl.Invoke(HttpContext context)&#xD;
+info: Microsoft.Hosting.Lifetime[0]&#xD;
+      Application is shutting down...&#xD;
+[xUnit.net 00:00:00.85]   Finished:    GuiyangMahjong.Admin.Tests&#xD;
+</StdOut>
+    </Output>
+    <RunInfos>
+      <RunInfo computerName="FREEBOOZ" outcome="Warning" timestamp="2026-07-29T09:37:50.8215195+08:00">
+        <Text>[xUnit.net 00:00:00.24]     GuiyangMahjong.Admin.Tests.AdminExternalPersistenceTests.PostgreSql_PlayerEvidenceIsConcurrentAndIdempotent [SKIP]</Text>
+      </RunInfo>
+      <RunInfo computerName="FREEBOOZ" outcome="Warning" timestamp="2026-07-29T09:37:50.8342139+08:00">
+        <Text>[xUnit.net 00:00:00.25]     GuiyangMahjong.Admin.Tests.AdminExternalPersistenceTests.PostgreSql_CaseCreationIsConcurrentAndIdempotent [SKIP]</Text>
+      </RunInfo>
+      <RunInfo computerName="FREEBOOZ" outcome="Warning" timestamp="2026-07-29T09:37:50.8351943+08:00">
+        <Text>[xUnit.net 00:00:00.25]     GuiyangMahjong.Admin.Tests.AdminExternalPersistenceTests.PostgreSql_ApprovalAndDispatchPersistAtomically [SKIP]</Text>
+      </RunInfo>
+    </RunInfos>
+  </ResultSummary>
+</TestRun>

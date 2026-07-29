@@ -178,6 +178,142 @@ public static partial class PlayerEvidenceEndpoints
                 cancellationToken);
             return Results.Ok(records);
         });
+        adminApi.MapGet("/replays/{eventId}/access", async (
+            string playerId,
+            string eventId,
+            string caseId,
+            HttpContext context,
+            IAdminCaseStore caseStore,
+            IPlayerEvidenceStore evidenceStore,
+            IReplayArchiveClient replayArchive,
+            TimeProvider timeProvider,
+            CancellationToken cancellationToken) =>
+        {
+            RequireAnyRole(
+                context,
+                AdminRoles.SupportOperator,
+                AdminRoles.RiskAnalyst,
+                AdminRoles.PlayerApprover,
+                AdminRoles.AuditViewer);
+            ValidateIdentifier(playerId, "playerId");
+            ValidateIdentifier(caseId, "caseId");
+            if (!Guid.TryParse(eventId, out _))
+                throw AdminOperationException.Invalid("eventId must be a UUID.");
+            var review = await caseStore.GetAsync(caseId, cancellationToken);
+            if (review is null
+                || review.CaseType != AdminCaseType.ReplayReview
+                || review.TargetType != "Player"
+                || review.TargetId != playerId
+                || review.Status != "Open")
+            {
+                throw AdminOperationException.Forbidden(
+                    "An open replay review case for this player is required.");
+            }
+            var evidence = (await evidenceStore.ListAsync(
+                    playerId,
+                    PlayerEvidenceType.Replay,
+                    200,
+                    cancellationToken))
+                .SingleOrDefault(item => item.EventId == eventId)
+                ?? throw AdminOperationException.NotFound(
+                    "Replay catalog entry was not found.");
+            if (!evidence.Data.TryGetProperty("objectKey", out _))
+                throw AdminOperationException.Conflict(
+                    "Replay catalog entry has no object reference.");
+            var principal = AdminPrincipalContext.Get(context);
+            return Results.Ok(replayArchive.CreateAccess(
+                caseId,
+                playerId,
+                eventId,
+                principal.OperatorId,
+                timeProvider.GetUtcNow()));
+        });
+        adminApi.MapGet("/replay-content/{eventId}", async (
+            string playerId,
+            string eventId,
+            string caseId,
+            long expires,
+            string signature,
+            HttpContext context,
+            IAdminCaseStore caseStore,
+            IPlayerEvidenceStore evidenceStore,
+            IReplayArchiveClient replayArchive,
+            IAdminActionStore auditStore,
+            TimeProvider timeProvider,
+            CancellationToken cancellationToken) =>
+        {
+            ValidateIdentifier(playerId, "playerId");
+            ValidateIdentifier(caseId, "caseId");
+            var principal = AdminPrincipalContext.Get(context);
+            var now = timeProvider.GetUtcNow();
+            if (!replayArchive.ValidateAccess(
+                    caseId,
+                    playerId,
+                    eventId,
+                    principal.OperatorId,
+                    expires,
+                    signature,
+                    now))
+            {
+                throw AdminOperationException.Forbidden(
+                    "Replay access URL is invalid, expired, or belongs to another operator.");
+            }
+            var review = await caseStore.GetAsync(caseId, cancellationToken);
+            if (review is null
+                || review.CaseType != AdminCaseType.ReplayReview
+                || review.TargetId != playerId
+                || review.Status != "Open")
+            {
+                throw AdminOperationException.Forbidden(
+                    "The replay review case is no longer active.");
+            }
+            var evidence = (await evidenceStore.ListAsync(
+                    playerId,
+                    PlayerEvidenceType.Replay,
+                    200,
+                    cancellationToken))
+                .SingleOrDefault(item => item.EventId == eventId)
+                ?? throw AdminOperationException.NotFound(
+                    "Replay catalog entry was not found.");
+            var objectKey = evidence.Data.GetProperty("objectKey").GetString()
+                ?? throw AdminOperationException.Conflict(
+                    "Replay object reference is invalid.");
+            var expectedHash =
+                evidence.Data.TryGetProperty("contentHash", out var hashElement)
+                    ? hashElement.GetString()
+                    : null;
+            var content = await replayArchive.DownloadAsync(
+                objectKey,
+                expectedHash,
+                cancellationToken);
+            await auditStore.AppendAuditAsync(
+                new AdminAuditDraft(
+                    now,
+                    principal.OperatorId,
+                    "PlayerReplayContentDownloaded",
+                    "Player",
+                    playerId,
+                    review.Reason,
+                    null,
+                    JsonSerializer.SerializeToElement(new
+                    {
+                        eventId,
+                        byteLength = content.Length,
+                        contentHash = expectedHash
+                    }),
+                    JsonSerializer.SerializeToElement(new
+                    {
+                        review.ApprovedBy,
+                        review.CaseId
+                    }),
+                    GetTraceId(context),
+                    review.TicketId),
+                cancellationToken);
+            return Results.File(
+                content,
+                "application/octet-stream",
+                $"replay-{eventId}.bin");
+        });
         adminApi.MapGet("/chat-permission", async (
             string playerId,
             string ticketId,
@@ -250,6 +386,109 @@ public static partial class PlayerEvidenceEndpoints
                     ticketId),
                 cancellationToken);
             return Results.Ok(result);
+        });
+        adminApi.MapGet("/chat-records", async (
+            string playerId,
+            string ticketId,
+            DateTimeOffset? fromUtc,
+            DateTimeOffset? toUtc,
+            string? scopes,
+            HttpContext context,
+            IPlayerEvidenceStore evidenceStore,
+            IChatArchiveQueryClient chatArchive,
+            IAdminActionStore auditStore,
+            TimeProvider timeProvider,
+            CancellationToken cancellationToken) =>
+        {
+            RequireAnyRole(
+                context,
+                AdminRoles.ChatCompliance,
+                AdminRoles.AuditViewer);
+            ValidateIdentifier(playerId, "playerId");
+            ValidateIdentifier(ticketId, "ticketId");
+            var now = timeProvider.GetUtcNow();
+            var principal = AdminPrincipalContext.Get(context);
+            var grant = await evidenceStore.GetActiveChatGrantAsync(
+                playerId,
+                ticketId,
+                principal.OperatorId,
+                now,
+                cancellationToken);
+            if (grant is null)
+            {
+                throw AdminOperationException.Forbidden(
+                    "An active separately approved chat grant is required.");
+            }
+            var requestedFrom = fromUtc ?? grant.WindowStartsAtUtc;
+            var requestedTo = toUtc ?? grant.WindowEndsAtUtc;
+            if (requestedFrom < grant.WindowStartsAtUtc
+                || requestedTo > grant.WindowEndsAtUtc
+                || requestedFrom >= requestedTo)
+            {
+                throw AdminOperationException.Forbidden(
+                    "The requested chat range exceeds the approved window.");
+            }
+            var requestedScopes = string.IsNullOrWhiteSpace(scopes)
+                ? grant.Scopes
+                : scopes.Split(
+                        ',',
+                        StringSplitOptions.RemoveEmptyEntries
+                            | StringSplitOptions.TrimEntries)
+                    .Distinct(StringComparer.Ordinal)
+                    .ToArray();
+            if (requestedScopes.Length == 0
+                || requestedScopes.Any(scope =>
+                    !grant.Scopes.Contains(scope, StringComparer.Ordinal)))
+            {
+                throw AdminOperationException.Forbidden(
+                    "The requested chat scope exceeds the approved grant.");
+            }
+            var records = await chatArchive.QueryAsync(
+                playerId,
+                requestedFrom,
+                requestedTo,
+                requestedScopes,
+                cancellationToken);
+            var traceId = GetTraceId(context);
+            await auditStore.AppendAuditAsync(
+                new AdminAuditDraft(
+                    now,
+                    principal.OperatorId,
+                    "PlayerChatContentViewed",
+                    "Player",
+                    playerId,
+                    grant.Reason,
+                    null,
+                    JsonSerializer.SerializeToElement(new
+                    {
+                        count = records.Length,
+                        requestedFrom,
+                        requestedTo,
+                        requestedScopes,
+                        grant.GrantId,
+                        watermark = $"{principal.OperatorId}:{ticketId}:{traceId}"
+                    }),
+                    JsonSerializer.SerializeToElement(new
+                    {
+                        grant.ApprovedBy,
+                        grant.ExpiresAtUtc
+                    }),
+                    traceId,
+                    ticketId),
+                cancellationToken);
+            return Results.Ok(new
+            {
+                records,
+                watermark = new
+                {
+                    operatorId = principal.OperatorId,
+                    ticketId,
+                    traceId,
+                    viewedAtUtc = now
+                },
+                range = new { requestedFrom, requestedTo },
+                scopes = requestedScopes
+            });
         });
         adminApi.MapGet("/gm-operations", async (
             string playerId,

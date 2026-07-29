@@ -8,6 +8,9 @@
     <NoWarn>$(NoWarn);CS1591</NoWarn>
   </PropertyGroup>
   <ItemGroup>
+    <ProjectReference Include="..\GuiyangMahjong.Observability\GuiyangMahjong.Observability.csproj" />
+  </ItemGroup>
+  <ItemGroup>
     <Content Include="..\..\Contracts\OpenAPI\allocator-v1.openapi.yaml"
              Link="OpenAPI\allocator-v1.openapi.yaml"
              CopyToOutputDirectory="PreserveNewest"

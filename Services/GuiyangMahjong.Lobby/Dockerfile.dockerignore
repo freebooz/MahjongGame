@@ -5,3 +5,8 @@
 !Services/GuiyangMahjong.Lobby/**
 Services/GuiyangMahjong.Lobby/bin/
 Services/GuiyangMahjong.Lobby/obj/
+# 共享可观测性项目参与镜像内编译，只排除本地产物。
+!Services/GuiyangMahjong.Observability/
+!Services/GuiyangMahjong.Observability/**
+Services/GuiyangMahjong.Observability/bin/
+Services/GuiyangMahjong.Observability/obj/

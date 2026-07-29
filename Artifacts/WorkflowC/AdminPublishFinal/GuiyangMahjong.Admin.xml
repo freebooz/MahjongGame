@@ -1,0 +1,729 @@
+<?xml version="1.0"?>
+<doc>
+    <assembly>
+        <name>GuiyangMahjong.Admin</name>
+    </assembly>
+    <members>
+        <member name="M:GuiyangMahjong.Admin.Api.AdminEndpoints.RequireAnyMonitoringRole(Microsoft.AspNetCore.Http.HttpContext)">
+            <summary>
+            来源健康同时服务房间与玩家监控；任一只读监控角色均可查看，但匿名或纯管理角色不可访问。
+            </summary>
+        </member>
+        <member name="M:GuiyangMahjong.Admin.Api.PlayerEvidenceEndpoints.SafeIdentifierPattern">
+            <remarks>
+            Pattern:<br/>
+            <code>^[A-Za-z0-9._:-]+$</code><br/>
+            Options:<br/>
+            <code>RegexOptions.CultureInvariant</code><br/>
+            Explanation:<br/>
+            <code>
+            ○ Match if at the beginning of the string.<br/>
+            ○ Match a character in the set [\-.0-:A-Z_a-z] atomically at least once.<br/>
+            ○ Match if at the end of the string or if before an ending newline.<br/>
+            </code>
+            </remarks>
+        </member>
+        <member name="M:GuiyangMahjong.Admin.Api.PlayerEvidenceEndpoints.NonAlphaNumericPattern">
+            <remarks>
+            Pattern:<br/>
+            <code>[^A-Za-z0-9]</code><br/>
+            Options:<br/>
+            <code>RegexOptions.CultureInvariant</code><br/>
+            Explanation:<br/>
+            <code>
+            ○ Match any character other than an ASCII letter or digit.<br/>
+            </code>
+            </remarks>
+        </member>
+        <member name="T:GuiyangMahjong.Admin.Domain.PlayerRuntimeTelemetry">
+            <summary>
+            Admin 从 Lobby 接收的玩家运行遥测；null 表示数据源未提供，不能转换为零值或 false。
+            </summary>
+            <param name="PlayerId">玩家唯一标识。</param>
+            <param name="SeatIndex">座位索引 0～3，未知座位为 -1。</param>
+            <param name="ConnectionState">连接状态：Connected、Disconnected 或 Reconnecting。</param>
+            <param name="LatencyMilliseconds">服务端观测延迟，单位毫秒。</param>
+            <param name="DisconnectedAtUtc">当前掉线开始时间。</param>
+            <param name="Trustee">当前托管状态；数据源不支持时为 null。</param>
+            <param name="TrusteeChangedAtUtc">最近一次托管状态变化时间。</param>
+            <param name="ConnectionChangedAtUtc">最近一次连接状态变化时间。</param>
+            <param name="ReconnectedAtUtc">最近一次成功重连时间。</param>
+            <param name="DisconnectReason">受控掉线原因；连接正常或未知时为 null。</param>
+            <param name="ConnectionStateSequence">连接状态单调序号，用于识别重复心跳。</param>
+            <param name="ConnectionEventId">最近连接状态事件的幂等标识。</param>
+        </member>
+        <member name="M:GuiyangMahjong.Admin.Domain.PlayerRuntimeTelemetry.#ctor(System.String,System.Int32,System.String,System.Nullable{System.Double},System.Nullable{System.DateTimeOffset},System.Nullable{System.Boolean},System.Nullable{System.DateTimeOffset},System.Nullable{System.DateTimeOffset},System.Nullable{System.DateTimeOffset},System.String,System.Nullable{System.Int64},System.String)">
+            <summary>
+            Admin 从 Lobby 接收的玩家运行遥测；null 表示数据源未提供，不能转换为零值或 false。
+            </summary>
+            <param name="PlayerId">玩家唯一标识。</param>
+            <param name="SeatIndex">座位索引 0～3，未知座位为 -1。</param>
+            <param name="ConnectionState">连接状态：Connected、Disconnected 或 Reconnecting。</param>
+            <param name="LatencyMilliseconds">服务端观测延迟，单位毫秒。</param>
+            <param name="DisconnectedAtUtc">当前掉线开始时间。</param>
+            <param name="Trustee">当前托管状态；数据源不支持时为 null。</param>
+            <param name="TrusteeChangedAtUtc">最近一次托管状态变化时间。</param>
+            <param name="ConnectionChangedAtUtc">最近一次连接状态变化时间。</param>
+            <param name="ReconnectedAtUtc">最近一次成功重连时间。</param>
+            <param name="DisconnectReason">受控掉线原因；连接正常或未知时为 null。</param>
+            <param name="ConnectionStateSequence">连接状态单调序号，用于识别重复心跳。</param>
+            <param name="ConnectionEventId">最近连接状态事件的幂等标识。</param>
+        </member>
+        <member name="P:GuiyangMahjong.Admin.Domain.PlayerRuntimeTelemetry.PlayerId">
+            <summary>玩家唯一标识。</summary>
+        </member>
+        <member name="P:GuiyangMahjong.Admin.Domain.PlayerRuntimeTelemetry.SeatIndex">
+            <summary>座位索引 0～3，未知座位为 -1。</summary>
+        </member>
+        <member name="P:GuiyangMahjong.Admin.Domain.PlayerRuntimeTelemetry.ConnectionState">
+            <summary>连接状态：Connected、Disconnected 或 Reconnecting。</summary>
+        </member>
+        <member name="P:GuiyangMahjong.Admin.Domain.PlayerRuntimeTelemetry.LatencyMilliseconds">
+            <summary>服务端观测延迟，单位毫秒。</summary>
+        </member>
+        <member name="P:GuiyangMahjong.Admin.Domain.PlayerRuntimeTelemetry.DisconnectedAtUtc">
+            <summary>当前掉线开始时间。</summary>
+        </member>
+        <member name="P:GuiyangMahjong.Admin.Domain.PlayerRuntimeTelemetry.Trustee">
+            <summary>当前托管状态；数据源不支持时为 null。</summary>
+        </member>
+        <member name="P:GuiyangMahjong.Admin.Domain.PlayerRuntimeTelemetry.TrusteeChangedAtUtc">
+            <summary>最近一次托管状态变化时间。</summary>
+        </member>
+        <member name="P:GuiyangMahjong.Admin.Domain.PlayerRuntimeTelemetry.ConnectionChangedAtUtc">
+            <summary>最近一次连接状态变化时间。</summary>
+        </member>
+        <member name="P:GuiyangMahjong.Admin.Domain.PlayerRuntimeTelemetry.ReconnectedAtUtc">
+            <summary>最近一次成功重连时间。</summary>
+        </member>
+        <member name="P:GuiyangMahjong.Admin.Domain.PlayerRuntimeTelemetry.DisconnectReason">
+            <summary>受控掉线原因；连接正常或未知时为 null。</summary>
+        </member>
+        <member name="P:GuiyangMahjong.Admin.Domain.PlayerRuntimeTelemetry.ConnectionStateSequence">
+            <summary>连接状态单调序号，用于识别重复心跳。</summary>
+        </member>
+        <member name="P:GuiyangMahjong.Admin.Domain.PlayerRuntimeTelemetry.ConnectionEventId">
+            <summary>最近连接状态事件的幂等标识。</summary>
+        </member>
+        <member name="T:GuiyangMahjong.Admin.Domain.RpcMethodTelemetry">
+            <summary>
+            固定方法白名单的 RPC 累计指标；方法名不得含玩家、房间或请求参数，避免高基数。
+            </summary>
+            <param name="MethodName">稳定 RPC 方法标识。</param>
+            <param name="ReceivedCount">累计接收次数。</param>
+            <param name="RejectedCount">累计本地拒绝次数。</param>
+            <param name="FailedCount">累计业务失败次数。</param>
+            <param name="TimeoutCount">累计处理超时次数。</param>
+            <param name="P95DurationMilliseconds">最近有界样本窗口 P95 耗时，单位毫秒。</param>
+            <param name="P99DurationMilliseconds">最近有界样本窗口 P99 耗时，单位毫秒。</param>
+        </member>
+        <member name="M:GuiyangMahjong.Admin.Domain.RpcMethodTelemetry.#ctor(System.String,System.Int64,System.Int64,System.Int64,System.Int64,System.Nullable{System.Double},System.Nullable{System.Double})">
+            <summary>
+            固定方法白名单的 RPC 累计指标；方法名不得含玩家、房间或请求参数，避免高基数。
+            </summary>
+            <param name="MethodName">稳定 RPC 方法标识。</param>
+            <param name="ReceivedCount">累计接收次数。</param>
+            <param name="RejectedCount">累计本地拒绝次数。</param>
+            <param name="FailedCount">累计业务失败次数。</param>
+            <param name="TimeoutCount">累计处理超时次数。</param>
+            <param name="P95DurationMilliseconds">最近有界样本窗口 P95 耗时，单位毫秒。</param>
+            <param name="P99DurationMilliseconds">最近有界样本窗口 P99 耗时，单位毫秒。</param>
+        </member>
+        <member name="P:GuiyangMahjong.Admin.Domain.RpcMethodTelemetry.MethodName">
+            <summary>稳定 RPC 方法标识。</summary>
+        </member>
+        <member name="P:GuiyangMahjong.Admin.Domain.RpcMethodTelemetry.ReceivedCount">
+            <summary>累计接收次数。</summary>
+        </member>
+        <member name="P:GuiyangMahjong.Admin.Domain.RpcMethodTelemetry.RejectedCount">
+            <summary>累计本地拒绝次数。</summary>
+        </member>
+        <member name="P:GuiyangMahjong.Admin.Domain.RpcMethodTelemetry.FailedCount">
+            <summary>累计业务失败次数。</summary>
+        </member>
+        <member name="P:GuiyangMahjong.Admin.Domain.RpcMethodTelemetry.TimeoutCount">
+            <summary>累计处理超时次数。</summary>
+        </member>
+        <member name="P:GuiyangMahjong.Admin.Domain.RpcMethodTelemetry.P95DurationMilliseconds">
+            <summary>最近有界样本窗口 P95 耗时，单位毫秒。</summary>
+        </member>
+        <member name="P:GuiyangMahjong.Admin.Domain.RpcMethodTelemetry.P99DurationMilliseconds">
+            <summary>最近有界样本窗口 P99 耗时，单位毫秒。</summary>
+        </member>
+        <member name="T:GuiyangMahjong.Admin.Domain.SettlementRuntimeTelemetry">
+            <summary>
+            只读结算链路投影；该模型不暴露修改比赛结果的任何接口。
+            </summary>
+            <param name="Status">Calculating、Submitted、Accepted、Failed、Compensating 或 Completed。</param>
+            <param name="MatchId">比赛唯一标识。</param>
+            <param name="ResultSequence">服务端单调结算序号。</param>
+            <param name="ResultHash">结算正文 SHA-256。</param>
+            <param name="SubmittedAtUtc">首次提交时间。</param>
+            <param name="ConfirmedAtUtc">Lobby 确认时间。</param>
+            <param name="FailureReason">安全失败摘要。</param>
+        </member>
+        <member name="M:GuiyangMahjong.Admin.Domain.SettlementRuntimeTelemetry.#ctor(System.String,System.String,System.Nullable{System.Int64},System.String,System.Nullable{System.DateTimeOffset},System.Nullable{System.DateTimeOffset},System.String)">
+            <summary>
+            只读结算链路投影；该模型不暴露修改比赛结果的任何接口。
+            </summary>
+            <param name="Status">Calculating、Submitted、Accepted、Failed、Compensating 或 Completed。</param>
+            <param name="MatchId">比赛唯一标识。</param>
+            <param name="ResultSequence">服务端单调结算序号。</param>
+            <param name="ResultHash">结算正文 SHA-256。</param>
+            <param name="SubmittedAtUtc">首次提交时间。</param>
+            <param name="ConfirmedAtUtc">Lobby 确认时间。</param>
+            <param name="FailureReason">安全失败摘要。</param>
+        </member>
+        <member name="P:GuiyangMahjong.Admin.Domain.SettlementRuntimeTelemetry.Status">
+            <summary>Calculating、Submitted、Accepted、Failed、Compensating 或 Completed。</summary>
+        </member>
+        <member name="P:GuiyangMahjong.Admin.Domain.SettlementRuntimeTelemetry.MatchId">
+            <summary>比赛唯一标识。</summary>
+        </member>
+        <member name="P:GuiyangMahjong.Admin.Domain.SettlementRuntimeTelemetry.ResultSequence">
+            <summary>服务端单调结算序号。</summary>
+        </member>
+        <member name="P:GuiyangMahjong.Admin.Domain.SettlementRuntimeTelemetry.ResultHash">
+            <summary>结算正文 SHA-256。</summary>
+        </member>
+        <member name="P:GuiyangMahjong.Admin.Domain.SettlementRuntimeTelemetry.SubmittedAtUtc">
+            <summary>首次提交时间。</summary>
+        </member>
+        <member name="P:GuiyangMahjong.Admin.Domain.SettlementRuntimeTelemetry.ConfirmedAtUtc">
+            <summary>Lobby 确认时间。</summary>
+        </member>
+        <member name="P:GuiyangMahjong.Admin.Domain.SettlementRuntimeTelemetry.FailureReason">
+            <summary>安全失败摘要。</summary>
+        </member>
+        <member name="T:GuiyangMahjong.Admin.Domain.RoomRuntimeTelemetry">
+            <summary>
+            Admin 使用的房间运行快照线协议模型，字段名称、类型和默认值必须与 Lobby v1 保持一致。
+            </summary>
+            <param name="RoomId">房间唯一标识。</param>
+            <param name="ServerInstanceId">Dedicated Server 实例标识。</param>
+            <param name="ObservedAtUtc">Lobby 接收时刻，是监控新鲜度的权威时间。</param>
+            <param name="GameStartedAtUtc">游戏首次开局时刻。</param>
+            <param name="Lifecycle">房间生命周期。</param>
+            <param name="CurrentRound">当前局序号。</param>
+            <param name="ConnectedPlayers">当前服务器会话玩家数。</param>
+            <param name="ServerTickMilliseconds">服务器 Tick 耗时，单位毫秒。</param>
+            <param name="ServerFramesPerSecond">服务器帧率，单位帧/秒。</param>
+            <param name="RpcReceivedCount">进程启动以来接收的 RPC 累计数量。</param>
+            <param name="ProcessMemoryBytes">进程常驻内存目标口径，单位字节。</param>
+            <param name="ProcessCpuPercent">按节点总 CPU 容量归一化的进程占用百分比。</param>
+            <param name="NetworkIngressBytes">进程启动以来累计接收的网络字节数。</param>
+            <param name="NetworkEgressBytes">进程启动以来累计发送的网络字节数。</param>
+            <param name="BuildVersion">Dedicated Server 构建版本。</param>
+            <param name="Players">玩家运行状态快照。</param>
+            <param name="TelemetrySchemaVersion">指标单位、空值和兼容规则的遥测主版本。</param>
+            <param name="ProcessCpuSampleWindowMilliseconds">CPU 最近采样窗口，单位毫秒。</param>
+            <param name="NetworkIngressBytesPerSecond">相邻有效样本计算的入站字节速率。</param>
+            <param name="NetworkEgressBytesPerSecond">相邻有效样本计算的出站字节速率。</param>
+            <param name="RpcMethods">固定方法白名单的 RPC 分类指标。</param>
+            <param name="Settlement">显式结算状态投影。</param>
+        </member>
+        <member name="M:GuiyangMahjong.Admin.Domain.RoomRuntimeTelemetry.#ctor(System.String,System.String,System.DateTimeOffset,System.Nullable{System.DateTimeOffset},System.String,System.Int32,System.Int32,System.Nullable{System.Double},System.Nullable{System.Double},System.Nullable{System.Int64},System.Nullable{System.Int64},System.Nullable{System.Double},System.Nullable{System.Int64},System.Nullable{System.Int64},System.String,GuiyangMahjong.Admin.Domain.PlayerRuntimeTelemetry[],System.Int32,System.Nullable{System.Double},System.Nullable{System.Double},System.Nullable{System.Double},GuiyangMahjong.Admin.Domain.RpcMethodTelemetry[],GuiyangMahjong.Admin.Domain.SettlementRuntimeTelemetry)">
+            <summary>
+            Admin 使用的房间运行快照线协议模型，字段名称、类型和默认值必须与 Lobby v1 保持一致。
+            </summary>
+            <param name="RoomId">房间唯一标识。</param>
+            <param name="ServerInstanceId">Dedicated Server 实例标识。</param>
+            <param name="ObservedAtUtc">Lobby 接收时刻，是监控新鲜度的权威时间。</param>
+            <param name="GameStartedAtUtc">游戏首次开局时刻。</param>
+            <param name="Lifecycle">房间生命周期。</param>
+            <param name="CurrentRound">当前局序号。</param>
+            <param name="ConnectedPlayers">当前服务器会话玩家数。</param>
+            <param name="ServerTickMilliseconds">服务器 Tick 耗时，单位毫秒。</param>
+            <param name="ServerFramesPerSecond">服务器帧率，单位帧/秒。</param>
+            <param name="RpcReceivedCount">进程启动以来接收的 RPC 累计数量。</param>
+            <param name="ProcessMemoryBytes">进程常驻内存目标口径，单位字节。</param>
+            <param name="ProcessCpuPercent">按节点总 CPU 容量归一化的进程占用百分比。</param>
+            <param name="NetworkIngressBytes">进程启动以来累计接收的网络字节数。</param>
+            <param name="NetworkEgressBytes">进程启动以来累计发送的网络字节数。</param>
+            <param name="BuildVersion">Dedicated Server 构建版本。</param>
+            <param name="Players">玩家运行状态快照。</param>
+            <param name="TelemetrySchemaVersion">指标单位、空值和兼容规则的遥测主版本。</param>
+            <param name="ProcessCpuSampleWindowMilliseconds">CPU 最近采样窗口，单位毫秒。</param>
+            <param name="NetworkIngressBytesPerSecond">相邻有效样本计算的入站字节速率。</param>
+            <param name="NetworkEgressBytesPerSecond">相邻有效样本计算的出站字节速率。</param>
+            <param name="RpcMethods">固定方法白名单的 RPC 分类指标。</param>
+            <param name="Settlement">显式结算状态投影。</param>
+        </member>
+        <member name="P:GuiyangMahjong.Admin.Domain.RoomRuntimeTelemetry.RoomId">
+            <summary>房间唯一标识。</summary>
+        </member>
+        <member name="P:GuiyangMahjong.Admin.Domain.RoomRuntimeTelemetry.ServerInstanceId">
+            <summary>Dedicated Server 实例标识。</summary>
+        </member>
+        <member name="P:GuiyangMahjong.Admin.Domain.RoomRuntimeTelemetry.ObservedAtUtc">
+            <summary>Lobby 接收时刻，是监控新鲜度的权威时间。</summary>
+        </member>
+        <member name="P:GuiyangMahjong.Admin.Domain.RoomRuntimeTelemetry.GameStartedAtUtc">
+            <summary>游戏首次开局时刻。</summary>
+        </member>
+        <member name="P:GuiyangMahjong.Admin.Domain.RoomRuntimeTelemetry.Lifecycle">
+            <summary>房间生命周期。</summary>
+        </member>
+        <member name="P:GuiyangMahjong.Admin.Domain.RoomRuntimeTelemetry.CurrentRound">
+            <summary>当前局序号。</summary>
+        </member>
+        <member name="P:GuiyangMahjong.Admin.Domain.RoomRuntimeTelemetry.ConnectedPlayers">
+            <summary>当前服务器会话玩家数。</summary>
+        </member>
+        <member name="P:GuiyangMahjong.Admin.Domain.RoomRuntimeTelemetry.ServerTickMilliseconds">
+            <summary>服务器 Tick 耗时，单位毫秒。</summary>
+        </member>
+        <member name="P:GuiyangMahjong.Admin.Domain.RoomRuntimeTelemetry.ServerFramesPerSecond">
+            <summary>服务器帧率，单位帧/秒。</summary>
+        </member>
+        <member name="P:GuiyangMahjong.Admin.Domain.RoomRuntimeTelemetry.RpcReceivedCount">
+            <summary>进程启动以来接收的 RPC 累计数量。</summary>
+        </member>
+        <member name="P:GuiyangMahjong.Admin.Domain.RoomRuntimeTelemetry.ProcessMemoryBytes">
+            <summary>进程常驻内存目标口径，单位字节。</summary>
+        </member>
+        <member name="P:GuiyangMahjong.Admin.Domain.RoomRuntimeTelemetry.ProcessCpuPercent">
+            <summary>按节点总 CPU 容量归一化的进程占用百分比。</summary>
+        </member>
+        <member name="P:GuiyangMahjong.Admin.Domain.RoomRuntimeTelemetry.NetworkIngressBytes">
+            <summary>进程启动以来累计接收的网络字节数。</summary>
+        </member>
+        <member name="P:GuiyangMahjong.Admin.Domain.RoomRuntimeTelemetry.NetworkEgressBytes">
+            <summary>进程启动以来累计发送的网络字节数。</summary>
+        </member>
+        <member name="P:GuiyangMahjong.Admin.Domain.RoomRuntimeTelemetry.BuildVersion">
+            <summary>Dedicated Server 构建版本。</summary>
+        </member>
+        <member name="P:GuiyangMahjong.Admin.Domain.RoomRuntimeTelemetry.Players">
+            <summary>玩家运行状态快照。</summary>
+        </member>
+        <member name="P:GuiyangMahjong.Admin.Domain.RoomRuntimeTelemetry.TelemetrySchemaVersion">
+            <summary>指标单位、空值和兼容规则的遥测主版本。</summary>
+        </member>
+        <member name="P:GuiyangMahjong.Admin.Domain.RoomRuntimeTelemetry.ProcessCpuSampleWindowMilliseconds">
+            <summary>CPU 最近采样窗口，单位毫秒。</summary>
+        </member>
+        <member name="P:GuiyangMahjong.Admin.Domain.RoomRuntimeTelemetry.NetworkIngressBytesPerSecond">
+            <summary>相邻有效样本计算的入站字节速率。</summary>
+        </member>
+        <member name="P:GuiyangMahjong.Admin.Domain.RoomRuntimeTelemetry.NetworkEgressBytesPerSecond">
+            <summary>相邻有效样本计算的出站字节速率。</summary>
+        </member>
+        <member name="P:GuiyangMahjong.Admin.Domain.RoomRuntimeTelemetry.RpcMethods">
+            <summary>固定方法白名单的 RPC 分类指标。</summary>
+        </member>
+        <member name="P:GuiyangMahjong.Admin.Domain.RoomRuntimeTelemetry.Settlement">
+            <summary>显式结算状态投影。</summary>
+        </member>
+        <member name="T:GuiyangMahjong.Admin.Domain.MonitoringSourceHealth">
+            <summary>
+            单个监控数据源的健康状态；状态只允许 Healthy、Degraded、Unavailable 和 Stale。
+            </summary>
+            <param name="Source">稳定来源标识，不包含地址、集群动态名称或凭据。</param>
+            <param name="Status">当前健康状态；Stale 表示响应使用了最后成功快照。</param>
+            <param name="Enabled">来源是否在当前环境启用，未启用来源不参与部分成功判定。</param>
+            <param name="ObservedAtUtc">Admin 最近一次更新该来源状态的时间。</param>
+            <param name="LastSuccessAtUtc">最近一次成功完成下游请求的时间。</param>
+            <param name="DataAgeSeconds">当前返回数据距成功观测的年龄，单位秒。</param>
+            <param name="StaleAfterSeconds">页面必须标记数据陈旧的阈值，单位秒。</param>
+            <param name="ErrorCode">不含地址与异常正文的受控错误代码。</param>
+            <param name="Message">面向中文运维人员的安全摘要，不包含内部端点或凭据。</param>
+            <param name="CircuitState">Closed、Open 或 HalfOpen。</param>
+            <param name="SnapshotVersion">来源级单调快照版本；零表示尚无成功快照。</param>
+            <param name="TimeoutCount">进程生命周期内该来源累计超时次数。</param>
+            <param name="FailureCount">进程生命周期内该来源累计失败次数。</param>
+        </member>
+        <member name="M:GuiyangMahjong.Admin.Domain.MonitoringSourceHealth.#ctor(System.String,System.String,System.Boolean,System.DateTimeOffset,System.Nullable{System.DateTimeOffset},System.Nullable{System.Double},System.Int32,System.String,System.String,System.String,System.Int64,System.Int64,System.Int64)">
+            <summary>
+            单个监控数据源的健康状态；状态只允许 Healthy、Degraded、Unavailable 和 Stale。
+            </summary>
+            <param name="Source">稳定来源标识，不包含地址、集群动态名称或凭据。</param>
+            <param name="Status">当前健康状态；Stale 表示响应使用了最后成功快照。</param>
+            <param name="Enabled">来源是否在当前环境启用，未启用来源不参与部分成功判定。</param>
+            <param name="ObservedAtUtc">Admin 最近一次更新该来源状态的时间。</param>
+            <param name="LastSuccessAtUtc">最近一次成功完成下游请求的时间。</param>
+            <param name="DataAgeSeconds">当前返回数据距成功观测的年龄，单位秒。</param>
+            <param name="StaleAfterSeconds">页面必须标记数据陈旧的阈值，单位秒。</param>
+            <param name="ErrorCode">不含地址与异常正文的受控错误代码。</param>
+            <param name="Message">面向中文运维人员的安全摘要，不包含内部端点或凭据。</param>
+            <param name="CircuitState">Closed、Open 或 HalfOpen。</param>
+            <param name="SnapshotVersion">来源级单调快照版本；零表示尚无成功快照。</param>
+            <param name="TimeoutCount">进程生命周期内该来源累计超时次数。</param>
+            <param name="FailureCount">进程生命周期内该来源累计失败次数。</param>
+        </member>
+        <member name="P:GuiyangMahjong.Admin.Domain.MonitoringSourceHealth.Source">
+            <summary>稳定来源标识，不包含地址、集群动态名称或凭据。</summary>
+        </member>
+        <member name="P:GuiyangMahjong.Admin.Domain.MonitoringSourceHealth.Status">
+            <summary>当前健康状态；Stale 表示响应使用了最后成功快照。</summary>
+        </member>
+        <member name="P:GuiyangMahjong.Admin.Domain.MonitoringSourceHealth.Enabled">
+            <summary>来源是否在当前环境启用，未启用来源不参与部分成功判定。</summary>
+        </member>
+        <member name="P:GuiyangMahjong.Admin.Domain.MonitoringSourceHealth.ObservedAtUtc">
+            <summary>Admin 最近一次更新该来源状态的时间。</summary>
+        </member>
+        <member name="P:GuiyangMahjong.Admin.Domain.MonitoringSourceHealth.LastSuccessAtUtc">
+            <summary>最近一次成功完成下游请求的时间。</summary>
+        </member>
+        <member name="P:GuiyangMahjong.Admin.Domain.MonitoringSourceHealth.DataAgeSeconds">
+            <summary>当前返回数据距成功观测的年龄，单位秒。</summary>
+        </member>
+        <member name="P:GuiyangMahjong.Admin.Domain.MonitoringSourceHealth.StaleAfterSeconds">
+            <summary>页面必须标记数据陈旧的阈值，单位秒。</summary>
+        </member>
+        <member name="P:GuiyangMahjong.Admin.Domain.MonitoringSourceHealth.ErrorCode">
+            <summary>不含地址与异常正文的受控错误代码。</summary>
+        </member>
+        <member name="P:GuiyangMahjong.Admin.Domain.MonitoringSourceHealth.Message">
+            <summary>面向中文运维人员的安全摘要，不包含内部端点或凭据。</summary>
+        </member>
+        <member name="P:GuiyangMahjong.Admin.Domain.MonitoringSourceHealth.CircuitState">
+            <summary>Closed、Open 或 HalfOpen。</summary>
+        </member>
+        <member name="P:GuiyangMahjong.Admin.Domain.MonitoringSourceHealth.SnapshotVersion">
+            <summary>来源级单调快照版本；零表示尚无成功快照。</summary>
+        </member>
+        <member name="P:GuiyangMahjong.Admin.Domain.MonitoringSourceHealth.TimeoutCount">
+            <summary>进程生命周期内该来源累计超时次数。</summary>
+        </member>
+        <member name="P:GuiyangMahjong.Admin.Domain.MonitoringSourceHealth.FailureCount">
+            <summary>进程生命周期内该来源累计失败次数。</summary>
+        </member>
+        <member name="T:GuiyangMahjong.Admin.Domain.MonitoringReliabilityMetadata">
+            <summary>
+            聚合响应的可靠性元数据；业务数据与来源健康信息使用同一生成时刻。
+            </summary>
+            <param name="GeneratedAtUtc">本次 Admin 聚合响应生成时间。</param>
+            <param name="Partial">至少一个已启用且必需的来源未返回实时数据时为 true。</param>
+            <param name="SafeForHighRiskActions">仅当相关来源均为实时健康状态时为 true。</param>
+            <param name="Sources">参与本次聚合或由管理台展示的来源健康列表。</param>
+        </member>
+        <member name="M:GuiyangMahjong.Admin.Domain.MonitoringReliabilityMetadata.#ctor(System.DateTimeOffset,System.Boolean,System.Boolean,GuiyangMahjong.Admin.Domain.MonitoringSourceHealth[])">
+            <summary>
+            聚合响应的可靠性元数据；业务数据与来源健康信息使用同一生成时刻。
+            </summary>
+            <param name="GeneratedAtUtc">本次 Admin 聚合响应生成时间。</param>
+            <param name="Partial">至少一个已启用且必需的来源未返回实时数据时为 true。</param>
+            <param name="SafeForHighRiskActions">仅当相关来源均为实时健康状态时为 true。</param>
+            <param name="Sources">参与本次聚合或由管理台展示的来源健康列表。</param>
+        </member>
+        <member name="P:GuiyangMahjong.Admin.Domain.MonitoringReliabilityMetadata.GeneratedAtUtc">
+            <summary>本次 Admin 聚合响应生成时间。</summary>
+        </member>
+        <member name="P:GuiyangMahjong.Admin.Domain.MonitoringReliabilityMetadata.Partial">
+            <summary>至少一个已启用且必需的来源未返回实时数据时为 true。</summary>
+        </member>
+        <member name="P:GuiyangMahjong.Admin.Domain.MonitoringReliabilityMetadata.SafeForHighRiskActions">
+            <summary>仅当相关来源均为实时健康状态时为 true。</summary>
+        </member>
+        <member name="P:GuiyangMahjong.Admin.Domain.MonitoringReliabilityMetadata.Sources">
+            <summary>参与本次聚合或由管理台展示的来源健康列表。</summary>
+        </member>
+        <member name="T:GuiyangMahjong.Admin.Domain.MonitoringSourceResult`1">
+            <summary>
+            来源调用的内部结果，携带数据值及其是否来自实时请求，供聚合层执行部分成功策略。
+            </summary>
+            <typeparam name="T">不会跨越授权边界的只读监控数据类型。</typeparam>
+            <param name="Value">实时值、最后成功快照或调用方提供的安全空值。</param>
+            <param name="Health">完成当前操作后的来源健康状态。</param>
+            <param name="IsLive">只有本次下游请求成功时才为 true；缓存命中始终为 false。</param>
+        </member>
+        <member name="M:GuiyangMahjong.Admin.Domain.MonitoringSourceResult`1.#ctor(`0,GuiyangMahjong.Admin.Domain.MonitoringSourceHealth,System.Boolean)">
+            <summary>
+            来源调用的内部结果，携带数据值及其是否来自实时请求，供聚合层执行部分成功策略。
+            </summary>
+            <typeparam name="T">不会跨越授权边界的只读监控数据类型。</typeparam>
+            <param name="Value">实时值、最后成功快照或调用方提供的安全空值。</param>
+            <param name="Health">完成当前操作后的来源健康状态。</param>
+            <param name="IsLive">只有本次下游请求成功时才为 true；缓存命中始终为 false。</param>
+        </member>
+        <member name="P:GuiyangMahjong.Admin.Domain.MonitoringSourceResult`1.Value">
+            <summary>实时值、最后成功快照或调用方提供的安全空值。</summary>
+        </member>
+        <member name="P:GuiyangMahjong.Admin.Domain.MonitoringSourceResult`1.Health">
+            <summary>完成当前操作后的来源健康状态。</summary>
+        </member>
+        <member name="P:GuiyangMahjong.Admin.Domain.MonitoringSourceResult`1.IsLive">
+            <summary>只有本次下游请求成功时才为 true；缓存命中始终为 false。</summary>
+        </member>
+        <member name="T:GuiyangMahjong.Admin.Options.MonitoringReliabilityOptions">
+            <summary>
+            Admin 监控聚合的统一可靠性策略；所有时间单位均为秒，快照仅保存在当前进程内存中。
+            </summary>
+        </member>
+        <member name="P:GuiyangMahjong.Admin.Options.MonitoringReliabilityOptions.CircuitFailureThreshold">
+            <summary>连续失败达到此次数后打开来源级熔断器，避免故障下游遭遇请求风暴。</summary>
+        </member>
+        <member name="P:GuiyangMahjong.Admin.Options.MonitoringReliabilityOptions.CircuitBreakSeconds">
+            <summary>首次熔断等待时间；重复打开时按指数退避，直到最大等待时间。</summary>
+        </member>
+        <member name="P:GuiyangMahjong.Admin.Options.MonitoringReliabilityOptions.CircuitMaxBreakSeconds">
+            <summary>熔断指数退避的上限，防止恢复探测间隔无限增长。</summary>
+        </member>
+        <member name="P:GuiyangMahjong.Admin.Options.MonitoringReliabilityOptions.StaleAfterSeconds">
+            <summary>数据超过此年龄后必须在页面醒目标记为陈旧，不得解释为实时值。</summary>
+        </member>
+        <member name="P:GuiyangMahjong.Admin.Options.MonitoringReliabilityOptions.SnapshotTtlSeconds">
+            <summary>最后成功快照的最大生存时间；超期后直接返回来源不可用，不再使用缓存。</summary>
+        </member>
+        <member name="P:GuiyangMahjong.Admin.Options.MonitoringReliabilityOptions.MaxSnapshotEntries">
+            <summary>进程内最多保存的操作快照数，限制搜索条件等动态键造成的内存增长。</summary>
+        </member>
+        <member name="T:GuiyangMahjong.Admin.Options.PlayerDataMonitoringOptions">
+            <summary>
+            PlayerData 只读监控依赖配置；与 Wallet 管理命令凭据严格分离。
+            </summary>
+        </member>
+        <member name="P:GuiyangMahjong.Admin.Options.PlayerDataMonitoringOptions.Enabled">
+            <summary>是否把 PlayerData 作为管理台只读监控来源；未启用时不会发起网络请求。</summary>
+        </member>
+        <member name="P:GuiyangMahjong.Admin.Options.PlayerDataMonitoringOptions.BaseUrl">
+            <summary>PlayerData 服务根地址，仅由服务端使用且不会出现在来源错误摘要中。</summary>
+        </member>
+        <member name="P:GuiyangMahjong.Admin.Options.PlayerDataMonitoringOptions.MonitoringToken">
+            <summary>只读监控专用凭据；不得复用 Wallet 管理命令凭据。</summary>
+        </member>
+        <member name="P:GuiyangMahjong.Admin.Options.PlayerDataMonitoringOptions.TimeoutSeconds">
+            <summary>PlayerData 单次监控请求硬超时，包含响应正文读取时间。</summary>
+        </member>
+        <member name="M:GuiyangMahjong.Admin.Services.AdminActionWorkflow.SafeIdentifierPattern">
+            <remarks>
+            Pattern:<br/>
+            <code>^[A-Za-z0-9._:-]+$</code><br/>
+            Options:<br/>
+            <code>RegexOptions.CultureInvariant</code><br/>
+            Explanation:<br/>
+            <code>
+            ○ Match if at the beginning of the string.<br/>
+            ○ Match a character in the set [\-.0-:A-Z_a-z] atomically at least once.<br/>
+            ○ Match if at the end of the string or if before an ending newline.<br/>
+            </code>
+            </remarks>
+        </member>
+        <member name="T:GuiyangMahjong.Admin.Services.MonitoringAggregationService">
+            <summary>
+            聚合 Lobby 与 Allocator 的只读房间监控投影；任一来源失败时返回部分成功数据和来源健康信息。
+            </summary>
+        </member>
+        <member name="M:GuiyangMahjong.Admin.Services.MonitoringAggregationService.#ctor(GuiyangMahjong.Admin.Services.ILobbyMonitoringClient,GuiyangMahjong.Admin.Services.IAllocatorMonitoringClient,GuiyangMahjong.Admin.Services.IPlayerDataMonitoringClient,GuiyangMahjong.Admin.Services.MonitoringSourceReliabilityService,Microsoft.Extensions.Options.IOptions{GuiyangMahjong.Admin.Options.AdminOptions},System.TimeProvider)">
+            <summary>
+            聚合 Lobby 与 Allocator 的只读房间监控投影；任一来源失败时返回部分成功数据和来源健康信息。
+            </summary>
+        </member>
+        <member name="M:GuiyangMahjong.Admin.Services.MonitoringAggregationService.GetOverviewAsync(System.Threading.CancellationToken)">
+            <summary>
+            获取房间总览。Lobby 与 Allocator 并行且各自受独立硬超时约束，单个来源故障不会使总览失败。
+            </summary>
+        </member>
+        <member name="M:GuiyangMahjong.Admin.Services.MonitoringAggregationService.ListRoomsAsync(System.String,System.String,System.String,System.Threading.CancellationToken)">
+            <summary>
+            查询房间列表；缺失 Allocator 时仍返回 Lobby 房间，只将集群、节点等来源字段保留为空。
+            </summary>
+        </member>
+        <member name="M:GuiyangMahjong.Admin.Services.MonitoringAggregationService.GetRoomAsync(System.String,System.Threading.CancellationToken)">
+            <summary>
+            获取房间详情；运行遥测与事件流独立降级，任一子调用失败不会遮蔽已有房间基础信息。
+            </summary>
+        </member>
+        <member name="M:GuiyangMahjong.Admin.Services.MonitoringAggregationService.GetRoomForActionAsync(System.String,System.Threading.CancellationToken)">
+            <summary>
+            为高危管理工作流重新读取实时房间状态；任何相关来源为缓存或不可用时均拒绝继续。
+            </summary>
+        </member>
+        <member name="M:GuiyangMahjong.Admin.Services.MonitoringAggregationService.ListInstancesAsync(System.Threading.CancellationToken)">
+            <summary>
+            获取 Dedicated Server 实例；Allocator 故障时返回未过期快照或安全空集合。
+            </summary>
+        </member>
+        <member name="M:GuiyangMahjong.Admin.Services.MonitoringAggregationService.ListInstancesForActionAsync(System.Threading.CancellationToken)">
+            <summary>
+            为高危服务器管理操作读取实时实例列表，缓存命中或熔断状态均视为冲突。
+            </summary>
+        </member>
+        <member name="M:GuiyangMahjong.Admin.Services.MonitoringAggregationService.GetReliabilityMetadata">
+            <summary>
+            返回四个监控来源最近状态，供管理台健康卡片独立刷新；该方法本身不触发新网络请求。
+            </summary>
+        </member>
+        <member name="T:GuiyangMahjong.Admin.Services.IPlayerDataMonitoringClient">
+            <summary>
+            PlayerData 只读健康探测客户端；仅验证监控依赖可达性，不读取资产、支付或聊天证据。
+            </summary>
+        </member>
+        <member name="M:GuiyangMahjong.Admin.Services.IPlayerDataMonitoringClient.CheckReadyAsync(System.Threading.CancellationToken)">
+            <summary>
+            调用 PlayerData 就绪端点；失败由统一可靠性边界转换为受控来源状态。
+            </summary>
+        </member>
+        <member name="T:GuiyangMahjong.Admin.Services.HttpPlayerDataMonitoringClient">
+            <summary>
+            使用独立监控配置探测 PlayerData，不复用具有写权限的 Wallet 命令凭据。
+            </summary>
+        </member>
+        <member name="M:GuiyangMahjong.Admin.Services.HttpPlayerDataMonitoringClient.#ctor(System.Net.Http.IHttpClientFactory,Microsoft.Extensions.Options.IOptions{GuiyangMahjong.Admin.Options.AdminOptions})">
+            <summary>
+            使用独立监控配置探测 PlayerData，不复用具有写权限的 Wallet 命令凭据。
+            </summary>
+        </member>
+        <member name="M:GuiyangMahjong.Admin.Services.HttpPlayerDataMonitoringClient.CheckReadyAsync(System.Threading.CancellationToken)">
+            <summary>
+            检查 PlayerData 就绪状态；完整请求由外层可靠性服务施加硬超时与取消传播。
+            </summary>
+        </member>
+        <member name="T:GuiyangMahjong.Admin.Services.MonitoringSourceReliabilityService">
+            <summary>
+            为 Admin 的只读监控下游提供独立硬超时、最后成功快照、来源级熔断和安全错误摘要。
+            该服务仅缓存调用方明确允许的监控投影，不得用于聊天正文、支付证据或未脱敏身份数据。
+            </summary>
+        </member>
+        <member name="M:GuiyangMahjong.Admin.Services.MonitoringSourceReliabilityService.#ctor(Microsoft.Extensions.Options.IOptions{GuiyangMahjong.Admin.Options.AdminOptions},System.TimeProvider,Microsoft.Extensions.Logging.ILogger{GuiyangMahjong.Admin.Services.MonitoringSourceReliabilityService})">
+            <summary>
+            创建进程内可靠性协调器；实例必须按 Singleton 注册，才能跨请求维持快照与熔断状态。
+            </summary>
+        </member>
+        <member name="M:GuiyangMahjong.Admin.Services.MonitoringSourceReliabilityService.ExecuteAsync``1(System.String,System.String,System.Boolean,System.TimeSpan,System.Func{System.Threading.CancellationToken,System.Threading.Tasks.Task{``0}},System.Func{``0},System.Boolean,System.Threading.CancellationToken)">
+            <summary>
+            在独立硬超时内执行来源调用。调用失败时优先返回未过期的最后成功快照，否则返回安全空值。
+            调用方取消会直接传播且不计为来源故障；下游即使忽略取消，也不会继续占用当前请求线程。
+            </summary>
+            <typeparam name="T">只读监控投影类型。</typeparam>
+            <param name="source">稳定、低基数的来源名称。</param>
+            <param name="operation">稳定、低基数的操作名称，也是快照隔离键的一部分。</param>
+            <param name="enabled">来源是否启用；禁用时不会调用下游。</param>
+            <param name="timeout">本操作独立硬超时。</param>
+            <param name="operationFactory">接收可取消令牌的下游调用。</param>
+            <param name="emptyFactory">无可用快照时生成不含敏感数据的安全空值。</param>
+            <param name="cacheSnapshot">是否允许保存该操作的最后成功快照。</param>
+            <param name="cancellationToken">Admin 请求取消令牌。</param>
+        </member>
+        <member name="M:GuiyangMahjong.Admin.Services.MonitoringSourceReliabilityService.GetHealth(System.String,System.Boolean)">
+            <summary>
+            返回指定来源最近一次安全健康快照；未访问来源会显示为尚未观测，不主动触发网络请求。
+            </summary>
+        </member>
+        <member name="M:GuiyangMahjong.Admin.Services.MonitoringSourceReliabilityService.RequireLive(System.Collections.Generic.IEnumerable{GuiyangMahjong.Admin.Domain.MonitoringSourceResult{System.Object}})">
+            <summary>
+            判断来源是否具有本次请求刚取得的实时值；高危管理操作必须使用此结果而不能依赖快照。
+            </summary>
+        </member>
+        <member name="T:GuiyangMahjong.Admin.Services.MonitoringFreshDataRequiredException">
+            <summary>
+            表示高危管理操作未取得实时权威状态；调用方必须拒绝继续，而不能把缓存快照当作当前状态。
+            </summary>
+        </member>
+        <member name="M:GuiyangMahjong.Admin.Services.MonitoringFreshDataRequiredException.#ctor">
+            <summary>使用固定中文运维提示创建异常，避免暴露具体下游地址和原始异常。</summary>
+        </member>
+        <member name="T:GuiyangMahjong.Admin.Services.MonitoringSourceUnavailableException">
+            <summary>
+            表示读取详情所必需的权威主数据来源当前不可用；与业务对象不存在的 404 语义严格区分。
+            </summary>
+        </member>
+        <member name="P:GuiyangMahjong.Admin.Services.MonitoringSourceUnavailableException.SourceName">
+            <summary>发生故障的稳定来源名称，不包含内部地址、集群名或其他敏感配置。</summary>
+        </member>
+        <member name="M:GuiyangMahjong.Admin.Services.MonitoringSourceUnavailableException.#ctor(System.String)">
+            <summary>用安全中文消息创建来源不可用异常。</summary>
+        </member>
+        <member name="T:GuiyangMahjong.Admin.Services.PlayerMonitoringService">
+            <summary>
+            聚合 Auth 玩家目录与 Lobby 在线/房间状态；来源失败时保留可用字段并附带可靠性元数据。
+            </summary>
+        </member>
+        <member name="M:GuiyangMahjong.Admin.Services.PlayerMonitoringService.#ctor(GuiyangMahjong.Admin.Services.IPlayerDirectoryClient,GuiyangMahjong.Admin.Services.ILobbyMonitoringClient,GuiyangMahjong.Admin.Services.MonitoringSourceReliabilityService,Microsoft.Extensions.Options.IOptions{GuiyangMahjong.Admin.Options.AdminOptions},System.TimeProvider)">
+            <summary>
+            聚合 Auth 玩家目录与 Lobby 在线/房间状态；来源失败时保留可用字段并附带可靠性元数据。
+            </summary>
+        </member>
+        <member name="M:GuiyangMahjong.Admin.Services.PlayerMonitoringService.ListPlayersAsync(System.String,System.Threading.CancellationToken)">
+            <summary>
+            查询玩家列表。Auth 与 Lobby 各自受独立超时控制，Lobby 故障不会隐藏 Auth 账号基础资料。
+            </summary>
+        </member>
+        <member name="M:GuiyangMahjong.Admin.Services.PlayerMonitoringService.GetPlayerAsync(System.String,System.Threading.CancellationToken)">
+            <summary>
+            获取玩家详情；只读页面允许 Lobby 子字段降级，Auth 主档不可用时返回明确的来源不可用错误。
+            </summary>
+        </member>
+        <member name="M:GuiyangMahjong.Admin.Services.PlayerMonitoringService.GetPlayerForActionAsync(System.String,System.Threading.CancellationToken)">
+            <summary>
+            为高危玩家管理工作流重新读取实时 Auth 与 Lobby 状态；任何缓存或降级值都会阻止操作。
+            </summary>
+        </member>
+        <member name="T:System.Text.RegularExpressions.Generated.SafeIdentifierPattern_0">
+            <summary>Custom <see cref="T:System.Text.RegularExpressions.Regex"/>-derived type for the SafeIdentifierPattern method.</summary>
+        </member>
+        <member name="F:System.Text.RegularExpressions.Generated.SafeIdentifierPattern_0.Instance">
+            <summary>Cached, thread-safe singleton instance.</summary>
+        </member>
+        <member name="M:System.Text.RegularExpressions.Generated.SafeIdentifierPattern_0.#ctor">
+            <summary>Initializes the instance.</summary>
+        </member>
+        <member name="T:System.Text.RegularExpressions.Generated.SafeIdentifierPattern_0.RunnerFactory">
+            <summary>Provides a factory for creating <see cref="T:System.Text.RegularExpressions.RegexRunner"/> instances to be used by methods on <see cref="T:System.Text.RegularExpressions.Regex"/>.</summary>
+        </member>
+        <member name="M:System.Text.RegularExpressions.Generated.SafeIdentifierPattern_0.RunnerFactory.CreateInstance">
+            <summary>Creates an instance of a <see cref="T:System.Text.RegularExpressions.RegexRunner"/> used by methods on <see cref="T:System.Text.RegularExpressions.Regex"/>.</summary>
+        </member>
+        <member name="T:System.Text.RegularExpressions.Generated.SafeIdentifierPattern_0.RunnerFactory.Runner">
+            <summary>Provides the runner that contains the custom logic implementing the specified regular expression.</summary>
+        </member>
+        <member name="M:System.Text.RegularExpressions.Generated.SafeIdentifierPattern_0.RunnerFactory.Runner.Scan(System.ReadOnlySpan{System.Char})">
+            <summary>Scan the <paramref name="inputSpan"/> starting from base.runtextstart for the next match.</summary>
+            <param name="inputSpan">The text being scanned by the regular expression.</param>
+        </member>
+        <member name="M:System.Text.RegularExpressions.Generated.SafeIdentifierPattern_0.RunnerFactory.Runner.TryFindNextPossibleStartingPosition(System.ReadOnlySpan{System.Char})">
+            <summary>Search <paramref name="inputSpan"/> starting from base.runtextpos for the next location a match could possibly start.</summary>
+            <param name="inputSpan">The text being scanned by the regular expression.</param>
+            <returns>true if a possible match was found; false if no more matches are possible.</returns>
+        </member>
+        <member name="M:System.Text.RegularExpressions.Generated.SafeIdentifierPattern_0.RunnerFactory.Runner.TryMatchAtCurrentPosition(System.ReadOnlySpan{System.Char})">
+            <summary>Determine whether <paramref name="inputSpan"/> at base.runtextpos is a match for the regular expression.</summary>
+            <param name="inputSpan">The text being scanned by the regular expression.</param>
+            <returns>true if the regular expression matches at the current position; otherwise, false.</returns>
+        </member>
+        <member name="T:System.Text.RegularExpressions.Generated.NonAlphaNumericPattern_1">
+            <summary>Custom <see cref="T:System.Text.RegularExpressions.Regex"/>-derived type for the NonAlphaNumericPattern method.</summary>
+        </member>
+        <member name="F:System.Text.RegularExpressions.Generated.NonAlphaNumericPattern_1.Instance">
+            <summary>Cached, thread-safe singleton instance.</summary>
+        </member>
+        <member name="M:System.Text.RegularExpressions.Generated.NonAlphaNumericPattern_1.#ctor">
+            <summary>Initializes the instance.</summary>
+        </member>
+        <member name="T:System.Text.RegularExpressions.Generated.NonAlphaNumericPattern_1.RunnerFactory">
+            <summary>Provides a factory for creating <see cref="T:System.Text.RegularExpressions.RegexRunner"/> instances to be used by methods on <see cref="T:System.Text.RegularExpressions.Regex"/>.</summary>
+        </member>
+        <member name="M:System.Text.RegularExpressions.Generated.NonAlphaNumericPattern_1.RunnerFactory.CreateInstance">
+            <summary>Creates an instance of a <see cref="T:System.Text.RegularExpressions.RegexRunner"/> used by methods on <see cref="T:System.Text.RegularExpressions.Regex"/>.</summary>
+        </member>
+        <member name="T:System.Text.RegularExpressions.Generated.NonAlphaNumericPattern_1.RunnerFactory.Runner">
+            <summary>Provides the runner that contains the custom logic implementing the specified regular expression.</summary>
+        </member>
+        <member name="M:System.Text.RegularExpressions.Generated.NonAlphaNumericPattern_1.RunnerFactory.Runner.Scan(System.ReadOnlySpan{System.Char})">
+            <summary>Scan the <paramref name="inputSpan"/> starting from base.runtextstart for the next match.</summary>
+            <param name="inputSpan">The text being scanned by the regular expression.</param>
+        </member>
+        <member name="M:System.Text.RegularExpressions.Generated.NonAlphaNumericPattern_1.RunnerFactory.Runner.TryFindNextPossibleStartingPosition(System.ReadOnlySpan{System.Char})">
+            <summary>Search <paramref name="inputSpan"/> starting from base.runtextpos for the next location a match could possibly start.</summary>
+            <param name="inputSpan">The text being scanned by the regular expression.</param>
+            <returns>true if a possible match was found; false if no more matches are possible.</returns>
+        </member>
+        <member name="T:System.Text.RegularExpressions.Generated.Utilities">
+            <summary>Helper methods used by generated <see cref="T:System.Text.RegularExpressions.Regex"/>-derived implementations.</summary>
+        </member>
+        <member name="F:System.Text.RegularExpressions.Generated.Utilities.s_defaultTimeout">
+            <summary>Default timeout value set in <see cref="T:System.AppContext"/>, or <see cref="F:System.Text.RegularExpressions.Regex.InfiniteMatchTimeout"/> if none was set.</summary>
+        </member>
+        <member name="F:System.Text.RegularExpressions.Generated.Utilities.s_hasTimeout">
+            <summary>Whether <see cref="F:System.Text.RegularExpressions.Generated.Utilities.s_defaultTimeout"/> is non-infinite.</summary>
+        </member>
+        <member name="F:System.Text.RegularExpressions.Generated.Utilities.s_asciiLettersAndDigits">
+            <summary>Supports searching for characters in or not in "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz".</summary>
+        </member>
+        <member name="F:System.Text.RegularExpressions.Generated.Utilities.s_ascii_60FF07FEFFFF87FEFFFF07">
+            <summary>Supports searching for characters in or not in "-.0123456789:ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz".</summary>
+        </member>
+    </members>
+</doc>

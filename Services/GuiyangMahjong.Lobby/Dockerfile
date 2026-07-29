@@ -1,8 +1,10 @@
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 COPY Services/GuiyangMahjong.Lobby/GuiyangMahjong.Lobby.csproj Services/GuiyangMahjong.Lobby/
+COPY Services/GuiyangMahjong.Observability/GuiyangMahjong.Observability.csproj Services/GuiyangMahjong.Observability/
 RUN dotnet restore Services/GuiyangMahjong.Lobby/GuiyangMahjong.Lobby.csproj
 COPY Contracts/ Contracts/
+COPY Services/GuiyangMahjong.Observability/ Services/GuiyangMahjong.Observability/
 COPY Services/GuiyangMahjong.Lobby/ Services/GuiyangMahjong.Lobby/
 RUN dotnet publish Services/GuiyangMahjong.Lobby/GuiyangMahjong.Lobby.csproj -c Release -o /app --no-restore
 

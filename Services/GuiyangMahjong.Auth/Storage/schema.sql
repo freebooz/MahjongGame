@@ -7,6 +7,10 @@ CREATE TABLE IF NOT EXISTS auth_identities (
     updated_at_utc TIMESTAMPTZ NOT NULL
 );
 
+-- 玩家监控使用不可变创建时间做键集分页；复合索引保证 10 万玩家目录不会退化为大偏移扫描。
+CREATE INDEX IF NOT EXISTS ix_auth_identities_monitoring_cursor_v2
+    ON auth_identities(created_at_utc DESC, player_id DESC);
+
 CREATE TABLE IF NOT EXISTS auth_refresh_sessions (
     session_id CHAR(32) PRIMARY KEY,
     player_id VARCHAR(80) NOT NULL REFERENCES auth_identities(player_id) ON DELETE CASCADE,

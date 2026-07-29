@@ -4,8 +4,10 @@
 #include "Game/GuiyangMahjongPlayerController.h"
 #include "Game/GuiyangMahjongPlayerState.h"
 #include "GuiyangMahjong.h"
+#include "Engine/GameInstance.h"
 #include "Room/GuiyangManagedRoomDefinition.h"
 #include "Room/GuiyangRoomManager.h"
+#include "Runtime/Launch/Resources/Version.h"
 #include "Server/GuiyangAgonesLifecycleSubsystem.h"
 #include "Server/GuiyangGameServerBridge.h"
 #include "Table/MahjongTableEngine.h"
@@ -44,6 +46,22 @@ AGuiyangMahjongGameMode::AGuiyangMahjongGameMode()
     DefaultPawnClass = nullptr;
     SpectatorClass = nullptr;
     bStartPlayersAsSpectators = true;
+}
+
+bool AGuiyangMahjongGameMode::GetPlayerConnectionTelemetry(
+    const FString& PlayerId, FGuiyangPlayerConnectionTelemetry& OutTelemetry) const
+{
+    return RoomManager && RoomManager->GetPlayerConnectionTelemetry(PlayerId, OutTelemetry);
+}
+
+bool AGuiyangMahjongGameMode::GetPlayerTrusteeTelemetry(
+    const FString& PlayerId, bool& OutTrustee, FDateTime& OutChangedAtUtc) const
+{
+    const FPlayerTrusteeState* State = TrusteeStateByPlayer.Find(PlayerId);
+    if (!State) return false;
+    OutTrustee = State->bTrustee;
+    OutChangedAtUtc = State->ChangedAtUtc;
+    return true;
 }
 
 void AGuiyangMahjongGameMode::InitGame(const FString& MapName, const FString& Options, FString& ErrorMessage)
@@ -766,6 +784,8 @@ void AGuiyangMahjongGameMode::HandleTableAction(AGuiyangMahjongPlayerController*
         Controller->Client_ShowErrorMessage(Result.Message);
         return;
     }
+    // 玩家成功提交权威动作即解除此前由超时触发的托管；无效请求不得解除托管。
+    SetSeatTrusteeState(Player->SeatIndex, false);
     PublishTableSnapshots();
     FinalizeRoundIfNeeded();
 }
@@ -844,10 +864,39 @@ void AGuiyangMahjongGameMode::HandleActionTimeout(const int32 ExpectedRoundId, c
     const EMahjongTablePhase ExpectedPhase)
 {
     if (!TableEngine) return;
+    TArray<int32> TimedOutSeats;
+    if (ExpectedPhase == EMahjongTablePhase::PlayerTurn)
+    {
+        TimedOutSeats.Add(TableEngine->GetPublicState().CurrentTurnSeat);
+    }
+    else
+    {
+        // 响应窗口可能有多名玩家同时可操作，必须把所有未响应座位标记为托管。
+        for (int32 SeatIndex = 0; SeatIndex < 4; ++SeatIndex)
+        {
+            if (!TableEngine->GetAvailableActions(SeatIndex).IsEmpty()) TimedOutSeats.Add(SeatIndex);
+        }
+    }
     const FMahjongActionResult Result = TableEngine->ResolveActionTimeout(ExpectedRoundId, ExpectedTurnId, ExpectedPhase);
     if (!Result.bSuccess) return;
+    // 超时动作由服务器代打，只有超时发生前确实拥有可选动作的座位进入托管。
+    for (const int32 TimedOutSeat : TimedOutSeats) SetSeatTrusteeState(TimedOutSeat, true);
     PublishTableSnapshots();
     FinalizeRoundIfNeeded();
+}
+
+void AGuiyangMahjongGameMode::SetSeatTrusteeState(const int32 SeatIndex, const bool bTrustee)
+{
+    const AGuiyangMahjongGameState* MahjongState = GetGameState<AGuiyangMahjongGameState>();
+    const FMahjongSeatInfo* Seat = MahjongState
+        ? MahjongState->RoomState.Seats.FindByPredicate(
+            [SeatIndex](const FMahjongSeatInfo& Item) { return Item.SeatIndex == SeatIndex; })
+        : nullptr;
+    if (!Seat || Seat->PlayerId.IsEmpty()) return;
+    FPlayerTrusteeState& State = TrusteeStateByPlayer.FindOrAdd(Seat->PlayerId);
+    if (State.ChangedAtUtc.GetTicks() > 0 && State.bTrustee == bTrustee) return;
+    State.bTrustee = bTrustee;
+    State.ChangedAtUtc = FDateTime::UtcNow();
 }
 
 void AGuiyangMahjongGameMode::FinalizeRoundIfNeeded()

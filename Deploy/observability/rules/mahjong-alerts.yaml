@@ -1,0 +1,71 @@
+groups:
+  - name: mahjong-dedicated-server
+    interval: 15s
+    rules:
+      - alert: MahjongHeartbeatMissing
+        expr: (time() - mahjong_room_heartbeat_last_seen_seconds > 30) or on() (absent(mahjong_room_heartbeat_last_seen_seconds) and absent_over_time(mahjong_room_heartbeat_received_total[30s]))
+        for: 0s
+        labels: {severity: critical, service: dedicated-server}
+        annotations:
+          summary: "活跃 Dedicated Server 实例超过 30 秒未收到心跳"
+          runbook_url: "Docs/RUNBOOKS/OBSERVABILITY_ALERTS.md#mahjongheartbeatmissing"
+      - alert: MahjongDedicatedServerCpuHigh
+        expr: rate(mahjong_dedicated_server_cpu_percent_sum[5m]) / clamp_min(rate(mahjong_dedicated_server_cpu_percent_count[5m]), 1) > 85
+        for: 10m
+        labels: {severity: warning, service: dedicated-server}
+        annotations:
+          summary: "Dedicated Server 平均 CPU 超过 85%"
+          runbook_url: "Docs/RUNBOOKS/OBSERVABILITY_ALERTS.md#mahjongdedicatedservercpuhigh"
+      - alert: MahjongDedicatedServerMemoryHigh
+        expr: rate(mahjong_dedicated_server_memory_bytes_sum[5m]) / clamp_min(rate(mahjong_dedicated_server_memory_bytes_count[5m]), 1) > 3221225472
+        for: 10m
+        labels: {severity: warning, service: dedicated-server}
+        annotations:
+          summary: "Dedicated Server 平均 RSS 超过 3 GiB"
+          runbook_url: "Docs/RUNBOOKS/OBSERVABILITY_ALERTS.md#mahjongdedicatedservermemoryhigh"
+      - alert: MahjongDedicatedServerTickSlow
+        expr: rate(mahjong_dedicated_server_tick_milliseconds_sum[2m]) / clamp_min(rate(mahjong_dedicated_server_tick_milliseconds_count[2m]), 1) > 50
+        for: 2m
+        labels: {severity: critical, service: dedicated-server}
+        annotations:
+          summary: "服务器平均 Tick 超过 50ms"
+          runbook_url: "Docs/RUNBOOKS/OBSERVABILITY_ALERTS.md#mahjongdedicatedservertickslow"
+      - alert: MahjongDisconnectRateHigh
+        expr: sum(rate(mahjong_player_disconnects_total[5m])) > 0.2
+        for: 5m
+        labels: {severity: warning, service: dedicated-server}
+        annotations:
+          summary: "玩家掉线速率持续升高"
+          runbook_url: "Docs/RUNBOOKS/OBSERVABILITY_ALERTS.md#mahjongdisconnectratehigh"
+      - alert: MahjongRpcStorm
+        expr: sum(rate(mahjong_dedicated_server_rpc_received_total[1m])) > 1000
+        for: 2m
+        labels: {severity: critical, service: dedicated-server}
+        annotations:
+          summary: "Dedicated Server RPC 速率异常"
+          runbook_url: "Docs/RUNBOOKS/OBSERVABILITY_ALERTS.md#mahjongrpcstorm"
+
+  - name: mahjong-control-plane
+    interval: 30s
+    rules:
+      - alert: MahjongServiceErrorRateHigh
+        expr: sum(rate(mahjong_http_server_failures_total[5m])) by (service) / clamp_min(sum(rate(mahjong_http_server_requests_total[5m])) by (service), 0.01) > 0.05
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: "{{ $labels.service }} 的 HTTP 5xx 比例超过 5%"
+          runbook_url: "Docs/RUNBOOKS/OBSERVABILITY_ALERTS.md#mahjongserviceerrorratehigh"
+      - alert: MahjongAdminCommandBacklogSuspected
+        expr: sum(rate(mahjong_admin_command_claimed_batch_sum[10m])) > 0 and sum(rate(mahjong_admin_command_outcomes_total{outcome="succeeded"}[10m])) == 0
+        for: 10m
+        labels: {severity: critical, service: admin}
+        annotations:
+          summary: "管理命令持续领取但没有成功结果"
+          runbook_url: "Docs/RUNBOOKS/OBSERVABILITY_ALERTS.md#mahjongadmincommandbacklogsuspected"
+      - alert: MahjongAuditArchiveBacklogSuspected
+        expr: sum(rate(mahjong_audit_archive_claimed_batch_sum[15m])) > 0 and sum(rate(mahjong_audit_archive_outcomes_total{outcome="succeeded"}[15m])) == 0
+        for: 15m
+        labels: {severity: critical, service: admin}
+        annotations:
+          summary: "审计归档持续领取但没有成功结果"
+          runbook_url: "Docs/RUNBOOKS/OBSERVABILITY_ALERTS.md#mahjongauditarchivebacklogsuspected"

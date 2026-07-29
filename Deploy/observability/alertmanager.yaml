@@ -1,0 +1,19 @@
+route:
+  receiver: local-review
+  group_by: [alertname, severity, service]
+  group_wait: 15s
+  group_interval: 5m
+  repeat_interval: 4h
+  routes:
+    - matchers: [severity="critical"]
+      receiver: local-review
+      repeat_interval: 30m
+
+inhibit_rules:
+  - source_matchers: [severity="critical"]
+    target_matchers: [severity="warning"]
+    equal: [alertname, service]
+
+receivers:
+  # 本地环境只在 Alertmanager UI 中展示；预生产/生产应替换为企业告警网关 webhook。
+  - name: local-review

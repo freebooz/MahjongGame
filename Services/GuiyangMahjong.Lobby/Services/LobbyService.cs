@@ -1,16 +1,24 @@
 using System.Security.Cryptography;
 using System.Text;
+using System.Diagnostics;
 using GuiyangMahjong.Lobby.Domain;
 using GuiyangMahjong.Lobby.Options;
 using GuiyangMahjong.Lobby.Realtime;
 using GuiyangMahjong.Lobby.Security;
 using GuiyangMahjong.Lobby.Storage;
+using GuiyangMahjong.Observability;
 using Microsoft.Extensions.Options;
 
 namespace GuiyangMahjong.Lobby.Services;
 
 public sealed class LobbyService
 {
+    /// <summary>
+    /// 与 Dedicated Server 紧凑 camelCase JSON 保持一致，用于生成跨平台稳定的结算正文 SHA-256。
+    /// </summary>
+    private static readonly System.Text.Json.JsonSerializerOptions TelemetryJsonOptions =
+        new(System.Text.Json.JsonSerializerDefaults.Web);
+
     private readonly ILobbyStore store;
     private readonly IRoomPasswordService passwordService;
     private readonly ILobbyEventPublisher events;
@@ -49,6 +57,12 @@ public sealed class LobbyService
         CreateRoomRequest request,
         CancellationToken cancellationToken)
     {
+        // 房间创建是跨存储、Allocator 与事件总线的业务事务，独立跨度用于定位具体失败阶段。
+        using var activity = MahjongTelemetry.ActivitySource.StartActivity(
+            "Lobby.CreateRoom",
+            ActivityKind.Internal);
+        activity?.SetTag("mahjong.player_id", player.PlayerId);
+        activity?.SetTag("mahjong.request_id", requestId);
         ValidateCreateRequest(request);
         if (await store.GetActiveRoomByPlayerAsync(player.PlayerId, cancellationToken) is not null)
         {
@@ -96,6 +110,8 @@ public sealed class LobbyService
             logger.LogInformation(
                 "房间创建请求已接受 RequestId={RequestId} RoomId={RoomId} PlayerId={PlayerId} PasswordProtected={PasswordProtected}",
                 requestId, room.RoomId, player.PlayerId, room.Password is not null);
+            activity?.SetTag("mahjong.room_id", room.RoomId);
+            activity?.SetTag("mahjong.match_id", room.MatchId);
             await events.PublishAsync(LobbyEventTypes.RoomUpdated, ToDirectoryItem(room), cancellationToken);
             if (allocator.Enabled)
             {
@@ -366,6 +382,15 @@ public sealed class LobbyService
         GameServerRegistration registration,
         CancellationToken cancellationToken)
     {
+        // 注册跨度把 Lobby 房间绑定与 Allocator 确认串在同一技术 Trace 中。
+        using var activity = MahjongTelemetry.ActivitySource.StartActivity(
+            "Lobby.RegisterGameServer",
+            ActivityKind.Internal);
+        activity?.SetTag("mahjong.room_id", registration.RoomId);
+        activity?.SetTag(
+            "mahjong.server_instance_id",
+            registration.ServerInstanceId);
+        activity?.SetTag("mahjong.match_id", registration.MatchId);
         if (!allocator.Enabled)
         {
             throw new LobbyOperationException(
@@ -440,6 +465,19 @@ public sealed class LobbyService
         GameServerHeartbeat heartbeat,
         CancellationToken cancellationToken)
     {
+        // 每次心跳跨度携带业务标识用于指标 exemplar 跳转；这些高基数字段不会成为指标标签。
+        using var activity = MahjongTelemetry.ActivitySource.StartActivity(
+            "Lobby.RecordGameServerHeartbeat",
+            ActivityKind.Internal);
+        activity?.SetTag("mahjong.room_id", heartbeat.RoomId);
+        activity?.SetTag("mahjong.server_instance_id", serverInstanceId);
+        activity?.SetTag("mahjong.request_id", requestId);
+        // 主版本决定指标单位和空值语义；未知版本必须在触达下游前失败关闭，
+        // 避免 Allocator 已接受心跳而 Lobby/Admin 使用错误口径展示数据。
+        if (heartbeat.TelemetrySchemaVersion != 1)
+        {
+            throw Invalid("GameServer heartbeat telemetry schema version is unsupported.");
+        }
         await allocator.RecordHeartbeatAsync(requestId, serverInstanceId, heartbeat, cancellationToken);
         var room = await store.GetRoomByIdAsync(heartbeat.RoomId, cancellationToken);
         if (room is null || room.Route?.ServerInstanceId != serverInstanceId) return;
@@ -550,6 +588,11 @@ public sealed class LobbyService
         }
     }
 
+    /// <summary>
+    /// 校验并保存一次 Dedicated Server 运行快照，计算派生网络速率，
+    /// 并把连接、托管、生命周期和结算的真实变化追加到房间时间线。
+    /// 任何字段越界都会失败关闭，且不会写入部分运行快照。
+    /// </summary>
     private async Task RecordRuntimeTelemetryAsync(
         string requestId,
         string serverInstanceId,
@@ -560,7 +603,11 @@ public sealed class LobbyService
     {
         ValidateRuntimeMetric(heartbeat.ServerTickMilliseconds, 0, 10_000, "server tick");
         ValidateRuntimeMetric(heartbeat.ServerFramesPerSecond, 0, 1_000, "server FPS");
-        ValidateRuntimeMetric(heartbeat.ProcessCpuPercent, 0, 10_000, "process CPU");
+        // v1 将进程 CPU 定义为按节点总容量归一化的百分比，超过 100
+        // 通常表示生产者使用了“单核可超过 100%”的另一种口径，必须拒绝而非混入看板。
+        ValidateRuntimeMetric(heartbeat.ProcessCpuPercent, 0, 100, "process CPU");
+        ValidateRuntimeMetric(
+            heartbeat.ProcessCpuSampleWindowMilliseconds, 250, 60_000, "process CPU sample window");
         if (heartbeat.RpcReceivedCount is < 0
             || heartbeat.ProcessMemoryBytes is < 0
             || heartbeat.NetworkIngressBytes is < 0
@@ -568,6 +615,8 @@ public sealed class LobbyService
         {
             throw Invalid("GameServer heartbeat cumulative metric is invalid.");
         }
+        ValidateRpcTelemetry(heartbeat.RpcMethods);
+        ValidateSettlementTelemetry(room, heartbeat.Settlement);
 
         var players = heartbeat.Players
             ?? (heartbeat.ConnectedPlayerIds ?? [])
@@ -586,12 +635,20 @@ public sealed class LobbyService
                 || player.SeatIndex is < -1 or > 3
                 || player.LatencyMilliseconds is < 0 or > 120_000
                 || !IsFinite(player.LatencyMilliseconds)
-                || player.ConnectionState is not ("Connected" or "Disconnected" or "Reconnecting")))
+                || player.ConnectionState is not ("Connected" or "Disconnected" or "Reconnecting")
+                || player.ConnectionStateSequence is < 0
+                || (player.ConnectionEventId is { Length: > 0 }
+                    && !Guid.TryParse(player.ConnectionEventId, out _))
+                || player.DisconnectReason is not null
+                    and not ("NormalExit" or "NetworkInterrupted" or "ReconnectTimeout"
+                        or "Kicked" or "ServerShutdown")))
         {
             throw Invalid("GameServer heartbeat player telemetry is invalid.");
         }
 
         var previous = await monitoringStore.GetRuntimeAsync(room.RoomId, cancellationToken);
+        var (ingressRate, egressRate) = CalculateNetworkRates(
+            previous, serverInstanceId, heartbeat, observedAtUtc);
         var runtime = new RoomRuntimeTelemetry(
             room.RoomId,
             serverInstanceId,
@@ -608,7 +665,47 @@ public sealed class LobbyService
             heartbeat.NetworkIngressBytes,
             heartbeat.NetworkEgressBytes,
             heartbeat.BuildVersion,
-            players);
+            players,
+            heartbeat.TelemetrySchemaVersion,
+            heartbeat.ProcessCpuSampleWindowMilliseconds,
+            ingressRate,
+            egressRate,
+            heartbeat.RpcMethods,
+            heartbeat.Settlement ?? previous?.Settlement);
+        var rpcDelta = previous is not null
+            && previous.ServerInstanceId == serverInstanceId
+            && heartbeat.RpcReceivedCount is { } currentRpc
+            && previous.RpcReceivedCount is { } previousRpc
+            && currentRpc >= previousRpc
+                ? currentRpc - previousRpc
+                : 0;
+        var previousPlayersById = previous?.Players.ToDictionary(
+            player => player.PlayerId,
+            StringComparer.Ordinal);
+        var disconnectDelta = previousPlayersById is null
+            ? 0
+            : runtime.Players.Count(player =>
+                player.ConnectionState == "Disconnected"
+                && previousPlayersById.TryGetValue(
+                    player.PlayerId,
+                    out var previousPlayer)
+                && previousPlayer.ConnectionState != "Disconnected");
+        MahjongTelemetry.RecordRoomHeartbeat(
+            serverInstanceId,
+            runtime.Lifecycle,
+            runtime.BuildVersion,
+            runtime.ConnectedPlayers,
+            runtime.ServerTickMilliseconds,
+            runtime.ServerFramesPerSecond,
+            runtime.ProcessCpuPercent,
+            runtime.ProcessMemoryBytes,
+            runtime.NetworkIngressBytesPerSecond,
+            runtime.NetworkEgressBytesPerSecond,
+            rpcDelta,
+            disconnectDelta);
+        MahjongTelemetry.RecordTelemetryFreshness(
+            observedAtUtc,
+            timeProvider.GetUtcNow());
         await monitoringStore.SetRuntimeAsync(runtime, cancellationToken);
 
         if (previous is null)
@@ -643,25 +740,69 @@ public sealed class LobbyService
                 cancellationToken);
         }
 
-        var previousConnections = previous.Players.ToDictionary(
-            player => player.PlayerId, player => player.ConnectionState, StringComparer.Ordinal);
+        var previousPlayers = previous.Players.ToDictionary(
+            player => player.PlayerId, StringComparer.Ordinal);
         foreach (var player in runtime.Players)
         {
-            if (!previousConnections.TryGetValue(player.PlayerId, out var oldState)
-                || oldState.Equals(player.ConnectionState, StringComparison.Ordinal))
+            if (!previousPlayers.TryGetValue(player.PlayerId, out var oldPlayer))
             {
                 continue;
             }
+            // 新生产者使用单调序号和 EventId 提供幂等键；旧生产者仍退化为状态比较。
+            var duplicateConnectionEvent = player.ConnectionStateSequence.HasValue
+                && player.ConnectionStateSequence == oldPlayer.ConnectionStateSequence
+                && player.ConnectionEventId == oldPlayer.ConnectionEventId;
+            if (!duplicateConnectionEvent
+                && !oldPlayer.ConnectionState.Equals(player.ConnectionState, StringComparison.Ordinal))
+            {
+                await AppendRuntimeEventAsync(
+                    room,
+                    requestId,
+                    "PlayerConnectionChanged",
+                    new Dictionary<string, object?>
+                    {
+                        ["playerId"] = player.PlayerId,
+                        ["from"] = oldPlayer.ConnectionState,
+                        ["to"] = player.ConnectionState,
+                        ["reason"] = player.DisconnectReason,
+                        ["latencyMilliseconds"] = player.LatencyMilliseconds,
+                        ["connectionStateSequence"] = player.ConnectionStateSequence
+                    },
+                    player.ConnectionChangedAtUtc ?? observedAtUtc,
+                    cancellationToken,
+                    player.ConnectionEventId);
+            }
+            if (oldPlayer.Trustee != player.Trustee)
+            {
+                await AppendRuntimeEventAsync(
+                    room,
+                    requestId,
+                    "PlayerTrusteeChanged",
+                    new Dictionary<string, object?>
+                    {
+                        ["playerId"] = player.PlayerId,
+                        ["from"] = oldPlayer.Trustee,
+                        ["to"] = player.Trustee
+                    },
+                    player.TrusteeChangedAtUtc ?? observedAtUtc,
+                    cancellationToken);
+            }
+        }
+
+        if (runtime.Settlement is not null
+            && previous.Settlement?.Status != runtime.Settlement.Status)
+        {
             await AppendRuntimeEventAsync(
                 room,
                 requestId,
-                "PlayerConnectionChanged",
+                "SettlementStatusChanged",
                 new Dictionary<string, object?>
                 {
-                    ["playerId"] = player.PlayerId,
-                    ["from"] = oldState,
-                    ["to"] = player.ConnectionState,
-                    ["latencyMilliseconds"] = player.LatencyMilliseconds
+                    ["from"] = previous.Settlement?.Status,
+                    ["to"] = runtime.Settlement.Status,
+                    ["matchId"] = runtime.Settlement.MatchId,
+                    ["resultSequence"] = runtime.Settlement.ResultSequence,
+                    ["resultHash"] = runtime.Settlement.ResultHash
                 },
                 observedAtUtc,
                 cancellationToken);
@@ -674,17 +815,106 @@ public sealed class LobbyService
         string eventType,
         Dictionary<string, object?> data,
         DateTimeOffset occurredAtUtc,
-        CancellationToken cancellationToken) =>
+        CancellationToken cancellationToken,
+        string? eventId = null) =>
         monitoringStore.AppendEventAsync(
             room.RoomId,
             new RoomTimelineEvent(
-                Guid.NewGuid().ToString(),
+                eventId ?? Guid.NewGuid().ToString(),
                 eventType,
                 occurredAtUtc,
                 room.StateSequence,
                 traceId,
                 data),
             cancellationToken);
+
+    /// <summary>
+    /// 仅在同一实例、计数器单调且时间前进时计算网络速率；进程重启、驱动重建或计数器回退时返回 null，
+    /// 从而避免把重置误算成负速率或尖峰。
+    /// </summary>
+    private static (double? Ingress, double? Egress) CalculateNetworkRates(
+        RoomRuntimeTelemetry? previous,
+        string serverInstanceId,
+        GameServerHeartbeat current,
+        DateTimeOffset observedAtUtc)
+    {
+        if (previous is null
+            || previous.ServerInstanceId != serverInstanceId
+            || current.NetworkIngressBytes is null
+            || current.NetworkEgressBytes is null
+            || previous.NetworkIngressBytes is null
+            || previous.NetworkEgressBytes is null
+            || current.NetworkIngressBytes < previous.NetworkIngressBytes
+            || current.NetworkEgressBytes < previous.NetworkEgressBytes)
+        {
+            return (null, null);
+        }
+        var elapsedSeconds = (observedAtUtc - previous.ObservedAtUtc).TotalSeconds;
+        if (elapsedSeconds <= 0) return (null, null);
+        return (
+            (current.NetworkIngressBytes.Value - previous.NetworkIngressBytes.Value) / elapsedSeconds,
+            (current.NetworkEgressBytes.Value - previous.NetworkEgressBytes.Value) / elapsedSeconds);
+    }
+
+    /// <summary>
+    /// 校验 RPC 指标的固定白名单形态与累计量，禁止动态高基数方法名进入监控存储。
+    /// </summary>
+    private static void ValidateRpcTelemetry(RpcMethodTelemetry[]? methods)
+    {
+        if (methods is null) return;
+        var names = methods.Select(metric => metric.MethodName).ToArray();
+        if (methods.Length > 32
+            || names.Distinct(StringComparer.Ordinal).Count() != names.Length
+            || methods.Any(metric =>
+                string.IsNullOrWhiteSpace(metric.MethodName)
+                || metric.MethodName.Length > 80
+                || !metric.MethodName.StartsWith("Server.", StringComparison.Ordinal)
+                || metric.ReceivedCount < 0
+                || metric.RejectedCount is < 0
+                || metric.FailedCount is < 0
+                || metric.TimeoutCount is < 0
+                || metric.RejectedCount > metric.ReceivedCount
+                || metric.FailedCount > metric.ReceivedCount
+                || metric.TimeoutCount > metric.ReceivedCount
+                || !IsFinite(metric.P95DurationMilliseconds)
+                || !IsFinite(metric.P99DurationMilliseconds)
+                || metric.P95DurationMilliseconds is < 0 or > 60_000
+                || metric.P99DurationMilliseconds is < 0 or > 60_000
+                || metric.P95DurationMilliseconds > metric.P99DurationMilliseconds))
+        {
+            throw Invalid("GameServer heartbeat RPC telemetry is invalid.");
+        }
+    }
+
+    /// <summary>
+    /// 校验结算投影与权威房间作用域一致；投影只读且不能携带可编辑的玩家结果。
+    /// </summary>
+    private static void ValidateSettlementTelemetry(
+        LobbyRoom room, SettlementRuntimeTelemetry? settlement)
+    {
+        if (settlement is null) return;
+        if (settlement.MatchId != room.MatchId
+            || settlement.Status is not ("Calculating" or "Submitted" or "Accepted"
+                or "Failed" or "Compensating" or "Completed")
+            || settlement.ResultSequence is < 1
+            || (settlement.Status != "Calculating"
+                && (settlement.ResultSequence is null || !IsSha256(settlement.ResultHash)))
+            || (settlement.ResultHash is not null && !IsSha256(settlement.ResultHash))
+            || settlement.FailureReason is { Length: > 256 })
+        {
+            throw Invalid("GameServer heartbeat settlement telemetry is invalid.");
+        }
+    }
+
+    /// <summary>只接受固定 64 位十六进制 SHA-256，避免把任意文本冒充结果摘要。</summary>
+    private static bool IsSha256(string? value)
+    {
+        if (value is null || value.Length != 64) return false;
+        return value.All(character =>
+            character is >= '0' and <= '9'
+            or >= 'a' and <= 'f'
+            or >= 'A' and <= 'F');
+    }
 
     private static void ValidateRuntimeMetric(
         double? value, double minimum, double maximum, string name)
@@ -780,6 +1010,44 @@ public sealed class LobbyService
                 "牌局结算已持久化 RequestId={RequestId} RoomId={RoomId} MatchId={MatchId} ResultSequence={ResultSequence}",
                 requestId, room.RoomId, matchId, report.ResultSequence);
             await events.PublishAsync(LobbyEventTypes.RoomClosed, ToDirectoryItem(closedRoom), cancellationToken);
+        }
+        // Lobby 持久化成功是结算完成的权威确认点；即使 Dedicated Server 随后立即回收，
+        // Admin 仍能从监控存储看到 Completed，而不会永久停留在 Submitted。
+        var runtime = await monitoringStore.GetRuntimeAsync(room.RoomId, cancellationToken);
+        if (runtime is not null)
+        {
+            var resultPayload = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(
+                report, TelemetryJsonOptions);
+            var resultHash = Convert.ToHexString(SHA256.HashData(resultPayload)).ToLowerInvariant();
+            var completedAtUtc = timeProvider.GetUtcNow();
+            var completedSettlement = new SettlementRuntimeTelemetry(
+                "Completed",
+                matchId,
+                report.ResultSequence,
+                resultHash,
+                runtime.Settlement?.SubmittedAtUtc,
+                completedAtUtc,
+                null);
+            await monitoringStore.SetRuntimeAsync(
+                runtime with { Settlement = completedSettlement },
+                cancellationToken);
+            if (runtime.Settlement?.Status != completedSettlement.Status)
+            {
+                await AppendRuntimeEventAsync(
+                    room,
+                    requestId,
+                    "SettlementStatusChanged",
+                    new Dictionary<string, object?>
+                    {
+                        ["from"] = runtime.Settlement?.Status,
+                        ["to"] = completedSettlement.Status,
+                        ["matchId"] = matchId,
+                        ["resultSequence"] = report.ResultSequence,
+                        ["resultHash"] = resultHash
+                    },
+                    completedAtUtc,
+                    cancellationToken);
+            }
         }
         if (allocator.Enabled && !trustedRecovery)
         {

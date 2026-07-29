@@ -1,0 +1,117 @@
+name: guiyang-mahjong-capacity
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: capacity
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: capacity-test-only
+    volumes:
+      - ../../Services/GuiyangMahjong.Auth/Storage/schema.sql:/docker-entrypoint-initdb.d/010-auth.sql:ro
+      - ../../Services/GuiyangMahjong.Lobby/Storage/schema.sql:/docker-entrypoint-initdb.d/020-lobby.sql:ro
+      - ../../Scripts/Load/seed-monitoring-capacity.sql:/docker-entrypoint-initdb.d/030-seed.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d capacity"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+
+  redis:
+    image: redis:8-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+
+  auth:
+    build:
+      context: ../..
+      dockerfile: Services/GuiyangMahjong.Auth/Dockerfile
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      Auth__PersistenceMode: Postgres
+      Auth__ApplyDatabaseMigrations: "false"
+      Auth__PostgresConnectionString: Host=postgres;Database=capacity;Username=postgres;Password=capacity-test-only
+      Auth__TokenSigningKey: capacity-signing-key-000000000000001
+      Auth__GuestIdentityPepper: capacity-identity-pepper-0000000001
+      Auth__MonitoringReadOnlyToken: capacity-monitoring-token-0000000001
+      Auth__ManagementCommandToken: capacity-auth-command-token-00000001
+    depends_on:
+      postgres: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:8080/health/ready"]
+      interval: 2s
+      timeout: 2s
+      retries: 60
+
+  lobby:
+    build:
+      context: ../..
+      dockerfile: Services/GuiyangMahjong.Lobby/Dockerfile
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      Lobby__Persistence__Mode: RedisPostgres
+      Lobby__Persistence__ApplyDatabaseMigrations: "false"
+      Lobby__Persistence__PostgresConnectionString: Host=postgres;Database=capacity;Username=postgres;Password=capacity-test-only
+      Lobby__Persistence__RedisConnectionString: redis:6379,abortConnect=false
+      Lobby__TokenSigningKey: capacity-signing-key-000000000000001
+      Lobby__JoinTicketSigningKey: capacity-join-ticket-key-00000000001
+      Lobby__InternalServiceToken: capacity-internal-token-000000000001
+      Lobby__MonitoringReadOnlyToken: capacity-monitoring-token-0000000001
+      Lobby__ManagementCommandToken: capacity-lobby-command-token-0000001
+      Lobby__Allocator__Enabled: "false"
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:8080/health/ready"]
+      interval: 2s
+      timeout: 2s
+      retries: 60
+
+  admin:
+    build:
+      context: ../..
+      dockerfile: Services/GuiyangMahjong.Admin/Dockerfile
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      Admin__ReadOnlyAccessToken: capacity-admin-token-000000000000001
+      Admin__Auth__Enabled: "true"
+      Admin__Auth__BaseUrl: http://auth:8080
+      Admin__Auth__MonitoringToken: capacity-monitoring-token-0000000001
+      Admin__Lobby__Enabled: "true"
+      Admin__Lobby__BaseUrl: http://lobby:8080
+      Admin__Lobby__MonitoringToken: capacity-monitoring-token-0000000001
+      Admin__PlayerData__Enabled: "false"
+      Admin__Allocators__0__Enabled: "false"
+      Admin__RealtimeCapacity__SnapshotIntervalSeconds: "5"
+      Admin__RealtimeCapacity__PlayerPagesPerSnapshotCycle: "20"
+      Admin__RealtimeCapacity__SseEnabled: "true"
+      Admin__RealtimeCapacity__LegacyPollingEnabled: "false"
+      # 容量环境允许单个测试身份持续读取；生产环境仍使用更严格的默认限额。
+      Admin__WebSecurity__ReadRequestsPerMinute: "1000"
+    depends_on:
+      auth: {condition: service_healthy}
+      lobby: {condition: service_healthy}
+    ports: ["127.0.0.1:38083:8080"]
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:8080/health/ready"]
+      interval: 2s
+      timeout: 2s
+      retries: 90
+
+  k6:
+    image: grafana/k6:0.57.0
+    profiles: ["load"]
+    environment:
+      ADMIN_BASE_URL: http://admin:8080
+      ADMIN_ACCESS_TOKEN: capacity-admin-token-000000000000001
+      MONITORING_REQUESTS_PER_SECOND: ${MONITORING_REQUESTS_PER_SECOND:-10}
+      MONITORING_DURATION: ${MONITORING_DURATION:-2m}
+    volumes:
+      - ../../Scripts/Load:/scripts:ro
+    depends_on:
+      admin: {condition: service_healthy}
+    command: ["run", "/scripts/monitoring-capacity.js"]

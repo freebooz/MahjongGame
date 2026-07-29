@@ -1,7 +1,9 @@
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 COPY Services/GuiyangMahjong.PlayerData/GuiyangMahjong.PlayerData.csproj Services/GuiyangMahjong.PlayerData/
+COPY Services/GuiyangMahjong.Observability/GuiyangMahjong.Observability.csproj Services/GuiyangMahjong.Observability/
 RUN dotnet restore Services/GuiyangMahjong.PlayerData/GuiyangMahjong.PlayerData.csproj
+COPY Services/GuiyangMahjong.Observability/ Services/GuiyangMahjong.Observability/
 COPY Services/GuiyangMahjong.PlayerData/ Services/GuiyangMahjong.PlayerData/
 RUN dotnet publish Services/GuiyangMahjong.PlayerData/GuiyangMahjong.PlayerData.csproj -c Release -o /app --no-restore
 

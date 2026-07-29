@@ -72,8 +72,10 @@ public sealed class RedisPostgresLobbyStore : ILobbyStore
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
         await using var command = new NpgsqlCommand(
             """
-            INSERT INTO lobby_rooms(room_id, room_code, lifecycle, state_sequence, payload, updated_at_utc)
-            VALUES ($1, $2, $3, $4, $5::jsonb, $6)
+            INSERT INTO lobby_rooms(
+                room_id, room_code, lifecycle, state_sequence,
+                payload, created_at_utc, updated_at_utc)
+            VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7)
             ON CONFLICT DO NOTHING
             RETURNING room_id
             """, connection, transaction);
@@ -82,6 +84,7 @@ public sealed class RedisPostgresLobbyStore : ILobbyStore
         command.Parameters.AddWithValue(room.Lifecycle.ToString());
         command.Parameters.AddWithValue(room.StateSequence);
         command.Parameters.AddWithValue(payload);
+        command.Parameters.AddWithValue(room.CreatedAtUtc);
         command.Parameters.AddWithValue(room.UpdatedAtUtc);
         var inserted = await command.ExecuteScalarAsync(cancellationToken);
         if (inserted is null)
@@ -132,6 +135,40 @@ public sealed class RedisPostgresLobbyStore : ILobbyStore
         return room;
     }
 
+    /// <summary>
+    /// 通过 active_player_rooms 索引一次批量关联房间，避免监控页对每名玩家执行一次数据库往返。
+    /// </summary>
+    public async Task<IReadOnlyDictionary<string, LobbyRoom>>
+        GetActiveRoomsByPlayersAsync(
+            IReadOnlyCollection<string> playerIds,
+            CancellationToken cancellationToken)
+    {
+        if (playerIds.Count == 0)
+            return new Dictionary<string, LobbyRoom>(StringComparer.Ordinal);
+        var normalizedIds = playerIds
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        await using var command = postgres.CreateCommand(
+            """
+            SELECT active.player_id, room.payload::text
+            FROM active_player_rooms AS active
+            JOIN lobby_rooms AS room ON room.room_id = active.room_id
+            WHERE active.player_id = ANY($1)
+            """);
+        command.Parameters.AddWithValue(normalizedIds);
+        var result = new Dictionary<string, LobbyRoom>(StringComparer.Ordinal);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            var room = JsonSerializer.Deserialize<LobbyRoom>(
+                reader.GetString(1),
+                JsonOptions);
+            if (room is not null)
+                result[reader.GetString(0)] = room;
+        }
+        return result;
+    }
+
     public async Task<IReadOnlyList<LobbyRoom>> ListPublicRoomsAsync(CancellationToken cancellationToken)
     {
         await using var command = postgres.CreateCommand(
@@ -151,14 +188,53 @@ public sealed class RedisPostgresLobbyStore : ILobbyStore
     }
 
     public async Task<IReadOnlyList<LobbyRoom>> ListRoomsForMonitoringAsync(
-        int limit, CancellationToken cancellationToken)
+        int limit,
+        DateTimeOffset? afterCreatedAtUtc,
+        string? afterRoomId,
+        string? lifecycle,
+        string? gameMode,
+        string? search,
+        CancellationToken cancellationToken)
     {
         await using var command = postgres.CreateCommand(
             """
             SELECT payload::text FROM lobby_rooms
-            ORDER BY updated_at_utc DESC LIMIT $1
+            WHERE ($4 = '' OR lower(lifecycle) = lower($4))
+              AND (
+                $5 = ''
+                OR COALESCE(
+                    payload -> 'ruleSnapshot' ->> 'gameMode',
+                    payload -> 'ruleSnapshot' ->> 'playMode',
+                    payload -> 'ruleSnapshot' ->> 'variant',
+                    'Standard') ILIKE $5)
+              AND (
+                $6 = ''
+                OR room_id ILIKE '%' || $6 || '%'
+                OR room_code ILIKE '%' || $6 || '%'
+                OR payload ->> 'matchId' ILIKE '%' || $6 || '%'
+                OR EXISTS (
+                    SELECT 1
+                    FROM jsonb_array_elements_text(
+                        payload -> 'playerIds') AS player_id
+                    WHERE player_id ILIKE '%' || $6 || '%'))
+              AND (
+                $1::timestamptz IS NULL
+                OR (created_at_utc, room_id) < ($1, $2))
+            ORDER BY created_at_utc DESC, room_id DESC
+            LIMIT $3
             """);
+        command.Parameters.Add(new Npgsql.NpgsqlParameter
+        {
+            NpgsqlDbType = NpgsqlTypes.NpgsqlDbType.TimestampTz,
+            Value = afterCreatedAtUtc.HasValue
+                ? afterCreatedAtUtc.Value
+                : DBNull.Value
+        });
+        command.Parameters.AddWithValue(afterRoomId ?? string.Empty);
         command.Parameters.AddWithValue(limit);
+        command.Parameters.AddWithValue(lifecycle?.Trim() ?? string.Empty);
+        command.Parameters.AddWithValue(gameMode?.Trim() ?? string.Empty);
+        command.Parameters.AddWithValue(search?.Trim() ?? string.Empty);
         var result = new List<LobbyRoom>();
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))

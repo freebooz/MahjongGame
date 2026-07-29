@@ -6,10 +6,14 @@ using Microsoft.Extensions.Options;
 
 namespace GuiyangMahjong.Admin.Security;
 
+/// <summary>
+/// Admin API 身份边界：生产使用企业 OIDC/JWT、MFA 和短时令牌；本地静态令牌仅用于非生产调试。
+/// </summary>
 public sealed class AdminAuthenticationMiddleware(
     RequestDelegate next,
     IOptions<AdminOptions> options)
 {
+    private readonly AdminAbacOptions abac = options.Value.Abac;
     private readonly byte[] expected =
         Encoding.UTF8.GetBytes(options.Value.ReadOnlyAccessToken);
     private readonly (byte[] Token, AdminPrincipal Principal)[] principals =
@@ -17,7 +21,11 @@ public sealed class AdminAuthenticationMiddleware(
             Encoding.UTF8.GetBytes(item.AccessToken),
             new AdminPrincipal(
                 item.OperatorId,
-                item.Roles.ToHashSet(StringComparer.Ordinal))))
+                item.Roles.ToHashSet(StringComparer.Ordinal),
+                item.Regions.ToHashSet(StringComparer.Ordinal),
+                item.CaseIds.ToHashSet(StringComparer.Ordinal),
+                item.ShiftId,
+                MfaSatisfied: true)))
             .ToArray();
     private readonly EnterpriseIdentityOptions enterprise =
         options.Value.EnterpriseIdentity;
@@ -62,6 +70,17 @@ public sealed class AdminAuthenticationMiddleware(
                         .Contains(
                             enterprise.MfaValue,
                             StringComparer.OrdinalIgnoreCase));
+            // 强制 iat 与 jti，确保企业角色撤销最多在短令牌窗口内生效，并保留可追踪的令牌标识。
+            var issuedAtValid = long.TryParse(
+                    context.User.FindFirstValue("iat"),
+                    out var issuedAtSeconds)
+                && DateTimeOffset.FromUnixTimeSeconds(issuedAtSeconds)
+                    >= DateTimeOffset.UtcNow.AddMinutes(
+                        -enterprise.MaxTokenAgeMinutes)
+                && DateTimeOffset.FromUnixTimeSeconds(issuedAtSeconds)
+                    <= DateTimeOffset.UtcNow.AddMinutes(1);
+            var tokenIdValid = !string.IsNullOrWhiteSpace(
+                context.User.FindFirstValue("jti"));
             if (string.IsNullOrWhiteSpace(operatorId)
                 || operatorId.Length > 128
                 || roles.Count == 0)
@@ -82,9 +101,26 @@ public sealed class AdminAuthenticationMiddleware(
                     "A recent multi-factor authentication is required.");
                 return;
             }
+            if (!issuedAtValid || !tokenIdValid)
+            {
+                await RejectAsync(
+                    context,
+                    StatusCodes.Status401Unauthorized,
+                    "ADMIN_ENTERPRISE_TOKEN_TOO_OLD",
+                    "The enterprise token is missing a traceable id or exceeds the allowed session age.");
+                return;
+            }
             AdminPrincipalContext.Set(
                 context,
-                new AdminPrincipal(operatorId, roles));
+                new AdminPrincipal(
+                    operatorId,
+                    roles,
+                    ReadAttributeSet(context.User, abac.RegionClaim),
+                    ReadAttributeSet(context.User, abac.CaseClaim),
+                    context.User.FindFirstValue(abac.ShiftClaim)?.Trim(),
+                    mfaSatisfied,
+                    ParseUtc(context.User.FindFirstValue(
+                        abac.BreakGlassUntilClaim))));
             await next(context);
             return;
         }
@@ -126,6 +162,30 @@ public sealed class AdminAuthenticationMiddleware(
         AdminPrincipalContext.Set(context, principal);
         await next(context);
     }
+
+    /// <summary>将多值或分隔字符串 Claim 统一为严格区分大小写的属性集合，避免客户端自行扩张范围。</summary>
+    private static IReadOnlySet<string> ReadAttributeSet(
+        ClaimsPrincipal principal,
+        string claimType) =>
+        principal.Claims
+            .Where(claim => claim.Type == claimType)
+            .SelectMany(claim => claim.Value.Split(
+                [' ', ','],
+                StringSplitOptions.RemoveEmptyEntries
+                | StringSplitOptions.TrimEntries))
+            .Where(value => value.Length <= 128)
+            .ToHashSet(StringComparer.Ordinal);
+
+    /// <summary>解析紧急授权截止时间；格式非法时按无授权处理，绝不采用宽松时间推断。</summary>
+    private static DateTimeOffset? ParseUtc(string? value) =>
+        DateTimeOffset.TryParse(
+            value,
+            System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.AssumeUniversal
+            | System.Globalization.DateTimeStyles.AdjustToUniversal,
+            out var parsed)
+            ? parsed
+            : null;
 
     private static async Task RejectAsync(
         HttpContext context,

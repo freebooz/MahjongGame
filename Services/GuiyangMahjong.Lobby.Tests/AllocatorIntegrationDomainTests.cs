@@ -1,4 +1,8 @@
+<<<<<<< HEAD
+using System.Security.Cryptography;
+=======
 using System.Text;
+>>>>>>> 50429c000bb99dda5845ee9162aabb9e75a2c8fa
 using System.Text.Json;
 using GuiyangMahjong.Lobby.Domain;
 using GuiyangMahjong.Lobby.Options;
@@ -312,6 +316,15 @@ public sealed class AllocatorIntegrationDomainTests
         Assert.True(duplicate.Duplicate);
         Assert.Equal(RoomLifecycle.Closed,
             (await fixture.Store.GetRoomByIdAsync(room.RoomId, CancellationToken.None))?.Lifecycle);
+        var runtime = await fixture.Monitoring.GetRuntimeAsync(room.RoomId, CancellationToken.None);
+        Assert.NotNull(runtime);
+        Assert.Equal("Completed", runtime.Settlement?.Status);
+        Assert.Equal(report.ResultSequence, runtime.Settlement?.ResultSequence);
+        var canonicalResult = JsonSerializer.SerializeToUtf8Bytes(
+            report, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        var expectedHash = Convert.ToHexString(SHA256.HashData(canonicalResult)).ToLowerInvariant();
+        Assert.Equal(expectedHash, runtime.Settlement?.ResultHash);
+        Assert.Equal(fixture.Time.GetUtcNow(), runtime.Settlement?.ConfirmedAtUtc);
         Assert.Equal(2, fixture.Allocator.DrainCount);
         var conflicting = report with
         {
@@ -376,17 +389,18 @@ public sealed class AllocatorIntegrationDomainTests
         var store = new InMemoryLobbyStore();
         var allocator = new RecordingAllocatorClient();
         var time = new FixedTimeProvider(DateTimeOffset.Parse("2026-07-18T00:00:00Z"));
+        var monitoring = new InMemoryRoomMonitoringStore();
         var service = new LobbyService(
             store,
             new RoomPasswordService(options, time),
             new NoOpEventPublisher(),
             allocator,
             new HmacJoinTicketIssuer(options, time),
-            new InMemoryRoomMonitoringStore(),
+            monitoring,
             options,
             time,
             NullLogger<LobbyService>.Instance);
-        return new Fixture(service, store, allocator, time);
+        return new Fixture(service, store, monitoring, allocator, time);
     }
 
     private static CreateRoomRequest NewCreateRequest() => new(
@@ -406,9 +420,13 @@ public sealed class AllocatorIntegrationDomainTests
         "test",
         DateTimeOffset.UtcNow);
 
+    /// <summary>
+    /// 保存真实 Lobby 领域服务、权威房间存储和只读监控存储，便于同时验证结算事务与投影。
+    /// </summary>
     private sealed record Fixture(
         LobbyService Service,
         InMemoryLobbyStore Store,
+        InMemoryRoomMonitoringStore Monitoring,
         RecordingAllocatorClient Allocator,
         FixedTimeProvider Time);
 

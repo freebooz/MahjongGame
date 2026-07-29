@@ -549,6 +549,8 @@ public sealed class PostgresAuthStore(NpgsqlDataSource postgres) : IAuthStore, I
     public async Task<IReadOnlyList<PlayerDirectoryItem>> ListPlayersAsync(
         string? search,
         int limit,
+        DateTimeOffset? afterCreatedAtUtc,
+        string? afterPlayerId,
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
@@ -583,13 +585,25 @@ public sealed class PostgresAuthStore(NpgsqlDataSource postgres) : IAuthStore, I
                 WHERE player_id=identity.player_id AND outcome='Success'
                 ORDER BY occurred_at_utc DESC LIMIT 1
             ) AS latest ON TRUE
-            WHERE $2='' OR identity.player_id ILIKE '%' || $2 || '%'
-                        OR identity.display_name ILIKE '%' || $2 || '%'
-            ORDER BY identity.updated_at_utc DESC
-            LIMIT $3
+            WHERE ($2='' OR identity.player_id ILIKE '%' || $2 || '%'
+                         OR identity.display_name ILIKE '%' || $2 || '%')
+              AND (
+                  $3::timestamptz IS NULL
+                  OR (identity.created_at_utc, identity.player_id)
+                     < ($3, $4))
+            ORDER BY identity.created_at_utc DESC, identity.player_id DESC
+            LIMIT $5
             """);
         command.Parameters.AddWithValue(now);
         command.Parameters.AddWithValue(search?.Trim() ?? string.Empty);
+        command.Parameters.Add(new NpgsqlParameter
+        {
+            NpgsqlDbType = NpgsqlDbType.TimestampTz,
+            Value = afterCreatedAtUtc.HasValue
+                ? afterCreatedAtUtc.Value
+                : DBNull.Value
+        });
+        command.Parameters.AddWithValue(afterPlayerId ?? string.Empty);
         command.Parameters.AddWithValue(limit);
         var result = new List<PlayerDirectoryItem>();
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);

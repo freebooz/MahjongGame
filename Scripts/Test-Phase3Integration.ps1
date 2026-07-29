@@ -1,4 +1,4 @@
-param(
+﻿param(
     [int]$LobbyPort = 28080,
     [int]$AllocatorPort = 28081,
     [int]$GameServerPortStart = 29000,
@@ -6,11 +6,14 @@ param(
     [string[]]$GameServerPrefixArguments = @(),
     [int]$RegistrationTimeoutSeconds = 10,
     [int]$HeartbeatTimeoutSeconds = 3,
+    [int]$HealthWaitAttempts = 120,
     [int]$RouteWaitAttempts = 40,
     [int]$FailureWaitAttempts = 40,
     [switch]$VerifySettlementOutboxRecovery
 )
 
+# 本机首次加载 .NET 运行时或系统处于高负载时，服务启动可能超过原来的 10 秒；
+# 健康检查参数只扩大测试服务的启动等待，不改变任何业务请求超时。
 $ErrorActionPreference = 'Stop'
 $lobby = $null
 $allocator = $null
@@ -29,7 +32,8 @@ if ([string]::IsNullOrWhiteSpace($GameServerExecutablePath) -or
 }
 
 function Wait-Health([string]$Url) {
-    for ($attempt = 0; $attempt -lt 40; $attempt++) {
+    # 每 250 毫秒探测一次，达到上限后失败关闭，避免后续步骤连接到未就绪服务。
+    for ($attempt = 0; $attempt -lt $HealthWaitAttempts; $attempt++) {
         try {
             $null = Invoke-RestMethod -Uri $Url -TimeoutSec 1
             return
@@ -124,7 +128,8 @@ try {
         '--Lobby:Persistence:Mode=InMemory'
     )
     $lobby = Start-Process -FilePath 'dotnet' -ArgumentList $lobbyArguments -WindowStyle Hidden -PassThru
-    Wait-Health "http://127.0.0.1:$LobbyPort/health/ready"
+    # Lobby 的就绪状态依赖 Allocator；先等待存活探针，再启动 Allocator，避免形成启动循环等待。
+    Wait-Health "http://127.0.0.1:$LobbyPort/health/live"
 
     $allocatorArguments = @(
         $allocatorDll,
@@ -150,6 +155,8 @@ try {
     }
     $allocator = Start-Process -FilePath 'dotnet' -ArgumentList $allocatorArguments -WindowStyle Hidden -PassThru
     Wait-Health "http://127.0.0.1:$AllocatorPort/health/ready"
+    # Allocator 就绪后再验证 Lobby 的完整依赖链，确保后续房间请求不会落到半就绪环境。
+    Wait-Health "http://127.0.0.1:$LobbyPort/health/ready"
 
     function New-PlayerToken([string]$PlayerId) {
         $tokenPayloadJson = @{
