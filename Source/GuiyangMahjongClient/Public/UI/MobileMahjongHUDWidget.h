@@ -5,7 +5,7 @@
 #include "Network/MahjongNetworkTypes.h"
 #include "MobileMahjongHUDWidget.generated.h"
 
-class UButton; class UHorizontalBox; class UOverlay; class UTextBlock; class UVerticalBox; class UViewport; class UWidget; class UWrapBox;
+class UButton; class UHorizontalBox; class UImage; class UOverlay; class UTextBlock; class UVerticalBox; class UViewport; class UWidget; class UWrapBox;
 class AMahjong3DTableActor;
 class UMobileActionButtonPanel;
 class UMobileHandTileWidget;
@@ -70,6 +70,10 @@ protected:
     /** Temporary room portraits; authoritative player images can replace these brushes later. */
     UPROPERTY(Transient) TObjectPtr<UTexture2D> PlaceholderAvatarA;
     UPROPERTY(Transient) TObjectPtr<UTexture2D> PlaceholderAvatarB;
+    /** Avatar-attached turn rings and dealer badges, ordered Self/Right/Top/Left. */
+    UPROPERTY(Transient) TArray<TObjectPtr<UImage>> TurnIndicatorRings;
+    UPROPERTY(Transient) TArray<TObjectPtr<UTextBlock>> DealerBadges;
+    float TurnIndicatorAngle = 0.0f;
     /** 最近一次公共/私有快照；UI 重建只读取缓存，不修改权威状态。 */
     UPROPERTY() FMahjongPublicTableState CachedPublicState;
     UPROPERTY() FMahjongPrivatePlayerState CachedPrivateState;
@@ -109,6 +113,8 @@ private:
     void RefreshMelds(int32 LocalSeat);
     void RefreshJiDisplay();
     void ApplyPlaceholderAvatars();
+    void EnsureSeatIndicators();
+    void RefreshSeatIndicators(int32 CurrentTurnSeat, int32 LocalSeat);
     /** 把同一份缓存快照同步给三维桌面表现。 */
     void Refresh3DTable();
 };

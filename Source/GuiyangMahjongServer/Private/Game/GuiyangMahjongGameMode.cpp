@@ -205,11 +205,14 @@ void AGuiyangMahjongGameMode::PreLogin(const FString& Options, const FString& Ad
         if (It.Value() <= NowUnixSeconds)
         {
             PendingAuthorizedPlayersByTicketDigest.Remove(It.Key());
+            PendingAuthorizedDisplayNamesByTicketDigest.Remove(It.Key());
             It.RemoveCurrent();
         }
     }
     const FString TicketDigest = HashJoinTicket(JoinTicket);
     PendingAuthorizedPlayersByTicketDigest.Add(TicketDigest, Claims.PlayerId);
+    PendingAuthorizedDisplayNamesByTicketDigest.Add(
+        TicketDigest, Claims.DisplayName.TrimStartAndEnd());
     PendingTicketExpiryByDigest.Add(TicketDigest, Claims.ExpiresAtUnixSeconds);
 }
 
@@ -224,30 +227,105 @@ FString AGuiyangMahjongGameMode::InitNewPlayer(APlayerController* NewPlayerContr
         UGameplayStatics::ParseOption(Options, TEXT("JoinTicket")));
     const FString TicketDigest = HashJoinTicket(JoinTicket);
     FString PlayerId;
+    FString DisplayName;
     int64 TicketExpiry = 0;
     const bool bHasPlayerBinding = PendingAuthorizedPlayersByTicketDigest.RemoveAndCopyValue(TicketDigest, PlayerId);
+    const bool bHasDisplayName =
+        PendingAuthorizedDisplayNamesByTicketDigest.RemoveAndCopyValue(TicketDigest, DisplayName);
     const bool bHasExpiry = PendingTicketExpiryByDigest.RemoveAndCopyValue(TicketDigest, TicketExpiry);
-    if (!bHasPlayerBinding || !bHasExpiry || TicketExpiry <= FDateTime::UtcNow().ToUnixTimestamp()
-        || PlayerId.IsEmpty() || !NewPlayerController)
+    if (!bHasPlayerBinding || !bHasDisplayName || !bHasExpiry
+        || TicketExpiry <= FDateTime::UtcNow().ToUnixTimestamp()
+        || PlayerId.IsEmpty() || DisplayName.IsEmpty() || !NewPlayerController)
     {
         return TEXT("JOIN_TICKET_BINDING_FAILED");
     }
     AuthorizedPlayerIdsByController.Add(NewPlayerController, MoveTemp(PlayerId));
+    AuthorizedDisplayNamesByController.Add(NewPlayerController, MoveTemp(DisplayName));
     return FString();
+}
+
+void AGuiyangMahjongGameMode::GetConnectedAuthorizedPlayerIds(
+    TArray<FString>& OutPlayerIds) const
+{
+    OutPlayerIds.Reset();
+    TSet<FString> UniquePlayerIds;
+    for (const TPair<TObjectPtr<APlayerController>, FString>& Entry
+        : AuthorizedPlayerIdsByController)
+    {
+        const APlayerController* Controller = Entry.Key.Get();
+        if (!IsValid(Controller) || !Controller->GetNetConnection()
+            || Entry.Value.IsEmpty() || UniquePlayerIds.Contains(Entry.Value))
+        {
+            continue;
+        }
+        UniquePlayerIds.Add(Entry.Value);
+        OutPlayerIds.Add(Entry.Value);
+    }
 }
 
 void AGuiyangMahjongGameMode::PostLogin(APlayerController* NewPlayer)
 {
     Super::PostLogin(NewPlayer);
-    if (const FString* PlayerId = AuthorizedPlayerIdsByController.Find(NewPlayer))
+    if (const FString* AuthorizedPlayerId = AuthorizedPlayerIdsByController.Find(NewPlayer))
     {
+        const FString PlayerId = *AuthorizedPlayerId;
         if (UGameInstance* GameInstance = GetGameInstance())
         {
             if (UGuiyangAgonesLifecycleSubsystem* Lifecycle =
                 GameInstance->GetSubsystem<UGuiyangAgonesLifecycleSubsystem>())
             {
-                Lifecycle->NotifyPlayerConnected(*PlayerId);
+                Lifecycle->NotifyPlayerConnected(PlayerId);
             }
+        }
+
+        // The short-lived signed JoinTicket is the authoritative admission credential for a
+        // managed GameServer. Complete the server session and room admission here instead of
+        // waiting for a second client profile RPC. This keeps direct/reconnect travel from
+        // getting stuck on the creating-room screen when the client login UI has no lobby token.
+        const FString* AuthorizedDisplayName = AuthorizedDisplayNamesByController.Find(NewPlayer);
+        const FString DisplayName = AuthorizedDisplayName ? *AuthorizedDisplayName : FString();
+        AGuiyangMahjongPlayerController* MahjongController =
+            Cast<AGuiyangMahjongPlayerController>(NewPlayer);
+        AGuiyangMahjongPlayerState* MahjongPlayer = MahjongController
+            ? MahjongController->GetPlayerState<AGuiyangMahjongPlayerState>()
+            : nullptr;
+        if (DisplayName.IsEmpty() || !MahjongPlayer
+            || !MahjongPlayer->AuthenticateServer(
+                PlayerId, DisplayName, EGuiyangLoginProvider::Guest))
+        {
+            if (MahjongController)
+            {
+                MahjongController->Client_ShowErrorMessage(TEXT("入场票据身份初始化失败"));
+            }
+            return;
+        }
+
+        FMahjongRoomState State;
+        if (!RoomManager || ManagedRoomCode.IsEmpty())
+        {
+            MahjongController->Client_ShowErrorMessage(TEXT("托管房间尚未就绪"));
+            return;
+        }
+        EMahjongRoomError Error = EMahjongRoomError::None;
+        if (!RoomManager->AdmitManagedPlayer(
+                ManagedRoomCode, PlayerId, DisplayName, State, Error))
+        {
+            MahjongController->Client_ShowErrorMessage(ErrorToMessage(Error));
+            return;
+        }
+        const FMahjongSeatInfo* Seat = State.Seats.FindByPredicate(
+            [&PlayerId](const FMahjongSeatInfo& Item)
+            {
+                return Item.bOccupied && Item.PlayerId == PlayerId;
+            });
+        MahjongPlayer->EnterRoomServer(
+            State.RoomInfo.RoomId,
+            Seat ? Seat->SeatIndex : INDEX_NONE,
+            Seat ? Seat->bReady : false);
+        PublishRoomState(State);
+        if (State.Lifecycle == EMahjongRoomLifecycle::Starting)
+        {
+            TryStartTable(State);
         }
     }
 }
@@ -285,6 +363,7 @@ void AGuiyangMahjongGameMode::Logout(AController* Exiting)
         }
     }
     AuthorizedPlayerIdsByController.Remove(Cast<APlayerController>(Exiting));
+    AuthorizedDisplayNamesByController.Remove(Cast<APlayerController>(Exiting));
     Super::Logout(Exiting);
 }
 
@@ -301,8 +380,10 @@ void AGuiyangMahjongGameMode::EndPlay(const EEndPlayReason::Type EndPlayReason)
     }
     if (GameServerBridge) GameServerBridge->Shutdown();
     PendingAuthorizedPlayersByTicketDigest.Reset();
+    PendingAuthorizedDisplayNamesByTicketDigest.Reset();
     PendingTicketExpiryByDigest.Reset();
     AuthorizedPlayerIdsByController.Reset();
+    AuthorizedDisplayNamesByController.Reset();
     ManagedRoomCode.Reset();
     Super::EndPlay(EndPlayReason);
 }

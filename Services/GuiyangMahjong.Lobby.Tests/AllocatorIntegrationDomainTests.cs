@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 using System.Security.Cryptography;
+=======
+using System.Text;
+>>>>>>> 50429c000bb99dda5845ee9162aabb9e75a2c8fa
 using System.Text.Json;
 using GuiyangMahjong.Lobby.Domain;
 using GuiyangMahjong.Lobby.Options;
@@ -48,6 +52,16 @@ public sealed class AllocatorIntegrationDomainTests
         Assert.Equal(fixture.Allocator.ServerInstanceId, route.ServerInstanceId);
         Assert.NotEmpty(route.JoinTicket);
         Assert.True(route.TicketExpireAtUtc > fixture.Time.GetUtcNow());
+        var encodedPayload = route.JoinTicket.Split('.', 2)[0]
+            .Replace('-', '+')
+            .Replace('_', '/');
+        encodedPayload = encodedPayload.PadRight(
+            encodedPayload.Length + ((4 - encodedPayload.Length % 4) % 4),
+            '=');
+        using var payload = JsonDocument.Parse(
+            Encoding.UTF8.GetString(Convert.FromBase64String(encodedPayload)));
+        Assert.Equal(owner.PlayerId, payload.RootElement.GetProperty("playerId").GetString());
+        Assert.Equal(owner.DisplayName, payload.RootElement.GetProperty("displayName").GetString());
     }
 
     [Fact]

@@ -109,6 +109,7 @@ bool FGuiyangJoinTicketValidator::ValidateAndConsume(const FString& Ticket, cons
     const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(PayloadJson);
     if (!FJsonSerializer::Deserialize(Reader, Payload) || !Payload.IsValid()
         || !Payload->TryGetStringField(TEXT("playerId"), OutClaims.PlayerId)
+        || !Payload->TryGetStringField(TEXT("displayName"), OutClaims.DisplayName)
         || !Payload->TryGetStringField(TEXT("roomId"), OutClaims.RoomId)
         || !Payload->TryGetStringField(TEXT("matchId"), OutClaims.MatchId)
         || !Payload->TryGetStringField(TEXT("serverInstanceId"), OutClaims.ServerInstanceId)
@@ -121,6 +122,8 @@ bool FGuiyangJoinTicketValidator::ValidateAndConsume(const FString& Ticket, cons
 
     // 票据必须同时绑定玩家、房间、比赛和本次服务器实例，不能跨服复用。
     if (OutClaims.PlayerId != SuppliedPlayerId
+        || OutClaims.DisplayName.TrimStartAndEnd().IsEmpty()
+        || OutClaims.DisplayName.TrimStartAndEnd().Len() > 24
         || OutClaims.RoomId != ExpectedRoomId
         || OutClaims.MatchId != ExpectedMatchId
         || OutClaims.ServerInstanceId != ExpectedServerInstanceId)
@@ -128,6 +131,7 @@ bool FGuiyangJoinTicketValidator::ValidateAndConsume(const FString& Ticket, cons
         OutError = TEXT("JOIN_TICKET_SCOPE_MISMATCH");
         return false;
     }
+    OutClaims.DisplayName.TrimStartAndEndInline();
     // 除了过期检查，也拒绝有效期异常长的票据，限制密钥泄露后的攻击窗口。
     if (OutClaims.ExpiresAtUnixSeconds <= NowUnixSeconds
         || OutClaims.ExpiresAtUnixSeconds > NowUnixSeconds + 120)

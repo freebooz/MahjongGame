@@ -382,19 +382,19 @@ void UGuiyangGameServerBridge::SendHeartbeat()
     int32 RoundId = 0;
     const FString Lifecycle = BuildHeartbeatLifecycle(RoundId);
     TArray<TSharedPtr<FJsonValue>> ConnectedPlayerIds;
-    // 以服务器当前 PlayerController 数量作为心跳在线人数，不信任客户端上报。
-    for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
+    TArray<FString> AuthorizedPlayerIds;
+    if (const AGuiyangMahjongGameMode* GameMode =
+        World->GetAuthGameMode<AGuiyangMahjongGameMode>())
     {
-        const APlayerController* Controller = It->Get();
-        const AGuiyangMahjongPlayerState* PlayerState = Controller
-            ? Controller->GetPlayerState<AGuiyangMahjongPlayerState>()
-            : nullptr;
-        if (PlayerState && !PlayerState->MahjongPlayerId.IsEmpty())
-        {
-            ConnectedPlayerIds.Add(MakeShared<FJsonValueString>(PlayerState->MahjongPlayerId));
-        }
+        // The signed join ticket authenticates a connection before the optional
+        // client profile RPC runs. Counting PlayerState identities here used to
+        // report zero, so Lobby reclaimed a live room after its empty timeout.
+        GameMode->GetConnectedAuthorizedPlayerIds(AuthorizedPlayerIds);
     }
-
+    for (const FString& PlayerId : AuthorizedPlayerIds)
+    {
+        ConnectedPlayerIds.Add(MakeShared<FJsonValueString>(PlayerId));
+    }
     const TSharedRef<FJsonObject> Body = MakeShared<FJsonObject>();
     // 显式携带版本便于 Lobby 拒绝未知语义；旧构建未携带时仍按 v1 兼容。
     Body->SetNumberField(

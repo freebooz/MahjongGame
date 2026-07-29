@@ -73,8 +73,8 @@ namespace GuiyangManagedGameServerTests
     constexpr const TCHAR* MatchId = TEXT("22222222-2222-2222-2222-222222222222");
     constexpr const TCHAR* InstanceId = TEXT("33333333-3333-3333-3333-333333333333");
     constexpr const TCHAR* ValidTicket = TEXT(
-        "eyJwbGF5ZXJJZCI6InBsYXllci0xIiwicm9vbUlkIjoiMTExMTExMTEtMTExMS0xMTExLTExMTEtMTExMTExMTExMTExIiwibWF0Y2hJZCI6IjIyMjIyMjIyLTIyMjItMjIyMi0yMjIyLTIyMjIyMjIyMjIyMiIsInNlcnZlckluc3RhbmNlSWQiOiIzMzMzMzMzMy0zMzMzLTMzMzMtMzMzMy0zMzMzMzMzMzMzMzMiLCJleHBpcmVzQXRVbml4U2Vjb25kcyI6MjAwMDAwMDAzMCwibm9uY2UiOiI0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NCJ9."
-        "Q4ZcDqoWDZZdQlHljOerhehnaHH8hrV5hm5HcvLJF9E");
+        "eyJwbGF5ZXJJZCI6InBsYXllci0xIiwiZGlzcGxheU5hbWUiOiLmtYvor5XnjqnlrrYiLCJyb29tSWQiOiIxMTExMTExMS0xMTExLTExMTEtMTExMS0xMTExMTExMTExMTEiLCJtYXRjaElkIjoiMjIyMjIyMjItMjIyMi0yMjIyLTIyMjItMjIyMjIyMjIyMjIyIiwic2VydmVySW5zdGFuY2VJZCI6IjMzMzMzMzMzLTMzMzMtMzMzMy0zMzMzLTMzMzMzMzMzMzMzMyIsImV4cGlyZXNBdFVuaXhTZWNvbmRzIjoyMDAwMDAwMDMwLCJub25jZSI6IjQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0In0."
+        "kM_Qa8MeH-B-BLF6TcCiQUzMy_9w7Rbi0FdgKnyQGUg");
 
     FGuiyangGameServerLaunchConfig MakeConfig()
     {
@@ -160,6 +160,7 @@ bool FGuiyangJoinTicketValidationTest::RunTest(const FString& Parameters)
     TestTrue(TEXT("签名、范围和期限正确的票据应通过"), Validator.ValidateAndConsume(
         GuiyangManagedGameServerTests::ValidTicket, TEXT("player-1"), 2000000000, Claims, Error));
     TestEqual(TEXT("PlayerId 必须来自已签名载荷"), Claims.PlayerId, FString(TEXT("player-1")));
+    TestEqual(TEXT("显示名必须来自已签名载荷"), Claims.DisplayName, FString(TEXT("测试玩家")));
 
     FGuiyangJoinTicketClaims ReplayClaims;
     TestFalse(TEXT("同一 nonce 不得重复消费"), Validator.ValidateAndConsume(

@@ -3,6 +3,7 @@
 #include "Components/Button.h"
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
+#include "Blueprint/WidgetTree.h"
 #include "GuiyangMahjong.h"
 
 void UMobileSettlementWidget::NativeConstruct()
@@ -10,11 +11,17 @@ void UMobileSettlementWidget::NativeConstruct()
     Super::NativeConstruct();
     Btn_NextRound->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleNextRound);
     Btn_BackLobby->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleBackLobby);
+    if (UTextBlock* ConfirmLabel =
+        Cast<UTextBlock>(WidgetTree->FindWidget(TEXT("Btn_NextRound_Label"))))
+    {
+        ConfirmLabel->SetText(FText::FromString(TEXT("确定")));
+    }
 }
 
 void UMobileSettlementWidget::SetSettlementResult(const FMahjongSettlementResult& Result)
 {
     Btn_NextRound->SetVisibility(ESlateVisibility::Visible);
+    Btn_NextRound->SetIsEnabled(true);
     Txt_ResultTitle->SetText(FText::FromString(Result.bDrawGame ? TEXT("本局流局") : FString::Printf(TEXT("座位 %d 胡牌"), Result.WinnerSeat)));
     Txt_HuType->SetText(FText::FromString(Result.bSelfDraw ? TEXT("自摸") : TEXT("点炮")));
     FString JiSummary = Result.FlippedJiTile.IsValid()
@@ -53,7 +60,14 @@ void UMobileSettlementWidget::SetFinalSettlementResult(const FMahjongFinalSettle
 
 void UMobileSettlementWidget::HandleNextRound()
 {
-    if (AGuiyangMahjongPlayerController* PC = Cast<AGuiyangMahjongPlayerController>(GetOwningPlayer())) PC->Server_RequestNextRound();
+    // Acknowledge once locally; the authoritative server starts the next round
+    // only after all four occupied seats have acknowledged their settlement.
+    Btn_NextRound->SetIsEnabled(false);
+    if (AGuiyangMahjongPlayerController* PC =
+        Cast<AGuiyangMahjongPlayerController>(GetOwningPlayer()))
+    {
+        PC->Server_RequestNextRound();
+    }
 }
 void UMobileSettlementWidget::HandleBackLobby()
 {

@@ -1541,6 +1541,8 @@ bool FMahjongThreeDTableLayoutTest::RunTest(const FString& Parameters)
             {
                 TestEqual(TEXT("天光必须由展示蓝图拥有"),
                     Sky->CreationMethod, EComponentCreationMethod::SimpleConstructionScript);
+                TestFalse(TEXT("封闭麻将房不得启用实时天空捕获"),
+                    Sky->IsRealTimeCaptureEnabled());
             }
             TArray<URectLightComponent*> RectLights;
             PresentationInstance->GetComponents<URectLightComponent>(RectLights);
@@ -1568,6 +1570,16 @@ bool FMahjongThreeDTableLayoutTest::RunTest(const FString& Parameters)
             const UStaticMeshComponent* TableMeshComponent = nullptr;
             for (const UStaticMeshComponent* Component : StaticMeshes)
             {
+                if (Component && Component->GetStaticMesh())
+                {
+                    const FString GeometryIdentity =
+                        Component->GetName() + TEXT(" ")
+                        + Component->GetStaticMesh()->GetPathName();
+                    TestFalse(TEXT("房间展示蓝图不得包含球体或天空穹顶几何体"),
+                        GeometryIdentity.Contains(TEXT("Sphere"), ESearchCase::IgnoreCase)
+                        || GeometryIdentity.Contains(TEXT("Dome"), ESearchCase::IgnoreCase)
+                        || GeometryIdentity.Contains(TEXT("Hemisphere"), ESearchCase::IgnoreCase));
+                }
                 if (Component && Component->GetName() == TEXT("MahjongTableMesh"))
                 {
                     TableMeshComponent = Component;

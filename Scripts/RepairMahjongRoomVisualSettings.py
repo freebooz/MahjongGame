@@ -7,7 +7,7 @@ BLUEPRINT_PATH = "/Game/Client/Room/Presentation/BP_MahjongRoomPresentation"
 TABLE_MESH_PATH = "/Game/Art/Mahjong/Table/Meshes/SM_StandardMahjongTable"
 TABLE_CLASS_PATH = "/Script/GuiyangMahjongClient.Mahjong3DTableActor"
 SCHEMA_METADATA_TAG = "MahjongPresentationSchemaVersion"
-SCHEMA_VERSION = "6"
+SCHEMA_VERSION = "7"
 
 
 def find_component_template(subsystem, blueprint, variable_name):
@@ -72,7 +72,7 @@ tile_layout.set_editor_property("child_actor_class", table_class)
 set_properties(
     camera,
     {
-        "relative_location": unreal.Vector(0.0, -164.6795, 110.0),
+        "relative_location": unreal.Vector(0.0, -160.3494, 107.5),
         "relative_rotation": unreal.Rotator(0.0, -30.0, 90.0),
         "current_focal_length": 30.0,
         "current_aperture": 16.0,
@@ -136,7 +136,7 @@ set_properties(
         "intensity": 0.025,
         "light_color": unreal.Color(r=165, g=190, b=230, a=255),
         "cast_shadows": True,
-        "real_time_capture": True,
+        "real_time_capture": False,
         "lower_hemisphere_is_black": False,
         "lower_hemisphere_color": unreal.LinearColor(
             r=0.012, g=0.010, b=0.009, a=1.0
@@ -148,6 +148,7 @@ set_properties(
 set_properties(
     key,
     {
+        "visible": True,
         "relative_location": unreal.Vector(-180.0, -160.0, 260.0),
         "relative_rotation": unreal.Rotator(pitch=-42.0, yaw=42.0, roll=0.0),
         "intensity": 90.0,
@@ -212,7 +213,7 @@ set_properties(
     {
         "relative_location": unreal.Vector(0.0, 190.0, 240.0),
         "relative_rotation": unreal.Rotator(pitch=-35.0, yaw=180.0, roll=0.0),
-        "intensity": 25.0,
+        "intensity": 12.5,
         "attenuation_radius": 500.0,
         "source_width": 150.0,
         "source_height": 100.0,
@@ -222,7 +223,7 @@ set_properties(
         "cast_shadows": False,
         "volumetric_scattering_intensity": 0.0,
         "specular_scale": 1.0,
-        "indirect_lighting_intensity": 0.4,
+        "indirect_lighting_intensity": 0.2,
     },
 )
 
@@ -233,6 +234,6 @@ unreal.BlueprintEditorLibrary.compile_blueprint(blueprint)
 unreal.EditorAssetLibrary.save_loaded_asset(blueprint, only_if_is_dirty=False)
 unreal.log(
     "MAHJONG_ROOM_VISUAL_SETTINGS_REPAIRED "
-    "camera=(0,-164.6795,110) tabletop-normal-angle=60 pitch=-30 focal=30 exposure=manual-night-ev100-9.5 "
+    "camera=(0,-160.3494,107.5) tabletop-normal-angle=60 pitch=-30 focal=30 exposure=manual-night-ev100-9.5 "
     "night-lights-cool=(directional-9000K,sky-blue,key-7200K,fill-6800K,top-6800K,rim-8500K)"
 )

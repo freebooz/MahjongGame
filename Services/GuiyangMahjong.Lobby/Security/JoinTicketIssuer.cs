@@ -11,6 +11,7 @@ public interface IJoinTicketIssuer
 {
     (string Ticket, DateTimeOffset ExpiresAtUtc) Issue(
         string playerId,
+        string displayName,
         LobbyRoom room,
         string serverInstanceId);
 }
@@ -23,6 +24,7 @@ public sealed class HmacJoinTicketIssuer(
 
     public (string Ticket, DateTimeOffset ExpiresAtUtc) Issue(
         string playerId,
+        string displayName,
         LobbyRoom room,
         string serverInstanceId)
     {
@@ -30,6 +32,7 @@ public sealed class HmacJoinTicketIssuer(
         var payload = Base64Url(JsonSerializer.SerializeToUtf8Bytes(new
         {
             playerId,
+            displayName,
             roomId = room.RoomId,
             matchId = room.MatchId,
             serverInstanceId,
