@@ -1,0 +1,114 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TestRun id="77312239-85d5-41ac-a2cd-d175d4a48174" name="Freebooz@FREEBOOZ 2026-07-29 09:55:58" runUser="FREEBOOZ\Freebooz" xmlns="http://microsoft.com/schemas/VisualStudio/TeamTest/2010">
+  <Times creation="2026-07-29T09:55:58.9488942+08:00" queuing="2026-07-29T09:55:58.9488944+08:00" start="2026-07-29T09:55:46.3902313+08:00" finish="2026-07-29T09:56:00.8029865+08:00" />
+  <TestSettings name="default" id="191d18ea-0141-4ace-a1b3-409e9bb88f3f">
+    <Deployment runDeploymentRoot="Freebooz_FREEBOOZ_2026-07-29_09_55_58" />
+  </TestSettings>
+  <Results>
+    <UnitTestResult executionId="08dda90b-72b9-4010-9961-74bab78a784f" testId="5a42b7e2-1b24-a35b-047a-5d85006312b1" testName="GuiyangMahjong.PlayerData.Tests.PlayerDataExternalPersistenceTests.PostgreSql_RewardWalletAndProjectionAreAtomicAndIdempotent" computerName="FREEBOOZ" duration="00:00:00.0010000" startTime="2026-07-29T09:55:57.4134104+08:00" endTime="2026-07-29T09:55:57.4136642+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="NotExecuted" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="08dda90b-72b9-4010-9961-74bab78a784f">
+      <Output>
+        <ErrorInfo>
+          <Message>Set PLAYER_DATA_TEST_POSTGRES to run PlayerData external persistence tests.</Message>
+        </ErrorInfo>
+      </Output>
+    </UnitTestResult>
+    <UnitTestResult executionId="1a7668ae-03e3-4d1d-9ce0-42c85d48a528" testId="23759936-45f8-a950-6f88-58fd51f57a4e" testName="GuiyangMahjong.PlayerData.Tests.PlayerDataApiTests.RewardClaimAndAdminReversalAreAtomicAndIdempotent" computerName="FREEBOOZ" duration="00:00:03.2950381" startTime="2026-07-29T09:55:57.4125160+08:00" endTime="2026-07-29T09:56:00.7028216+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="1a7668ae-03e3-4d1d-9ce0-42c85d48a528" />
+    <UnitTestResult executionId="265c208a-10d6-4282-888f-0c6543fd72f0" testId="4da30aed-2d75-0e50-de5f-4fe0fee6dab1" testName="GuiyangMahjong.PlayerData.Tests.PlayerDataApiTests.CompensationRequiresSeparateApprovalAndUpdatesBalance" computerName="FREEBOOZ" duration="00:00:00.0046255" startTime="2026-07-29T09:56:00.7186336+08:00" endTime="2026-07-29T09:56:00.7236999+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="265c208a-10d6-4282-888f-0c6543fd72f0" />
+    <UnitTestResult executionId="e06a0823-16e9-4c00-820a-7b19015d9852" testId="1649909f-fbb0-9817-1ea9-fa12f98b90c8" testName="GuiyangMahjong.PlayerData.Tests.PlayerDataApiTests.ChatAuthorizationFailsClosedForMutedPlayer" computerName="FREEBOOZ" duration="00:00:00.0138838" startTime="2026-07-29T09:56:00.7051756+08:00" endTime="2026-07-29T09:56:00.7182234+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="e06a0823-16e9-4c00-820a-7b19015d9852" />
+    <UnitTestResult executionId="5758d876-a357-4c32-990b-051097f2499b" testId="d0e915bc-025f-256c-383d-4ea47d88eb1c" testName="GuiyangMahjong.PlayerData.Tests.PlayerDataExternalPersistenceTests.PostgreSql_SourceEvidenceRejectsConflictingReuse" computerName="FREEBOOZ" duration="00:00:00.0010000" startTime="2026-07-29T09:55:57.4244549+08:00" endTime="2026-07-29T09:55:57.4245094+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="NotExecuted" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="5758d876-a357-4c32-990b-051097f2499b">
+      <Output>
+        <ErrorInfo>
+          <Message>Set PLAYER_DATA_TEST_POSTGRES to run PlayerData external persistence tests.</Message>
+        </ErrorInfo>
+      </Output>
+    </UnitTestResult>
+    <UnitTestResult executionId="312875dc-5894-45ae-a19a-2fcfd7a4a305" testId="8ebc42b8-413b-ed9e-ab58-66e4698abcf2" testName="GuiyangMahjong.PlayerData.Tests.PlayerDataApiTests.EvidenceSourceRejectsPiiAndWrongCredential" computerName="FREEBOOZ" duration="00:00:00.0157534" startTime="2026-07-29T09:56:00.7239622+08:00" endTime="2026-07-29T09:56:00.7399109+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="312875dc-5894-45ae-a19a-2fcfd7a4a305" />
+  </Results>
+  <TestDefinitions>
+    <UnitTest name="GuiyangMahjong.PlayerData.Tests.PlayerDataApiTests.RewardClaimAndAdminReversalAreAtomicAndIdempotent" storage="h:\mahjonggame\services\guiyangmahjong.playerdata.tests\bin\release\net10.0\guiyangmahjong.playerdata.tests.dll" id="23759936-45f8-a950-6f88-58fd51f57a4e">
+      <Execution id="1a7668ae-03e3-4d1d-9ce0-42c85d48a528" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.PlayerData.Tests\bin\Release\net10.0\GuiyangMahjong.PlayerData.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.PlayerData.Tests.PlayerDataApiTests" name="RewardClaimAndAdminReversalAreAtomicAndIdempotent" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.PlayerData.Tests.PlayerDataApiTests.EvidenceSourceRejectsPiiAndWrongCredential" storage="h:\mahjonggame\services\guiyangmahjong.playerdata.tests\bin\release\net10.0\guiyangmahjong.playerdata.tests.dll" id="8ebc42b8-413b-ed9e-ab58-66e4698abcf2">
+      <Execution id="312875dc-5894-45ae-a19a-2fcfd7a4a305" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.PlayerData.Tests\bin\Release\net10.0\GuiyangMahjong.PlayerData.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.PlayerData.Tests.PlayerDataApiTests" name="EvidenceSourceRejectsPiiAndWrongCredential" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.PlayerData.Tests.PlayerDataApiTests.CompensationRequiresSeparateApprovalAndUpdatesBalance" storage="h:\mahjonggame\services\guiyangmahjong.playerdata.tests\bin\release\net10.0\guiyangmahjong.playerdata.tests.dll" id="4da30aed-2d75-0e50-de5f-4fe0fee6dab1">
+      <Execution id="265c208a-10d6-4282-888f-0c6543fd72f0" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.PlayerData.Tests\bin\Release\net10.0\GuiyangMahjong.PlayerData.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.PlayerData.Tests.PlayerDataApiTests" name="CompensationRequiresSeparateApprovalAndUpdatesBalance" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.PlayerData.Tests.PlayerDataApiTests.ChatAuthorizationFailsClosedForMutedPlayer" storage="h:\mahjonggame\services\guiyangmahjong.playerdata.tests\bin\release\net10.0\guiyangmahjong.playerdata.tests.dll" id="1649909f-fbb0-9817-1ea9-fa12f98b90c8">
+      <Execution id="e06a0823-16e9-4c00-820a-7b19015d9852" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.PlayerData.Tests\bin\Release\net10.0\GuiyangMahjong.PlayerData.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.PlayerData.Tests.PlayerDataApiTests" name="ChatAuthorizationFailsClosedForMutedPlayer" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.PlayerData.Tests.PlayerDataExternalPersistenceTests.PostgreSql_RewardWalletAndProjectionAreAtomicAndIdempotent" storage="h:\mahjonggame\services\guiyangmahjong.playerdata.tests\bin\release\net10.0\guiyangmahjong.playerdata.tests.dll" id="5a42b7e2-1b24-a35b-047a-5d85006312b1">
+      <Execution id="08dda90b-72b9-4010-9961-74bab78a784f" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.PlayerData.Tests\bin\Release\net10.0\GuiyangMahjong.PlayerData.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.PlayerData.Tests.PlayerDataExternalPersistenceTests" name="PostgreSql_RewardWalletAndProjectionAreAtomicAndIdempotent" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.PlayerData.Tests.PlayerDataExternalPersistenceTests.PostgreSql_SourceEvidenceRejectsConflictingReuse" storage="h:\mahjonggame\services\guiyangmahjong.playerdata.tests\bin\release\net10.0\guiyangmahjong.playerdata.tests.dll" id="d0e915bc-025f-256c-383d-4ea47d88eb1c">
+      <Execution id="5758d876-a357-4c32-990b-051097f2499b" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.PlayerData.Tests\bin\Release\net10.0\GuiyangMahjong.PlayerData.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.PlayerData.Tests.PlayerDataExternalPersistenceTests" name="PostgreSql_SourceEvidenceRejectsConflictingReuse" />
+    </UnitTest>
+  </TestDefinitions>
+  <TestEntries>
+    <TestEntry testId="5a42b7e2-1b24-a35b-047a-5d85006312b1" executionId="08dda90b-72b9-4010-9961-74bab78a784f" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="23759936-45f8-a950-6f88-58fd51f57a4e" executionId="1a7668ae-03e3-4d1d-9ce0-42c85d48a528" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="4da30aed-2d75-0e50-de5f-4fe0fee6dab1" executionId="265c208a-10d6-4282-888f-0c6543fd72f0" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="1649909f-fbb0-9817-1ea9-fa12f98b90c8" executionId="e06a0823-16e9-4c00-820a-7b19015d9852" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="d0e915bc-025f-256c-383d-4ea47d88eb1c" executionId="5758d876-a357-4c32-990b-051097f2499b" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="8ebc42b8-413b-ed9e-ab58-66e4698abcf2" executionId="312875dc-5894-45ae-a19a-2fcfd7a4a305" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+  </TestEntries>
+  <TestLists>
+    <TestList name="列表中未列出的结果" id="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestList name="所有已加载的结果" id="19431567-8539-422a-85d7-44ee4e166bda" />
+  </TestLists>
+  <ResultSummary outcome="Completed">
+    <Counters total="6" executed="4" passed="4" failed="0" error="0" timeout="0" aborted="0" inconclusive="0" passedButRunAborted="0" notRunnable="0" notExecuted="0" disconnected="0" warning="0" completed="0" inProgress="0" pending="0" />
+    <Output>
+      <StdOut>[xUnit.net 00:00:00.12] xUnit.net VSTest Adapter v3.1.4+50e68bbb8b (64-bit .NET 10.0.2)&#xD;
+[xUnit.net 00:00:03.51]   Discovering: GuiyangMahjong.PlayerData.Tests&#xD;
+[xUnit.net 00:00:04.06]   Discovered:  GuiyangMahjong.PlayerData.Tests&#xD;
+[xUnit.net 00:00:04.08]   Starting:    GuiyangMahjong.PlayerData.Tests&#xD;
+[xUnit.net 00:00:04.11]       Set PLAYER_DATA_TEST_POSTGRES to run PlayerData external persistence tests.&#xD;
+[xUnit.net 00:00:04.12]       Set PLAYER_DATA_TEST_POSTGRES to run PlayerData external persistence tests.&#xD;
+在测试运行中跳过测试“GuiyangMahjong.PlayerData.Tests.PlayerDataExternalPersistenceTests.PostgreSql_RewardWalletAndProjectionAreAtomicAndIdempotent”。&#xD;
+在测试运行中跳过测试“GuiyangMahjong.PlayerData.Tests.PlayerDataExternalPersistenceTests.PostgreSql_SourceEvidenceRejectsConflictingReuse”。&#xD;
+info: GuiyangMahjong.PlayerData.Services.PlayerDataStoreInitializer[0]&#xD;
+      Player data store initialized.&#xD;
+info: GuiyangMahjong.PlayerData.Services.ProjectionDispatcherService[0]&#xD;
+      Player evidence projection dispatcher is disabled.&#xD;
+info: Microsoft.Hosting.Lifetime[0]&#xD;
+      Application started. Press Ctrl+C to shut down.&#xD;
+info: Microsoft.Hosting.Lifetime[0]&#xD;
+      Hosting environment: Development&#xD;
+info: Microsoft.Hosting.Lifetime[0]&#xD;
+      Content root path: H:\MahjongGame\Services\GuiyangMahjong.PlayerData.Tests\bin\Release\net10.0\&#xD;
+warn: Microsoft.AspNetCore.Routing.EndpointRoutingMiddleware[9]&#xD;
+      A request body size limit could not be applied. This server does not support the IHttpMaxRequestBodySizeFeature.&#xD;
+warn: Microsoft.AspNetCore.Routing.EndpointRoutingMiddleware[9]&#xD;
+      A request body size limit could not be applied. This server does not support the IHttpMaxRequestBodySizeFeature.&#xD;
+warn: Microsoft.AspNetCore.Routing.EndpointRoutingMiddleware[9]&#xD;
+      A request body size limit could not be applied. This server does not support the IHttpMaxRequestBodySizeFeature.&#xD;
+warn: Microsoft.AspNetCore.Routing.EndpointRoutingMiddleware[9]&#xD;
+      A request body size limit could not be applied. This server does not support the IHttpMaxRequestBodySizeFeature.&#xD;
+warn: Microsoft.AspNetCore.Routing.EndpointRoutingMiddleware[9]&#xD;
+      A request body size limit could not be applied. This server does not support the IHttpMaxRequestBodySizeFeature.&#xD;
+warn: Microsoft.AspNetCore.Routing.EndpointRoutingMiddleware[9]&#xD;
+      A request body size limit could not be applied. This server does not support the IHttpMaxRequestBodySizeFeature.&#xD;
+warn: Microsoft.AspNetCore.Routing.EndpointRoutingMiddleware[9]&#xD;
+      A request body size limit could not be applied. This server does not support the IHttpMaxRequestBodySizeFeature.&#xD;
+info: Microsoft.Hosting.Lifetime[0]&#xD;
+      Application is shutting down...&#xD;
+[xUnit.net 00:00:07.45]   Finished:    GuiyangMahjong.PlayerData.Tests&#xD;
+</StdOut>
+    </Output>
+    <RunInfos>
+      <RunInfo computerName="FREEBOOZ" outcome="Warning" timestamp="2026-07-29T09:55:57.4219128+08:00">
+        <Text>[xUnit.net 00:00:04.11]     GuiyangMahjong.PlayerData.Tests.PlayerDataExternalPersistenceTests.PostgreSql_RewardWalletAndProjectionAreAtomicAndIdempotent [SKIP]</Text>
+      </RunInfo>
+      <RunInfo computerName="FREEBOOZ" outcome="Warning" timestamp="2026-07-29T09:55:57.4256132+08:00">
+        <Text>[xUnit.net 00:00:04.12]     GuiyangMahjong.PlayerData.Tests.PlayerDataExternalPersistenceTests.PostgreSql_SourceEvidenceRejectsConflictingReuse [SKIP]</Text>
+      </RunInfo>
+    </RunInfos>
+  </ResultSummary>
+</TestRun>

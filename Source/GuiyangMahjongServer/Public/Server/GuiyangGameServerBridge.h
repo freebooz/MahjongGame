@@ -1,9 +1,11 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Dom/JsonObject.h"
 #include "Interfaces/IHttpRequest.h"
 #include "Interfaces/IHttpResponse.h"
 #include "Server/GuiyangServerTicketVerifier.h"
+#include "TimerManager.h"
 #include "UObject/Object.h"
 #include "GuiyangGameServerBridge.generated.h"
 
@@ -38,6 +40,7 @@ struct GUIYANGMAHJONGSERVER_API FGuiyangGameServerLaunchConfig
 };
 
 struct FMahjongFinalSettlementResult;
+class UNetDriver;
 
 /** 连接独立游戏服与 Lobby 控制面的桥接对象，负责注册、心跳、票据和结果上报。 */
 UCLASS()
@@ -81,6 +84,11 @@ private:
     void DeletePersistedMatchResult() const;
     /** 把权威牌桌状态转换为控制面可识别的生命周期字符串。 */
     FString BuildHeartbeatLifecycle(int32& OutRoundId) const;
+    /**
+     * 从当前 GameNetDriver 累加应用层收发字节。
+     * 同一驱动内使用 uint32 无符号差值处理回绕；驱动重建时重新设基线，避免产生异常尖峰。
+     */
+    void UpdateNetworkTelemetry();
 
     /** 仅弱引用世界，避免桥接对象反向延长 World 生命周期。 */
     TWeakObjectPtr<UWorld> World;
@@ -105,6 +113,21 @@ private:
     int32 MatchResultAttempt = 0;
     /** 首次进入 Playing 的 UTC 时间，仅用于监控，不参与权威规则计算。 */
     FDateTime GameStartedAtUtc;
+    /** 最近网络驱动原始计数和进程生命周期累计量，单位字节。 */
+    TWeakObjectPtr<UNetDriver> SampledNetDriver;
+    uint32 PreviousNetworkIngressBytes = 0;
+    uint32 PreviousNetworkEgressBytes = 0;
+    uint64 NetworkIngressBytes = 0;
+    uint64 NetworkEgressBytes = 0;
+    bool bNetworkBaselineInitialized = false;
+    /** 当前只读结算投影；正文哈希用于争议核对，不存储或修改玩家结果。 */
+    FString SettlementStatus;
+    FString SettlementResultHash;
+    FString SettlementFailureReason;
+    /** 最近结算的单调序号；确认后继续保留供最后一次心跳和本地诊断。 */
+    int64 SettlementResultSequence = 0;
+    FDateTime SettlementSubmittedAtUtc;
+    FDateTime SettlementConfirmedAtUtc;
     /** 网络流程状态位，避免关闭过程中继续发送或重复并发。 */
     bool bRegistered = false;
     bool bShuttingDown = false;

@@ -1,0 +1,28 @@
+{
+  "uid": "mahjong-approvals",
+  "title": "审批、命令与审计归档",
+  "timezone": "browser",
+  "schemaVersion": 41,
+  "refresh": "15s",
+  "tags": ["mahjong", "approval", "audit"],
+  "panels": [
+    {
+      "id": 1, "type": "timeseries", "title": "管理命令结果",
+      "datasource": {"type": "prometheus", "uid": "mahjong-prometheus"},
+      "targets": [{"refId": "A", "expr": "sum(rate(mahjong_admin_command_outcomes_total[5m])) by (outcome)", "legendFormat": "{{outcome}}"}],
+      "gridPos": {"x": 0, "y": 0, "w": 12, "h": 8}
+    },
+    {
+      "id": 2, "type": "timeseries", "title": "不可变审计归档结果",
+      "datasource": {"type": "prometheus", "uid": "mahjong-prometheus"},
+      "targets": [{"refId": "A", "expr": "sum(rate(mahjong_audit_archive_outcomes_total[5m])) by (outcome)", "legendFormat": "{{outcome}}"}],
+      "gridPos": {"x": 12, "y": 0, "w": 12, "h": 8}
+    },
+    {
+      "id": 3, "type": "logs", "title": "审批与操作审计日志",
+      "datasource": {"type": "loki", "uid": "mahjong-loki"},
+      "targets": [{"refId": "A", "expr": "{service_name=\"GuiyangMahjong.Admin\"} |~ \"审批|命令|审计|工单\""}],
+      "gridPos": {"x": 0, "y": 8, "w": 24, "h": 10}
+    }
+  ]
+}

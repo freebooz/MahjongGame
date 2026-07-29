@@ -2,6 +2,7 @@
 
 
 #include "Dom/JsonObject.h"
+#include "Runtime/Launch/Resources/Version.h"
 #include "Room/GuiyangManagedRoomDefinition.h"
 #include "Room/GuiyangRoomManager.h"
 #include "Server/GuiyangGameServerBridge.h"
@@ -282,6 +283,68 @@ bool FGuiyangManagedRoomIsolationTest::RunTest(const FString& Parameters)
     }
     TestEqual(TEXT("最后玩家离开后托管房间仍应保留"), FirstManager->GetRoomCount(), 1);
     TestEqual(TEXT("空托管房应回到等待状态"), FirstState.Lifecycle, EMahjongRoomLifecycle::WaitingForPlayers);
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FGuiyangConnectionTelemetryIdempotencyTest,
+    "GuiyangMahjong.GameServer.ConnectionTelemetryIdempotency",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ServerContext
+        | EAutomationTestFlags::EngineFilter)
+
+/** 验证连接序号与 EventId 只随真实状态变化推进，重复网络通知不得制造重复事件。 */
+bool FGuiyangConnectionTelemetryIdempotencyTest::RunTest(const FString& Parameters)
+{
+    const TSharedRef<FJsonObject> Bootstrap = GuiyangManagedGameServerTests::MakeBootstrap(
+        GuiyangManagedGameServerTests::RoomId,
+        GuiyangManagedGameServerTests::MatchId,
+        TEXT("333333"));
+    FGuiyangManagedRoomDefinition Definition;
+    FString ParseError;
+    TestTrue(TEXT("连接遥测测试房间应可解析"), FGuiyangManagedRoomDefinition::TryParse(
+        Bootstrap,
+        GuiyangManagedGameServerTests::RoomId,
+        GuiyangManagedGameServerTests::MatchId,
+        Definition,
+        ParseError));
+    UGuiyangRoomManager* Manager = NewObject<UGuiyangRoomManager>();
+    FMahjongRoomState State;
+    EMahjongRoomError Error;
+    TestTrue(TEXT("连接遥测测试房间应可创建"), Manager->CreateManagedRoom(Definition, State, Error));
+    TestTrue(TEXT("测试玩家应进入权威桌"), Manager->AdmitManagedPlayer(
+        TEXT("333333"), TEXT("owner-1"), TEXT("房主"), State, Error));
+
+    FGuiyangPlayerConnectionTelemetry Initial;
+    TestTrue(TEXT("入座应产生初始连接事件"), Manager->GetPlayerConnectionTelemetry(TEXT("owner-1"), Initial));
+    TestFalse(TEXT("初始状态应为已连接"), Initial.bDisconnected);
+    TestEqual(TEXT("初始连接序号应为一"), Initial.Sequence, static_cast<int64>(1));
+
+    TestTrue(TEXT("网络中断应保留座位"), Manager->MarkDisconnected(
+        TEXT("owner-1"), State, Error, TEXT("NetworkInterrupted")));
+    FGuiyangPlayerConnectionTelemetry Disconnected;
+    TestTrue(TEXT("应可读取掉线状态"), Manager->GetPlayerConnectionTelemetry(
+        TEXT("owner-1"), Disconnected));
+    TestTrue(TEXT("掉线标志应为真"), Disconnected.bDisconnected);
+    TestEqual(TEXT("掉线序号应推进一次"), Disconnected.Sequence, static_cast<int64>(2));
+    TestEqual(TEXT("掉线原因应保持受控分类"),
+        Disconnected.DisconnectReason, FString(TEXT("NetworkInterrupted")));
+
+    TestTrue(TEXT("重复掉线通知应幂等成功"), Manager->MarkDisconnected(
+        TEXT("owner-1"), State, Error, TEXT("NetworkInterrupted")));
+    FGuiyangPlayerConnectionTelemetry Duplicate;
+    TestTrue(TEXT("应可读取重复通知后的状态"), Manager->GetPlayerConnectionTelemetry(
+        TEXT("owner-1"), Duplicate));
+    TestEqual(TEXT("重复通知不得推进序号"), Duplicate.Sequence, Disconnected.Sequence);
+    TestEqual(TEXT("重复通知不得更换 EventId"), Duplicate.EventId, Disconnected.EventId);
+
+    int32 RemainingSeconds = 0;
+    TestTrue(TEXT("宽限期内应可重连"), Manager->ReconnectPlayer(
+        TEXT("owner-1"), State, RemainingSeconds, Error));
+    FGuiyangPlayerConnectionTelemetry Reconnected;
+    TestTrue(TEXT("应可读取重连状态"), Manager->GetPlayerConnectionTelemetry(
+        TEXT("owner-1"), Reconnected));
+    TestFalse(TEXT("重连后掉线标志应清除"), Reconnected.bDisconnected);
+    TestEqual(TEXT("重连只推进一个序号"), Reconnected.Sequence, static_cast<int64>(3));
+    TestTrue(TEXT("重连时间应存在"), Reconnected.ReconnectedAtUtc.GetTicks() > 0);
     return true;
 }
 

@@ -63,9 +63,13 @@ public sealed class AdminWebApplicationFactory : WebApplicationFactory<Program>
                 ["Admin:Principals:4:AccessToken"] = ChatComplianceToken,
                 ["Admin:Principals:4:Roles:0"] = "player.viewer",
                 ["Admin:Principals:4:Roles:1"] = "chat.compliance",
-                ["Admin:Auth:Enabled"] = "false",
-                ["Admin:Lobby:Enabled"] = "false",
-                ["Admin:Lobby:MonitoringToken"] = "",
+                // 集成测试使用进程内假客户端，但仍按生产语义启用来源，确保可靠性边界执行实时校验。
+                ["Admin:Auth:Enabled"] = "true",
+                ["Admin:Auth:MonitoringToken"] =
+                    "test-only-auth-monitoring-token-that-is-long-enough",
+                ["Admin:Lobby:Enabled"] = "true",
+                ["Admin:Lobby:MonitoringToken"] =
+                    "test-only-lobby-monitoring-token-that-is-long-enough",
                 ["Admin:Allocators:0:Enabled"] = "false"
             });
         });
@@ -124,10 +128,55 @@ public sealed class AdminApiTests(AdminWebApplicationFactory factory)
             new AuthenticationHeaderValue("Bearer", AdminWebApplicationFactory.Token);
         using var response = await client.GetAsync("/admin/v1/players");
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Equal("[]", await response.Content.ReadAsStringAsync());
+        var page = await response.Content.ReadFromJsonAsync<
+            CursorPage<PlayerMonitorListItem>>();
+        Assert.NotNull(page);
+        Assert.Empty(page.Items);
+        Assert.False(page.HasMore);
 
         using var detail = await client.GetAsync("/admin/v1/players/unknown-player");
         Assert.Equal(HttpStatusCode.NotFound, detail.StatusCode);
+    }
+
+    [Fact]
+    public async Task MonitoringPaginationCapsPageSizeAndRejectsCrossFilterCursor()
+    {
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue(
+                "Bearer",
+                AdminWebApplicationFactory.Token);
+
+        var page = await client.GetFromJsonAsync<
+            CursorPage<RoomListItem>>("/admin/v1/rooms?pageSize=9999");
+        Assert.NotNull(page);
+        Assert.Equal(200, page.PageSize);
+
+        var items = new[]
+        {
+            new RoomListItem(
+                "room-a", "100001", "match-a", "Standard", "Waiting",
+                0, 4, 0, 8, null, null, null,
+                DateTimeOffset.Parse("2026-07-29T00:00:00Z"),
+                DateTimeOffset.Parse("2026-07-29T00:00:00Z"), 1),
+            new RoomListItem(
+                "room-b", "100002", "match-b", "Standard", "Waiting",
+                0, 4, 0, 8, null, null, null,
+                DateTimeOffset.Parse("2026-07-28T00:00:00Z"),
+                DateTimeOffset.Parse("2026-07-28T00:00:00Z"), 1)
+        };
+        var cursorPage = MonitoringCursorPagination.CreatePage(
+            items,
+            1,
+            200,
+            "rooms|||",
+            item => item.CreatedAtUtc,
+            item => item.RoomId,
+            null);
+        using var invalid = await client.GetAsync(
+            "/admin/v1/rooms?lifecycle=Playing&pageSize=1&cursor="
+            + Uri.EscapeDataString(cursorPage.NextCursor!));
+        Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
     }
 
     [Fact]
@@ -688,6 +737,20 @@ public sealed class AdminTestLobbyMonitoringClient : ILobbyMonitoringClient
         CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<RoomMonitorSnapshot>>([Room]);
 
+    /// <summary>测试替身仅包含一个房间，因此第一页即为完整结果。</summary>
+    public Task<CursorPage<RoomMonitorSnapshot>> ListRoomsPageAsync(
+        string? lifecycle,
+        string? gameMode,
+        string? search,
+        string? cursor,
+        int pageSize,
+        CancellationToken cancellationToken) =>
+        Task.FromResult(new CursorPage<RoomMonitorSnapshot>(
+            cursor is null ? [Room] : [],
+            null,
+            false,
+            pageSize));
+
     public Task<RoomRuntimeTelemetry?> GetRuntimeAsync(
         string roomId,
         CancellationToken cancellationToken) =>
@@ -716,10 +779,16 @@ public sealed class AdminTestPlayerDirectoryClient : IPlayerDirectoryClient
     public const string PlayerId = "guest-player-management-test";
     public int ActiveSessionCount { get; set; } = 1;
 
-    public Task<AuthPlayerDirectoryItem[]> ListPlayersAsync(
+    public Task<CursorPage<AuthPlayerDirectoryItem>> ListPlayersPageAsync(
         string? search,
+        string? cursor,
+        int pageSize,
         CancellationToken cancellationToken) =>
-        Task.FromResult(Array.Empty<AuthPlayerDirectoryItem>());
+        Task.FromResult(new CursorPage<AuthPlayerDirectoryItem>(
+            [],
+            null,
+            false,
+            pageSize));
 
     public Task<AuthPlayerDirectoryDetail?> GetPlayerAsync(
         string playerId,

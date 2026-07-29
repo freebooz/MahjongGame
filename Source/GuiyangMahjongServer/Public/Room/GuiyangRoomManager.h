@@ -7,6 +7,25 @@
 
 struct FGuiyangManagedRoomDefinition;
 
+/**
+ * 玩家连接状态的权威监控快照。
+ * Sequence 在房间内按玩家单调递增，EventId 标识一次真实状态变化，重复心跳不得生成新事件。
+ */
+struct GUIYANGMAHJONGSERVER_API FGuiyangPlayerConnectionTelemetry
+{
+    /** 当前是否掉线；连接正常时 DisconnectedAtUtc 为空。 */
+    bool bDisconnected = false;
+    /** 最近状态变化、当前掉线开始和最近恢复时间。 */
+    FDateTime ChangedAtUtc;
+    FDateTime DisconnectedAtUtc;
+    FDateTime ReconnectedAtUtc;
+    /** NormalExit、NetworkInterrupted、ReconnectTimeout、Kicked 或 ServerShutdown。 */
+    FString DisconnectReason;
+    /** 状态单调序号与本次变化的全局幂等标识。 */
+    int64 Sequence = 0;
+    FString EventId;
+};
+
 /** Dedicated Server 持有的房间领域服务；客户端不得创建该对象或直接改写房间记录。 */
 UCLASS()
 class GUIYANGMAHJONGSERVER_API UGuiyangRoomManager : public UObject
@@ -35,12 +54,16 @@ public:
         FMahjongRoomState& OutState, EMahjongRoomError& OutError);
     bool RequestNextRound(const FString& PlayerId, FMahjongRoomState& OutState, EMahjongRoomError& OutError);
     /** 标记掉线并在超时窗口内恢复原座位。 */
-    bool MarkDisconnected(const FString& PlayerId, FMahjongRoomState& OutState, EMahjongRoomError& OutError);
+    bool MarkDisconnected(const FString& PlayerId, FMahjongRoomState& OutState,
+        EMahjongRoomError& OutError, const FString& Reason = TEXT("NetworkInterrupted"));
     bool ReconnectPlayer(const FString& PlayerId, FMahjongRoomState& OutState,
         int32& OutRemainingSeconds, EMahjongRoomError& OutError);
     /** 只读查询房间/玩家索引，并生成比赛最终排名。 */
     bool GetRoomState(const FString& RoomCode, FMahjongRoomState& OutState) const;
     bool GetPlayerRoomCode(const FString& PlayerId, FString& OutRoomCode) const;
+    /** 返回当前或最近连接状态；玩家不在房间或尚无状态记录时返回 false。 */
+    bool GetPlayerConnectionTelemetry(
+        const FString& PlayerId, FGuiyangPlayerConnectionTelemetry& OutTelemetry) const;
     static FMahjongFinalSettlementResult BuildFinalSettlement(const FMahjongRoomState& State);
     int32 GetRoomCount() const { return Rooms.Num(); }
 
@@ -60,7 +83,8 @@ private:
         FString PasswordSalt;
         FString PasswordDigest;
         TMap<FString, FPasswordAttemptState> PasswordAttemptsByPlayer;
-        TMap<FString, FDateTime> DisconnectedAtUtcByPlayer;
+        /** 每名在座玩家最近连接状态，保留重连时间以支持 Admin 时间线审计。 */
+        TMap<FString, FGuiyangPlayerConnectionTelemetry> ConnectionTelemetryByPlayer;
         /** 是否由外部控制面创建并拥有生命周期。 */
         bool bManagedAuthority = false;
     };

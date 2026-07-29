@@ -2,6 +2,7 @@ using System.Text.Json;
 using GuiyangMahjong.Admin.Domain;
 using GuiyangMahjong.Admin.Options;
 using GuiyangMahjong.Admin.Storage;
+using GuiyangMahjong.Observability;
 using Microsoft.Extensions.Options;
 
 namespace GuiyangMahjong.Admin.Services;
@@ -49,6 +50,7 @@ public sealed class AdminCommandDispatcher(
             now,
             now.AddSeconds(management.LeaseSeconds),
             cancellationToken);
+        MahjongTelemetry.RecordAdminCommandBatch(commands.Count);
         foreach (var command in commands)
             await DispatchCommandAsync(command, cancellationToken);
         return commands.Count;
@@ -66,6 +68,14 @@ public sealed class AdminCommandDispatcher(
                 command.OutboxId,
                 command.ActionRequestId);
             return;
+        }
+        if (action.Approval is not null && command.AttemptCount <= 1)
+        {
+            // 仅首次领取记录批准到开始，重试等待不污染“开始执行”SLI。
+            MahjongTelemetry.RecordAdminApprovalToStart(
+                action.Approval.ApprovedAtUtc,
+                timeProvider.GetUtcNow(),
+                action.ActionType.ToString());
         }
 
         AdminCommandExecutionResult result;
@@ -85,6 +95,9 @@ public sealed class AdminCommandDispatcher(
         var now = timeProvider.GetUtcNow();
         if (result.Succeeded)
         {
+            MahjongTelemetry.RecordAdminCommandOutcome(
+                command.ActionType.ToString(),
+                "succeeded");
             var completed = action with
             {
                 Status = AdminActionStatus.Succeeded,
@@ -108,6 +121,9 @@ public sealed class AdminCommandDispatcher(
         }
 
         var terminal = !result.Retryable || command.AttemptCount >= management.MaxAttempts;
+        MahjongTelemetry.RecordAdminCommandOutcome(
+            command.ActionType.ToString(),
+            terminal ? "failed" : "retry_scheduled");
         var failed = terminal
             ? action with
             {

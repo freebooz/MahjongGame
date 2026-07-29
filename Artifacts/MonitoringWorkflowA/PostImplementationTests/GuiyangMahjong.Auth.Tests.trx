@@ -1,0 +1,172 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TestRun id="f9fe6c1f-b8f4-48eb-94bf-6c531bba20c2" name="Freebooz@FREEBOOZ 2026-07-29 09:55:23" runUser="FREEBOOZ\Freebooz" xmlns="http://microsoft.com/schemas/VisualStudio/TeamTest/2010">
+  <Times creation="2026-07-29T09:55:23.3496560+08:00" queuing="2026-07-29T09:55:23.3496561+08:00" start="2026-07-29T09:55:14.4669973+08:00" finish="2026-07-29T09:55:30.2762950+08:00" />
+  <TestSettings name="default" id="0ad9a89c-3388-450e-95b4-25514e41bdae">
+    <Deployment runDeploymentRoot="Freebooz_FREEBOOZ_2026-07-29_09_55_23" />
+  </TestSettings>
+  <Results>
+    <UnitTestResult executionId="a7f12212-bda6-48d2-bc0e-d87bd65ef9be" testId="54b7ad46-e1a5-77c7-94a4-08e95c4a5575" testName="GuiyangMahjong.Auth.Tests.ExternalPersistenceIntegrationTests.PostgreSql_AdminSessionRevocationIsIdempotentAcrossInstances" computerName="FREEBOOZ" duration="00:00:00.0010000" startTime="2026-07-29T09:55:22.7604853+08:00" endTime="2026-07-29T09:55:22.7604988+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="NotExecuted" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="a7f12212-bda6-48d2-bc0e-d87bd65ef9be">
+      <Output>
+        <ErrorInfo>
+          <Message>Set AUTH_TEST_POSTGRES to run Auth external persistence tests.</Message>
+        </ErrorInfo>
+      </Output>
+    </UnitTestResult>
+    <UnitTestResult executionId="54988149-eed3-4cba-a953-a7135d94a2a4" testId="46b9bcdf-a6dc-0d6f-3844-256f0c3c90c4" testName="GuiyangMahjong.Auth.Tests.AuthApiTests.BanMuteAndRiskControlsRequireCurrentVersionAndRecordHistory" computerName="FREEBOOZ" duration="00:00:00.0070013" startTime="2026-07-29T09:55:23.3187765+08:00" endTime="2026-07-29T09:55:23.3258596+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="54988149-eed3-4cba-a953-a7135d94a2a4" />
+    <UnitTestResult executionId="aa52f2bc-107b-4782-aec5-9d356dca2b90" testId="be0d3aa2-9c2f-86fd-f8c9-80273f881fc2" testName="GuiyangMahjong.Auth.Tests.AuthApiTests.Logout_RevokesRefreshToken" computerName="FREEBOOZ" duration="00:00:00.0064672" startTime="2026-07-29T09:55:30.2062493+08:00" endTime="2026-07-29T09:55:30.2128475+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="aa52f2bc-107b-4782-aec5-9d356dca2b90" />
+    <UnitTestResult executionId="fb9fd79e-4cca-4d47-879e-a48f177be4df" testId="0aed9554-c503-3cdd-b8f4-fb414df201cc" testName="GuiyangMahjong.Auth.Tests.AuthApiTests.AdminSessionRevocationRequiresDedicatedCredentialAndIsIdempotent" computerName="FREEBOOZ" duration="00:00:00.0058437" startTime="2026-07-29T09:55:23.3260055+08:00" endTime="2026-07-29T09:55:23.3319296+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="fb9fd79e-4cca-4d47-879e-a48f177be4df" />
+    <UnitTestResult executionId="4e342bd4-0ec7-4906-a320-a62e555a1c3c" testId="2687ee41-3458-0294-2976-d7e568d60b4f" testName="GuiyangMahjong.Auth.Tests.AuthApiTests.PlayerMonitoring_ReturnsMaskedLoginAndNeverReturnsCredentials" computerName="FREEBOOZ" duration="00:00:00.1824030" startTime="2026-07-29T09:55:30.0234144+08:00" endTime="2026-07-29T09:55:30.2060054+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="4e342bd4-0ec7-4906-a320-a62e555a1c3c" />
+    <UnitTestResult executionId="d26eade9-7519-4469-bfce-c01aa64cda6f" testId="45e2c335-573d-d592-be70-1790b60aa415" testName="GuiyangMahjong.Auth.Tests.AuthApiTests.RefreshToken_IsRotatedAndCannotBeReused" computerName="FREEBOOZ" duration="00:00:00.0054407" startTime="2026-07-29T09:55:30.2129884+08:00" endTime="2026-07-29T09:55:30.2184537+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="d26eade9-7519-4469-bfce-c01aa64cda6f" />
+    <UnitTestResult executionId="7f3f36a1-afe4-4c6d-853f-62678b19f443" testId="c5b74851-d9c2-36bf-c3bc-06ecb7281409" testName="GuiyangMahjong.Auth.Tests.AuthApiTests.GuestLogin_IssuesTokenAcceptedByLobbyValidator" computerName="FREEBOOZ" duration="00:00:06.6821082" startTime="2026-07-29T09:55:23.3368545+08:00" endTime="2026-07-29T09:55:30.0191941+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="7f3f36a1-afe4-4c6d-853f-62678b19f443" />
+    <UnitTestResult executionId="dc5571d1-b760-48c8-88b2-54535055caad" testId="b20da135-10d0-dd81-ba0d-a1c42934ecca" testName="GuiyangMahjong.Auth.Tests.ExternalPersistenceIntegrationTests.PostgreSql_RefreshRotationIsSingleUseAcrossAuthInstances" computerName="FREEBOOZ" duration="00:00:00.0010000" startTime="2026-07-29T09:55:22.7599665+08:00" endTime="2026-07-29T09:55:22.7599876+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="NotExecuted" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="dc5571d1-b760-48c8-88b2-54535055caad">
+      <Output>
+        <ErrorInfo>
+          <Message>Set AUTH_TEST_POSTGRES to run Auth external persistence tests.</Message>
+        </ErrorInfo>
+      </Output>
+    </UnitTestResult>
+    <UnitTestResult executionId="d02cabf5-4daa-43db-85c5-1a8627597e07" testId="1a96a2cf-5345-5431-62bb-84d01c6c2a6b" testName="GuiyangMahjong.Auth.Tests.AuthApiTests.SameInstallation_KeepsStableServerOwnedPlayerId" computerName="FREEBOOZ" duration="00:00:00.0289554" startTime="2026-07-29T09:55:23.2587636+08:00" endTime="2026-07-29T09:55:23.2879773+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="d02cabf5-4daa-43db-85c5-1a8627597e07" />
+    <UnitTestResult executionId="5c50bc8f-666d-417f-b63f-333855c38f79" testId="8c242a4a-6c07-f3dd-cf4d-2c32b46c7ff2" testName="GuiyangMahjong.Auth.Tests.AuthApiTests.Readiness_ChecksConfiguredIdentityStore" computerName="FREEBOOZ" duration="00:00:00.5138122" startTime="2026-07-29T09:55:22.7527471+08:00" endTime="2026-07-29T09:55:23.2580966+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="5c50bc8f-666d-417f-b63f-333855c38f79" />
+    <UnitTestResult executionId="e126feb0-a676-44b0-8357-14d86db6eafb" testId="d24f5c2b-94f0-5d10-962d-e56f2cf5f0ae" testName="GuiyangMahjong.Auth.Tests.AuthApiTests.PlayerMonitoring_RequiresDedicatedReadOnlyCredential" computerName="FREEBOOZ" duration="00:00:00.0036206" startTime="2026-07-29T09:55:30.0200565+08:00" endTime="2026-07-29T09:55:30.0231957+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="e126feb0-a676-44b0-8357-14d86db6eafb" />
+    <UnitTestResult executionId="12534263-3348-4140-85ad-f2759f0aff8e" testId="9bc64006-654f-c35a-8558-586c1ad120aa" testName="GuiyangMahjong.Auth.Tests.ExternalPersistenceIntegrationTests.PostgreSql_PlayerBanIsAtomicIdempotentAndVisibleAcrossInstances" computerName="FREEBOOZ" duration="00:00:00.0010000" startTime="2026-07-29T09:55:22.7606916+08:00" endTime="2026-07-29T09:55:22.7607040+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="NotExecuted" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="12534263-3348-4140-85ad-f2759f0aff8e">
+      <Output>
+        <ErrorInfo>
+          <Message>Set AUTH_TEST_POSTGRES to run Auth external persistence tests.</Message>
+        </ErrorInfo>
+      </Output>
+    </UnitTestResult>
+    <UnitTestResult executionId="a055b33e-16b0-489f-a60c-4aeea3f06ed2" testId="7fb02595-c0fd-70cf-0ffd-d305e0ab6a5e" testName="GuiyangMahjong.Auth.Tests.AuthApiTests.GuestLogin_WithoutName_ReturnsStableLocalPlayerName" computerName="FREEBOOZ" duration="00:00:00.0045814" startTime="2026-07-29T09:55:23.3359848+08:00" endTime="2026-07-29T09:55:23.3367419+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="a055b33e-16b0-489f-a60c-4aeea3f06ed2" />
+    <UnitTestResult executionId="3baf3bc8-7828-4d3d-bab8-5d38c88e5a76" testId="761739e7-1bbf-4f83-c48d-45241a2d41f7" testName="GuiyangMahjong.Auth.Tests.ExternalPersistenceIntegrationTests.PostgreSql_IdentityIsStableAndHealthyAcrossAuthInstances" computerName="FREEBOOZ" duration="00:00:00.0010000" startTime="2026-07-29T09:55:22.7534944+08:00" endTime="2026-07-29T09:55:22.7537280+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="NotExecuted" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="3baf3bc8-7828-4d3d-bab8-5d38c88e5a76">
+      <Output>
+        <ErrorInfo>
+          <Message>Set AUTH_TEST_POSTGRES to run Auth external persistence tests.</Message>
+        </ErrorInfo>
+      </Output>
+    </UnitTestResult>
+    <UnitTestResult executionId="4d2005de-5a8c-490c-a9a6-fcbf534fa13b" testId="d1d15b07-f842-326d-b3ba-f63dae884d9d" testName="GuiyangMahjong.Auth.Tests.AuthApiTests.TemporaryFreezeIsVersionedIdempotentAndBlocksLoginAndRefresh" computerName="FREEBOOZ" duration="00:00:00.0304129" startTime="2026-07-29T09:55:23.2881256+08:00" endTime="2026-07-29T09:55:23.3186420+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="4d2005de-5a8c-490c-a9a6-fcbf534fa13b" />
+  </Results>
+  <TestDefinitions>
+    <UnitTest name="GuiyangMahjong.Auth.Tests.AuthApiTests.Logout_RevokesRefreshToken" storage="h:\mahjonggame\services\guiyangmahjong.auth.tests\bin\release\net10.0\guiyangmahjong.auth.tests.dll" id="be0d3aa2-9c2f-86fd-f8c9-80273f881fc2">
+      <Execution id="aa52f2bc-107b-4782-aec5-9d356dca2b90" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Auth.Tests\bin\Release\net10.0\GuiyangMahjong.Auth.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Auth.Tests.AuthApiTests" name="Logout_RevokesRefreshToken" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Auth.Tests.AuthApiTests.BanMuteAndRiskControlsRequireCurrentVersionAndRecordHistory" storage="h:\mahjonggame\services\guiyangmahjong.auth.tests\bin\release\net10.0\guiyangmahjong.auth.tests.dll" id="46b9bcdf-a6dc-0d6f-3844-256f0c3c90c4">
+      <Execution id="54988149-eed3-4cba-a953-a7135d94a2a4" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Auth.Tests\bin\Release\net10.0\GuiyangMahjong.Auth.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Auth.Tests.AuthApiTests" name="BanMuteAndRiskControlsRequireCurrentVersionAndRecordHistory" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Auth.Tests.AuthApiTests.PlayerMonitoring_RequiresDedicatedReadOnlyCredential" storage="h:\mahjonggame\services\guiyangmahjong.auth.tests\bin\release\net10.0\guiyangmahjong.auth.tests.dll" id="d24f5c2b-94f0-5d10-962d-e56f2cf5f0ae">
+      <Execution id="e126feb0-a676-44b0-8357-14d86db6eafb" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Auth.Tests\bin\Release\net10.0\GuiyangMahjong.Auth.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Auth.Tests.AuthApiTests" name="PlayerMonitoring_RequiresDedicatedReadOnlyCredential" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Auth.Tests.ExternalPersistenceIntegrationTests.PostgreSql_AdminSessionRevocationIsIdempotentAcrossInstances" storage="h:\mahjonggame\services\guiyangmahjong.auth.tests\bin\release\net10.0\guiyangmahjong.auth.tests.dll" id="54b7ad46-e1a5-77c7-94a4-08e95c4a5575">
+      <Execution id="a7f12212-bda6-48d2-bc0e-d87bd65ef9be" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Auth.Tests\bin\Release\net10.0\GuiyangMahjong.Auth.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Auth.Tests.ExternalPersistenceIntegrationTests" name="PostgreSql_AdminSessionRevocationIsIdempotentAcrossInstances" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Auth.Tests.AuthApiTests.AdminSessionRevocationRequiresDedicatedCredentialAndIsIdempotent" storage="h:\mahjonggame\services\guiyangmahjong.auth.tests\bin\release\net10.0\guiyangmahjong.auth.tests.dll" id="0aed9554-c503-3cdd-b8f4-fb414df201cc">
+      <Execution id="fb9fd79e-4cca-4d47-879e-a48f177be4df" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Auth.Tests\bin\Release\net10.0\GuiyangMahjong.Auth.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Auth.Tests.AuthApiTests" name="AdminSessionRevocationRequiresDedicatedCredentialAndIsIdempotent" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Auth.Tests.ExternalPersistenceIntegrationTests.PostgreSql_PlayerBanIsAtomicIdempotentAndVisibleAcrossInstances" storage="h:\mahjonggame\services\guiyangmahjong.auth.tests\bin\release\net10.0\guiyangmahjong.auth.tests.dll" id="9bc64006-654f-c35a-8558-586c1ad120aa">
+      <Execution id="12534263-3348-4140-85ad-f2759f0aff8e" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Auth.Tests\bin\Release\net10.0\GuiyangMahjong.Auth.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Auth.Tests.ExternalPersistenceIntegrationTests" name="PostgreSql_PlayerBanIsAtomicIdempotentAndVisibleAcrossInstances" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Auth.Tests.ExternalPersistenceIntegrationTests.PostgreSql_RefreshRotationIsSingleUseAcrossAuthInstances" storage="h:\mahjonggame\services\guiyangmahjong.auth.tests\bin\release\net10.0\guiyangmahjong.auth.tests.dll" id="b20da135-10d0-dd81-ba0d-a1c42934ecca">
+      <Execution id="dc5571d1-b760-48c8-88b2-54535055caad" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Auth.Tests\bin\Release\net10.0\GuiyangMahjong.Auth.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Auth.Tests.ExternalPersistenceIntegrationTests" name="PostgreSql_RefreshRotationIsSingleUseAcrossAuthInstances" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Auth.Tests.AuthApiTests.SameInstallation_KeepsStableServerOwnedPlayerId" storage="h:\mahjonggame\services\guiyangmahjong.auth.tests\bin\release\net10.0\guiyangmahjong.auth.tests.dll" id="1a96a2cf-5345-5431-62bb-84d01c6c2a6b">
+      <Execution id="d02cabf5-4daa-43db-85c5-1a8627597e07" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Auth.Tests\bin\Release\net10.0\GuiyangMahjong.Auth.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Auth.Tests.AuthApiTests" name="SameInstallation_KeepsStableServerOwnedPlayerId" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Auth.Tests.AuthApiTests.GuestLogin_IssuesTokenAcceptedByLobbyValidator" storage="h:\mahjonggame\services\guiyangmahjong.auth.tests\bin\release\net10.0\guiyangmahjong.auth.tests.dll" id="c5b74851-d9c2-36bf-c3bc-06ecb7281409">
+      <Execution id="7f3f36a1-afe4-4c6d-853f-62678b19f443" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Auth.Tests\bin\Release\net10.0\GuiyangMahjong.Auth.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Auth.Tests.AuthApiTests" name="GuestLogin_IssuesTokenAcceptedByLobbyValidator" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Auth.Tests.AuthApiTests.GuestLogin_WithoutName_ReturnsStableLocalPlayerName" storage="h:\mahjonggame\services\guiyangmahjong.auth.tests\bin\release\net10.0\guiyangmahjong.auth.tests.dll" id="7fb02595-c0fd-70cf-0ffd-d305e0ab6a5e">
+      <Execution id="a055b33e-16b0-489f-a60c-4aeea3f06ed2" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Auth.Tests\bin\Release\net10.0\GuiyangMahjong.Auth.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Auth.Tests.AuthApiTests" name="GuestLogin_WithoutName_ReturnsStableLocalPlayerName" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Auth.Tests.AuthApiTests.Readiness_ChecksConfiguredIdentityStore" storage="h:\mahjonggame\services\guiyangmahjong.auth.tests\bin\release\net10.0\guiyangmahjong.auth.tests.dll" id="8c242a4a-6c07-f3dd-cf4d-2c32b46c7ff2">
+      <Execution id="5c50bc8f-666d-417f-b63f-333855c38f79" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Auth.Tests\bin\Release\net10.0\GuiyangMahjong.Auth.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Auth.Tests.AuthApiTests" name="Readiness_ChecksConfiguredIdentityStore" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Auth.Tests.AuthApiTests.TemporaryFreezeIsVersionedIdempotentAndBlocksLoginAndRefresh" storage="h:\mahjonggame\services\guiyangmahjong.auth.tests\bin\release\net10.0\guiyangmahjong.auth.tests.dll" id="d1d15b07-f842-326d-b3ba-f63dae884d9d">
+      <Execution id="4d2005de-5a8c-490c-a9a6-fcbf534fa13b" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Auth.Tests\bin\Release\net10.0\GuiyangMahjong.Auth.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Auth.Tests.AuthApiTests" name="TemporaryFreezeIsVersionedIdempotentAndBlocksLoginAndRefresh" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Auth.Tests.AuthApiTests.RefreshToken_IsRotatedAndCannotBeReused" storage="h:\mahjonggame\services\guiyangmahjong.auth.tests\bin\release\net10.0\guiyangmahjong.auth.tests.dll" id="45e2c335-573d-d592-be70-1790b60aa415">
+      <Execution id="d26eade9-7519-4469-bfce-c01aa64cda6f" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Auth.Tests\bin\Release\net10.0\GuiyangMahjong.Auth.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Auth.Tests.AuthApiTests" name="RefreshToken_IsRotatedAndCannotBeReused" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Auth.Tests.AuthApiTests.PlayerMonitoring_ReturnsMaskedLoginAndNeverReturnsCredentials" storage="h:\mahjonggame\services\guiyangmahjong.auth.tests\bin\release\net10.0\guiyangmahjong.auth.tests.dll" id="2687ee41-3458-0294-2976-d7e568d60b4f">
+      <Execution id="4e342bd4-0ec7-4906-a320-a62e555a1c3c" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Auth.Tests\bin\Release\net10.0\GuiyangMahjong.Auth.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Auth.Tests.AuthApiTests" name="PlayerMonitoring_ReturnsMaskedLoginAndNeverReturnsCredentials" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Auth.Tests.ExternalPersistenceIntegrationTests.PostgreSql_IdentityIsStableAndHealthyAcrossAuthInstances" storage="h:\mahjonggame\services\guiyangmahjong.auth.tests\bin\release\net10.0\guiyangmahjong.auth.tests.dll" id="761739e7-1bbf-4f83-c48d-45241a2d41f7">
+      <Execution id="3baf3bc8-7828-4d3d-bab8-5d38c88e5a76" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Auth.Tests\bin\Release\net10.0\GuiyangMahjong.Auth.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Auth.Tests.ExternalPersistenceIntegrationTests" name="PostgreSql_IdentityIsStableAndHealthyAcrossAuthInstances" />
+    </UnitTest>
+  </TestDefinitions>
+  <TestEntries>
+    <TestEntry testId="54b7ad46-e1a5-77c7-94a4-08e95c4a5575" executionId="a7f12212-bda6-48d2-bc0e-d87bd65ef9be" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="46b9bcdf-a6dc-0d6f-3844-256f0c3c90c4" executionId="54988149-eed3-4cba-a953-a7135d94a2a4" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="be0d3aa2-9c2f-86fd-f8c9-80273f881fc2" executionId="aa52f2bc-107b-4782-aec5-9d356dca2b90" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="0aed9554-c503-3cdd-b8f4-fb414df201cc" executionId="fb9fd79e-4cca-4d47-879e-a48f177be4df" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="2687ee41-3458-0294-2976-d7e568d60b4f" executionId="4e342bd4-0ec7-4906-a320-a62e555a1c3c" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="45e2c335-573d-d592-be70-1790b60aa415" executionId="d26eade9-7519-4469-bfce-c01aa64cda6f" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="c5b74851-d9c2-36bf-c3bc-06ecb7281409" executionId="7f3f36a1-afe4-4c6d-853f-62678b19f443" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="b20da135-10d0-dd81-ba0d-a1c42934ecca" executionId="dc5571d1-b760-48c8-88b2-54535055caad" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="1a96a2cf-5345-5431-62bb-84d01c6c2a6b" executionId="d02cabf5-4daa-43db-85c5-1a8627597e07" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="8c242a4a-6c07-f3dd-cf4d-2c32b46c7ff2" executionId="5c50bc8f-666d-417f-b63f-333855c38f79" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="d24f5c2b-94f0-5d10-962d-e56f2cf5f0ae" executionId="e126feb0-a676-44b0-8357-14d86db6eafb" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="9bc64006-654f-c35a-8558-586c1ad120aa" executionId="12534263-3348-4140-85ad-f2759f0aff8e" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="7fb02595-c0fd-70cf-0ffd-d305e0ab6a5e" executionId="a055b33e-16b0-489f-a60c-4aeea3f06ed2" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="761739e7-1bbf-4f83-c48d-45241a2d41f7" executionId="3baf3bc8-7828-4d3d-bab8-5d38c88e5a76" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="d1d15b07-f842-326d-b3ba-f63dae884d9d" executionId="4d2005de-5a8c-490c-a9a6-fcbf534fa13b" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+  </TestEntries>
+  <TestLists>
+    <TestList name="列表中未列出的结果" id="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestList name="所有已加载的结果" id="19431567-8539-422a-85d7-44ee4e166bda" />
+  </TestLists>
+  <ResultSummary outcome="Completed">
+    <Counters total="15" executed="11" passed="11" failed="0" error="0" timeout="0" aborted="0" inconclusive="0" passedButRunAborted="0" notRunnable="0" notExecuted="0" disconnected="0" warning="0" completed="0" inProgress="0" pending="0" />
+    <Output>
+      <StdOut>[xUnit.net 00:00:00.00] xUnit.net VSTest Adapter v3.1.4+50e68bbb8b (64-bit .NET 10.0.2)&#xD;
+[xUnit.net 00:00:02.37]   Discovering: GuiyangMahjong.Auth.Tests&#xD;
+[xUnit.net 00:00:02.64]   Discovered:  GuiyangMahjong.Auth.Tests&#xD;
+[xUnit.net 00:00:02.65]   Starting:    GuiyangMahjong.Auth.Tests&#xD;
+[xUnit.net 00:00:02.68]       Set AUTH_TEST_POSTGRES to run Auth external persistence tests.&#xD;
+[xUnit.net 00:00:02.69]       Set AUTH_TEST_POSTGRES to run Auth external persistence tests.&#xD;
+[xUnit.net 00:00:02.69]       Set AUTH_TEST_POSTGRES to run Auth external persistence tests.&#xD;
+[xUnit.net 00:00:02.69]       Set AUTH_TEST_POSTGRES to run Auth external persistence tests.&#xD;
+info: Microsoft.Hosting.Lifetime[0]&#xD;
+      Application started. Press Ctrl+C to shut down.&#xD;
+info: Microsoft.Hosting.Lifetime[0]&#xD;
+      Hosting environment: Development&#xD;
+info: Microsoft.Hosting.Lifetime[0]&#xD;
+      Content root path: H:\MahjongGame\Services\GuiyangMahjong.Auth.Tests\bin\Release\net10.0\&#xD;
+在测试运行中跳过测试“GuiyangMahjong.Auth.Tests.ExternalPersistenceIntegrationTests.PostgreSql_IdentityIsStableAndHealthyAcrossAuthInstances”。&#xD;
+在测试运行中跳过测试“GuiyangMahjong.Auth.Tests.ExternalPersistenceIntegrationTests.PostgreSql_RefreshRotationIsSingleUseAcrossAuthInstances”。&#xD;
+在测试运行中跳过测试“GuiyangMahjong.Auth.Tests.ExternalPersistenceIntegrationTests.PostgreSql_AdminSessionRevocationIsIdempotentAcrossInstances”。&#xD;
+在测试运行中跳过测试“GuiyangMahjong.Auth.Tests.ExternalPersistenceIntegrationTests.PostgreSql_PlayerBanIsAtomicIdempotentAndVisibleAcrossInstances”。&#xD;
+info: Microsoft.Hosting.Lifetime[0]&#xD;
+      Application is shutting down...&#xD;
+[xUnit.net 00:00:10.15]   Finished:    GuiyangMahjong.Auth.Tests&#xD;
+</StdOut>
+    </Output>
+    <RunInfos>
+      <RunInfo computerName="FREEBOOZ" outcome="Warning" timestamp="2026-07-29T09:55:22.7701431+08:00">
+        <Text>[xUnit.net 00:00:02.68]     GuiyangMahjong.Auth.Tests.ExternalPersistenceIntegrationTests.PostgreSql_IdentityIsStableAndHealthyAcrossAuthInstances [SKIP]</Text>
+      </RunInfo>
+      <RunInfo computerName="FREEBOOZ" outcome="Warning" timestamp="2026-07-29T09:55:22.7703284+08:00">
+        <Text>[xUnit.net 00:00:02.68]     GuiyangMahjong.Auth.Tests.ExternalPersistenceIntegrationTests.PostgreSql_RefreshRotationIsSingleUseAcrossAuthInstances [SKIP]</Text>
+      </RunInfo>
+      <RunInfo computerName="FREEBOOZ" outcome="Warning" timestamp="2026-07-29T09:55:22.7703439+08:00">
+        <Text>[xUnit.net 00:00:02.69]     GuiyangMahjong.Auth.Tests.ExternalPersistenceIntegrationTests.PostgreSql_AdminSessionRevocationIsIdempotentAcrossInstances [SKIP]</Text>
+      </RunInfo>
+      <RunInfo computerName="FREEBOOZ" outcome="Warning" timestamp="2026-07-29T09:55:22.7703570+08:00">
+        <Text>[xUnit.net 00:00:02.69]     GuiyangMahjong.Auth.Tests.ExternalPersistenceIntegrationTests.PostgreSql_PlayerBanIsAtomicIdempotentAndVisibleAcrossInstances [SKIP]</Text>
+      </RunInfo>
+    </RunInfos>
+  </ResultSummary>
+</TestRun>

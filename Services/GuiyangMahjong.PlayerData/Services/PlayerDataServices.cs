@@ -206,12 +206,20 @@ public sealed class ProjectionDispatcherService(
 
 public sealed class PlayerDataStoreInitializer(
     IPlayerDataStore store,
+    IOptions<PlayerDataOptions> options,
     ILogger<PlayerDataStoreInitializer> logger) : IHostedService
 {
+    /// <summary>本地开发可执行幂等建表；生产环境关闭后仅使用预先迁移好的结构。</summary>
     public async Task StartAsync(CancellationToken cancellationToken)
     {
-        await store.InitializeAsync(cancellationToken);
-        logger.LogInformation("Player data store initialized.");
+        if (options.Value.ApplyDatabaseMigrations)
+        {
+            await store.InitializeAsync(cancellationToken);
+            logger.LogInformation("Player data store initialized.");
+            return;
+        }
+
+        logger.LogInformation("PlayerData 数据库迁移已关闭，运行身份不会执行 DDL。");
     }
 
     public Task StopAsync(CancellationToken cancellationToken) =>

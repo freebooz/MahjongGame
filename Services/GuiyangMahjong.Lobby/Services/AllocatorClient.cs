@@ -2,6 +2,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using GuiyangMahjong.Lobby.Domain;
 using GuiyangMahjong.Lobby.Options;
+using GuiyangMahjong.Observability;
 using Microsoft.Extensions.Options;
 
 namespace GuiyangMahjong.Lobby.Services;
@@ -146,6 +147,9 @@ public sealed class HttpAllocatorClient(
         var request = new HttpRequestMessage(method, path);
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", options.ServiceToken);
         request.Headers.Add("X-Request-Id", requestId);
+        request.Headers.Add(
+            "X-Trace-Id",
+            MahjongTelemetry.CurrentBusinessTraceId);
         return request;
     }
 

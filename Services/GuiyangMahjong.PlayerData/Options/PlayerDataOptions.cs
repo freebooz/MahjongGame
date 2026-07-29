@@ -7,6 +7,8 @@ public sealed class PlayerDataOptions
     public const string SectionName = "PlayerData";
 
     [Required] public string PersistenceMode { get; init; } = "InMemory";
+    /// <summary>是否允许运行进程执行建表；生产环境必须关闭并使用独立迁移身份。</summary>
+    public bool ApplyDatabaseMigrations { get; init; } = true;
     public string PostgresConnectionString { get; init; } = string.Empty;
     public string SourceIngestionToken { get; init; } = string.Empty;
     public string AdminCommandToken { get; init; } = string.Empty;

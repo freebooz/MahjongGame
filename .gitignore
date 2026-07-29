@@ -27,8 +27,12 @@ Build/Android/src/
 **/obj/
 *.user
 TestResults/
+**/node_modules/
+**/.angular/
+**/dist/
 Deploy/.env
 Deploy/linux/.env
+Deploy/observability/.env
 Deploy/linux/backups/
 Deploy/linux/diagnostics/
 Deploy/linux/.deployed-version

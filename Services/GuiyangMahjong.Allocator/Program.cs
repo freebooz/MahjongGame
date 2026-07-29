@@ -5,6 +5,7 @@ using GuiyangMahjong.Allocator.Domain;
 using GuiyangMahjong.Allocator.Options;
 using GuiyangMahjong.Allocator.Security;
 using GuiyangMahjong.Allocator.Services;
+using GuiyangMahjong.Observability;
 using Microsoft.Extensions.Options;
 
 Console.OutputEncoding = Encoding.UTF8;
@@ -14,6 +15,7 @@ var builder = WebApplication.CreateBuilder(new WebApplicationOptions
     Args = args,
     ContentRootPath = AppContext.BaseDirectory
 });
+builder.AddMahjongObservability("GuiyangMahjong.Allocator");
 
 builder.Services
     .AddOptions<AllocatorOptions>()
@@ -48,6 +50,17 @@ builder.Services
                                  options.ServiceToken,
                                  StringComparison.Ordinal)),
         "Allocator management credential must be dedicated.")
+    .Validate(options => !options.TopologyRegistration.Enabled
+            || (options.TopologyRegistration.RegistrationToken.Length >= 32
+                && !string.Equals(
+                    options.TopologyRegistration.RegistrationToken,
+                    options.MonitoringReadOnlyToken,
+                    StringComparison.Ordinal)
+                && !string.Equals(
+                    options.TopologyRegistration.RegistrationToken,
+                    options.ManagementCommandToken,
+                    StringComparison.Ordinal)),
+        "Allocator topology registration requires a dedicated 32+ character credential.")
     .ValidateOnStart();
 
 builder.Services.AddSingleton(TimeProvider.System);
@@ -68,8 +81,12 @@ builder.Services.AddSingleton<GameServerInstanceManager>();
 builder.Services.AddHostedService<AllocatorStateInitializer>();
 builder.Services.AddHostedService<InstanceMonitorService>();
 builder.Services.AddHostedService<MatchResultOutboxRecoveryService>();
+builder.Services.AddHostedService<AllocatorTopologyRegistrationService>();
 
 var app = builder.Build();
+app.UseMahjongObservability(
+    "GuiyangMahjong.Allocator",
+    app.Environment.EnvironmentName);
 app.UseMiddleware<AllocatorExceptionMiddleware>();
 app.UseMiddleware<AllocatorServiceAuthenticationMiddleware>();
 app.MapAllocatorEndpoints();

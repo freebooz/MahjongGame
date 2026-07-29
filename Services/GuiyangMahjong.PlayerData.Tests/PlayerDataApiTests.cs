@@ -52,6 +52,25 @@ public sealed class PlayerDataApiTests(
     PlayerDataWebApplicationFactory factory)
     : IClassFixture<PlayerDataWebApplicationFactory>
 {
+    /// <summary>
+    /// Admin 的 PlayerData 依赖探测必须使用只读监控凭据，匿名请求不得获知内部就绪状态。
+    /// </summary>
+    [Fact]
+    public async Task InternalMonitoringHealthRequiresDedicatedCredential()
+    {
+        using var anonymous = factory.CreateClient();
+        using var rejected = await anonymous.GetAsync("/internal/monitoring/health");
+        Assert.Equal(HttpStatusCode.Unauthorized, rejected.StatusCode);
+
+        using var monitoring = factory.CreateClient();
+        monitoring.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue(
+                "Bearer",
+                PlayerDataWebApplicationFactory.MonitoringToken);
+        using var ready = await monitoring.GetAsync("/internal/monitoring/health");
+        Assert.Equal(HttpStatusCode.OK, ready.StatusCode);
+    }
+
     [Fact]
     public async Task RewardClaimAndAdminReversalAreAtomicAndIdempotent()
     {

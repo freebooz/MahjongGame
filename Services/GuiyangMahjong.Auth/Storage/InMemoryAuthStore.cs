@@ -267,6 +267,8 @@ public sealed class InMemoryAuthStore : IAuthStore
     public Task<IReadOnlyList<PlayerDirectoryItem>> ListPlayersAsync(
         string? search,
         int limit,
+        DateTimeOffset? afterCreatedAtUtc,
+        string? afterPlayerId,
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
@@ -278,7 +280,13 @@ public sealed class InMemoryAuthStore : IAuthStore
                 .Where(identity => normalized.Length == 0
                     || identity.PlayerId.Contains(normalized, StringComparison.OrdinalIgnoreCase)
                     || identity.DisplayName.Contains(normalized, StringComparison.OrdinalIgnoreCase))
-                .OrderByDescending(identity => identity.UpdatedAtUtc)
+                // 创建时间不随登录或风控变化，可避免翻页期间状态更新导致大面积重复或遗漏。
+                .Where(identity => afterCreatedAtUtc is null
+                    || identity.CreatedAtUtc < afterCreatedAtUtc
+                    || (identity.CreatedAtUtc == afterCreatedAtUtc
+                        && string.CompareOrdinal(identity.PlayerId, afterPlayerId) < 0))
+                .OrderByDescending(identity => identity.CreatedAtUtc)
+                .ThenByDescending(identity => identity.PlayerId, StringComparer.Ordinal)
                 .Take(limit)
                 .Select(identity => BuildDirectoryItem(identity, now))
                 .ToArray();

@@ -3,3 +3,10 @@
 !Services/GuiyangMahjong.Admin/**
 Services/GuiyangMahjong.Admin/bin/
 Services/GuiyangMahjong.Admin/obj/
+# Node 依赖必须由锁文件在镜像内恢复，禁止把本机依赖目录发送到构建上下文。
+Services/GuiyangMahjong.Admin/ClientApp/node_modules/
+# 共享可观测性项目参与镜像内编译，只排除本地产物。
+!Services/GuiyangMahjong.Observability/
+!Services/GuiyangMahjong.Observability/**
+Services/GuiyangMahjong.Observability/bin/
+Services/GuiyangMahjong.Observability/obj/

@@ -119,10 +119,10 @@ public sealed class AuthApiTests(AuthWebApplicationFactory factory)
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
             "Bearer", AuthWebApplicationFactory.MonitoringToken);
 
-        var players = await client.GetFromJsonAsync<PlayerDirectoryItem[]>(
+        var page = await client.GetFromJsonAsync<MonitoringPlayerPage>(
             $"/internal/monitoring/players?search={Uri.EscapeDataString(login.PlayerId)}");
-        Assert.NotNull(players);
-        var player = Assert.Single(players);
+        Assert.NotNull(page);
+        var player = Assert.Single(page.Items);
         Assert.StartsWith("device-", player.CurrentDeviceId, StringComparison.Ordinal);
         Assert.DoesNotContain(installationId, player.CurrentDeviceId, StringComparison.Ordinal);
 
@@ -355,6 +355,13 @@ public sealed class AuthApiTests(AuthWebApplicationFactory factory)
                ?? throw new InvalidDataException("Auth response was empty.");
     }
 }
+
+/// <summary>Auth 内部监控玩家游标页测试投影，仅用于验证分页外壳和脱敏内容。</summary>
+public sealed record MonitoringPlayerPage(
+    PlayerDirectoryItem[] Items,
+    string? NextCursor,
+    bool HasMore,
+    int PageSize);
 
 public sealed class AuthWebApplicationFactory : WebApplicationFactory<Program>
 {

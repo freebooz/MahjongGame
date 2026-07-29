@@ -76,7 +76,20 @@ bool UGuiyangRoomManager::AdmitManagedPlayer(const FString& RoomCode, const FStr
             return false;
         }
         ExistingSeat->bOnline = true;
-        ExistingRecord->DisconnectedAtUtcByPlayer.Remove(PlayerId);
+        FGuiyangPlayerConnectionTelemetry& Connection =
+            ExistingRecord->ConnectionTelemetryByPlayer.FindOrAdd(PlayerId);
+        // 重复接纳只在确实从掉线恢复时推进序号，保证控制面幂等。
+        if (Connection.bDisconnected)
+        {
+            const FDateTime Now = FDateTime::UtcNow();
+            Connection.bDisconnected = false;
+            Connection.ChangedAtUtc = Now;
+            Connection.ReconnectedAtUtc = Now;
+            Connection.DisconnectedAtUtc = FDateTime();
+            Connection.DisconnectReason.Reset();
+            ++Connection.Sequence;
+            Connection.EventId = FGuid::NewGuid().ToString(EGuidFormats::DigitsWithHyphensLower);
+        }
         ++ExistingRecord->PublicState.StateSequence;
         OutState = ExistingRecord->PublicState;
         return true;
@@ -108,6 +121,12 @@ bool UGuiyangRoomManager::AdmitManagedPlayer(const FString& RoomCode, const FStr
     EmptySeat->bOnline = true;
     EmptySeat->bReady = false;
     PlayerRoomCodes.Add(PlayerId, RoomCode);
+    FGuiyangPlayerConnectionTelemetry& Connection =
+        Record->ConnectionTelemetryByPlayer.FindOrAdd(PlayerId);
+    Connection.bDisconnected = false;
+    Connection.ChangedAtUtc = FDateTime::UtcNow();
+    Connection.Sequence = FMath::Max<int64>(1, Connection.Sequence + 1);
+    Connection.EventId = FGuid::NewGuid().ToString(EGuidFormats::DigitsWithHyphensLower);
     RefreshLifecycle(Record->PublicState);
     ++Record->PublicState.StateSequence;
     OutState = Record->PublicState;
@@ -367,7 +386,7 @@ bool UGuiyangRoomManager::LeaveRoom(const FString& PlayerId, FMahjongRoomState& 
     *Seat = FMahjongSeatInfo();
     Seat->SeatIndex = SeatIndex;
     PlayerRoomCodes.Remove(PlayerId);
-    Record->DisconnectedAtUtcByPlayer.Remove(PlayerId);
+    Record->ConnectionTelemetryByPlayer.Remove(PlayerId);
 
     int32 OccupiedCount = 0;
     for (const FMahjongSeatInfo& Item : Record->PublicState.Seats)
@@ -537,9 +556,9 @@ bool UGuiyangRoomManager::RequestNextRound(const FString& PlayerId, FMahjongRoom
 }
 
 bool UGuiyangRoomManager::MarkDisconnected(const FString& PlayerId, FMahjongRoomState& OutState,
-    EMahjongRoomError& OutError)
+    EMahjongRoomError& OutError, const FString& Reason)
 {
-    // 保留座位和玩家反向索引，只记录 UTC 掉线时间供宽限期重连。
+    // 保留座位和玩家反向索引，并记录受控原因、序号和幂等事件供宽限期重连与监控。
     OutError = EMahjongRoomError::None;
     const FString* RoomCode = PlayerRoomCodes.Find(PlayerId);
     FRoomRecord* Record = RoomCode ? Rooms.Find(*RoomCode) : nullptr;
@@ -554,9 +573,32 @@ bool UGuiyangRoomManager::MarkDisconnected(const FString& PlayerId, FMahjongRoom
         OutError = EMahjongRoomError::NotInRoom;
         return false;
     }
+    static const TSet<FString> AllowedReasons = {
+        TEXT("NormalExit"), TEXT("NetworkInterrupted"), TEXT("ReconnectTimeout"),
+        TEXT("Kicked"), TEXT("ServerShutdown")
+    };
+    if (!AllowedReasons.Contains(Reason))
+    {
+        OutError = EMahjongRoomError::InvalidRequest;
+        return false;
+    }
+    FGuiyangPlayerConnectionTelemetry& Connection =
+        Record->ConnectionTelemetryByPlayer.FindOrAdd(PlayerId);
+    if (Connection.bDisconnected)
+    {
+        // 网络层可能重复通知同一次断线；返回当前状态但不生成重复事件。
+        OutState = Record->PublicState;
+        return true;
+    }
+    const FDateTime Now = FDateTime::UtcNow();
     Seat->bOnline = false;
     Seat->bReady = false;
-    Record->DisconnectedAtUtcByPlayer.Add(PlayerId, FDateTime::UtcNow());
+    Connection.bDisconnected = true;
+    Connection.ChangedAtUtc = Now;
+    Connection.DisconnectedAtUtc = Now;
+    Connection.DisconnectReason = Reason;
+    ++Connection.Sequence;
+    Connection.EventId = FGuid::NewGuid().ToString(EGuidFormats::DigitsWithHyphensLower);
     ++Record->PublicState.StateSequence;
     OutState = Record->PublicState;
     UE_LOG(LogMahjongReconnect, Log, TEXT("玩家断线，座位已保留：Room=%s，Player=%s，Seat=%d"),
@@ -585,9 +627,12 @@ bool UGuiyangRoomManager::ReconnectPlayer(const FString& PlayerId, FMahjongRoomS
     }
 
     const int32 TimeoutSeconds = Record->PublicState.RuleSnapshot.Config.ReconnectTimeoutSeconds;
-    if (const FDateTime* DisconnectedAt = Record->DisconnectedAtUtcByPlayer.Find(PlayerId))
+    const FGuiyangPlayerConnectionTelemetry* ExistingConnection =
+        Record->ConnectionTelemetryByPlayer.Find(PlayerId);
+    if (ExistingConnection && ExistingConnection->bDisconnected)
     {
-        const int32 ElapsedSeconds = FMath::Max(0, FMath::FloorToInt((FDateTime::UtcNow() - *DisconnectedAt).GetTotalSeconds()));
+        const int32 ElapsedSeconds = FMath::Max(0, FMath::FloorToInt(
+            (FDateTime::UtcNow() - ExistingConnection->DisconnectedAtUtc).GetTotalSeconds()));
         OutRemainingSeconds = FMath::Max(0, TimeoutSeconds - ElapsedSeconds);
         if (ElapsedSeconds > TimeoutSeconds)
         {
@@ -601,7 +646,16 @@ bool UGuiyangRoomManager::ReconnectPlayer(const FString& PlayerId, FMahjongRoomS
     }
 
     Seat->bOnline = true;
-    Record->DisconnectedAtUtcByPlayer.Remove(PlayerId);
+    FGuiyangPlayerConnectionTelemetry& Connection =
+        Record->ConnectionTelemetryByPlayer.FindOrAdd(PlayerId);
+    const FDateTime Now = FDateTime::UtcNow();
+    Connection.bDisconnected = false;
+    Connection.ChangedAtUtc = Now;
+    Connection.ReconnectedAtUtc = Now;
+    Connection.DisconnectedAtUtc = FDateTime();
+    Connection.DisconnectReason.Reset();
+    ++Connection.Sequence;
+    Connection.EventId = FGuid::NewGuid().ToString(EGuidFormats::DigitsWithHyphensLower);
     ++Record->PublicState.StateSequence;
     OutState = Record->PublicState;
     UE_LOG(LogMahjongReconnect, Log, TEXT("玩家重连并恢复座位：Room=%s，Player=%s，Seat=%d"),
@@ -614,6 +668,18 @@ bool UGuiyangRoomManager::GetPlayerRoomCode(const FString& PlayerId, FString& Ou
     const FString* RoomCode = PlayerRoomCodes.Find(PlayerId);
     if (!RoomCode) return false;
     OutRoomCode = *RoomCode;
+    return true;
+}
+
+bool UGuiyangRoomManager::GetPlayerConnectionTelemetry(
+    const FString& PlayerId, FGuiyangPlayerConnectionTelemetry& OutTelemetry) const
+{
+    const FString* RoomCode = PlayerRoomCodes.Find(PlayerId);
+    const FRoomRecord* Record = RoomCode ? Rooms.Find(*RoomCode) : nullptr;
+    const FGuiyangPlayerConnectionTelemetry* Telemetry =
+        Record ? Record->ConnectionTelemetryByPlayer.Find(PlayerId) : nullptr;
+    if (!Telemetry) return false;
+    OutTelemetry = *Telemetry;
     return true;
 }
 

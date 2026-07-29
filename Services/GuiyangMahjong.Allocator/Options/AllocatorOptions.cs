@@ -49,4 +49,22 @@ public sealed class AllocatorOptions
     public string ManagementCommandToken { get; init; } = string.Empty;
     [MinLength(32)] public string LobbyCallbackToken { get; init; } = string.Empty;
     [MinLength(32)] public string JoinTicketSigningKey { get; init; } = string.Empty;
+    /// <summary>Allocator 所属地域、集群、节点和逻辑实例标识；用于跨集群聚合与故障隔离。</summary>
+    [Required] public string RegionId { get; init; } = "local";
+    [Required] public string ClusterId { get; init; } = "local";
+    [Required] public string NodeId { get; init; } = "game-node";
+    [Required] public string AllocatorId { get; init; } = "allocator-local-1";
+    [Required] public AllocatorTopologyRegistrationOptions TopologyRegistration { get; init; } = new();
+}
+
+/// <summary>Allocator 向 Admin 动态目录注册只读监控端点的配置；管理命令端点不会通过该目录下发。</summary>
+public sealed class AllocatorTopologyRegistrationOptions
+{
+    public bool Enabled { get; init; }
+    [Required, Url] public string AdminBaseUrl { get; init; } = "http://127.0.0.1:18083";
+    [Required, Url] public string PublicBaseUrl { get; init; } = "http://127.0.0.1:18081";
+    public string RegistrationToken { get; init; } = string.Empty;
+    [Required] public string SourceId { get; init; } = "allocator-local-1";
+    [Range(1, long.MaxValue)] public long Generation { get; init; } = 1;
+    [Range(5, 120)] public int RefreshSeconds { get; init; } = 20;
 }

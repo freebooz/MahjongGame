@@ -1,0 +1,35 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: mahjong-postgres-migration
+  namespace: guiyang-mahjong
+  labels:
+    app.kubernetes.io/name: mahjong-postgres-migration
+spec:
+  backoffLimit: 2
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: mahjong-postgres-migration
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      containers:
+        - name: migration
+          # 该镜像只包含版本化 schema 与 least-privilege SQL，入口按 001→schema→002→004 顺序执行。
+          image: registry.example.com/guiyang-mahjong/postgres-migration:replace-with-release
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            # 迁移管理员连接和八个身份密码由 External Secrets 生成，不复用应用 Secret。
+            - secretRef:
+                name: mahjong-postgres-migration-secrets
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests: {cpu: 50m, memory: 64Mi}
+            limits: {cpu: 500m, memory: 256Mi}

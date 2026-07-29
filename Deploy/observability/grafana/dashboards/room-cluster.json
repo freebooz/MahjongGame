@@ -1,0 +1,43 @@
+{
+  "uid": "mahjong-room-cluster",
+  "title": "房间与集群下钻",
+  "timezone": "browser",
+  "schemaVersion": 41,
+  "refresh": "15s",
+  "tags": ["mahjong", "room", "cluster"],
+  "templating": {
+    "list": [
+      {"name": "roomId", "type": "textbox", "label": "RoomId", "query": "", "current": {"text": "", "value": ""}},
+      {"name": "serverInstanceId", "type": "textbox", "label": "ServerInstanceId", "query": "", "current": {"text": "", "value": ""}}
+    ]
+  },
+  "panels": [
+    {
+      "id": 1, "type": "stat", "title": "心跳速率（全局）",
+      "datasource": {"type": "prometheus", "uid": "mahjong-prometheus"},
+      "targets": [{"refId": "A", "expr": "sum(rate(mahjong_room_heartbeat_received_total[1m]))"}],
+      "gridPos": {"x": 0, "y": 0, "w": 6, "h": 6}
+    },
+    {
+      "id": 4, "type": "stat", "title": "活跃房间 / 在线玩家",
+      "datasource": {"type": "prometheus", "uid": "mahjong-prometheus"},
+      "targets": [
+        {"refId": "A", "expr": "sum(mahjong_rooms_active)", "legendFormat": "活跃房间"},
+        {"refId": "B", "expr": "sum(mahjong_players_connected)", "legendFormat": "在线玩家"}
+      ],
+      "gridPos": {"x": 0, "y": 6, "w": 6, "h": 6}
+    },
+    {
+      "id": 2, "type": "logs", "title": "RoomId / 实例日志下钻",
+      "datasource": {"type": "loki", "uid": "mahjong-loki"},
+      "targets": [{"refId": "A", "expr": "{service_name=~\"GuiyangMahjong.+\"} | RoomId=\"$roomId\" | ServerInstanceId=~\"$serverInstanceId|^$\""}],
+      "gridPos": {"x": 6, "y": 0, "w": 18, "h": 12}
+    },
+    {
+      "id": 3, "type": "timeseries", "title": "在线玩家采样分布",
+      "datasource": {"type": "prometheus", "uid": "mahjong-prometheus"},
+      "targets": [{"refId": "A", "expr": "sum(rate(mahjong_room_connected_players_sum[5m])) / clamp_min(sum(rate(mahjong_room_connected_players_count[5m])), 1)"}],
+      "gridPos": {"x": 0, "y": 12, "w": 24, "h": 8}
+    }
+  ]
+}

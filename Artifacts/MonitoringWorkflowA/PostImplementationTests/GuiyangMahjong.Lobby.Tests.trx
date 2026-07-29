@@ -1,0 +1,554 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TestRun id="400a5d07-4996-4545-a26b-aa008bb0b873" name="Freebooz@FREEBOOZ 2026-07-29 09:55:39" runUser="FREEBOOZ\Freebooz" xmlns="http://microsoft.com/schemas/VisualStudio/TeamTest/2010">
+  <Times creation="2026-07-29T09:55:39.6576883+08:00" queuing="2026-07-29T09:55:39.6576885+08:00" start="2026-07-29T09:55:35.3561272+08:00" finish="2026-07-29T09:55:41.6514252+08:00" />
+  <TestSettings name="default" id="5dd5bdde-f617-4c4b-93bb-8b6b292eb5c8">
+    <Deployment runDeploymentRoot="Freebooz_FREEBOOZ_2026-07-29_09_55_39" />
+  </TestSettings>
+  <Results>
+    <UnitTestResult executionId="3bb404f7-9f57-4698-bc5d-1dba3b5d1d38" testId="49b2b52e-4892-5891-82bc-7422bd93b84d" testName="GuiyangMahjong.Lobby.Tests.ExternalPersistenceIntegrationTests.PostgreSql_RoomAdmissionControlIsVisibleAcrossInstances" computerName="FREEBOOZ" duration="00:00:00.0010000" startTime="2026-07-29T09:55:39.5770638+08:00" endTime="2026-07-29T09:55:39.5771034+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="NotExecuted" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="3bb404f7-9f57-4698-bc5d-1dba3b5d1d38">
+      <Output>
+        <ErrorInfo>
+          <Message>Set LOBBY_TEST_POSTGRES and LOBBY_TEST_REDIS to run external persistence tests.</Message>
+        </ErrorInfo>
+      </Output>
+    </UnitTestResult>
+    <UnitTestResult executionId="cb545672-3a36-4550-986a-e9f3b8ec992f" testId="1b843fd4-74e6-034a-a7ba-391882728cfc" testName="GuiyangMahjong.Lobby.Tests.AllocatorIntegrationDomainTests.FailureBeforeRegistration_FailsAllocatingRoom" computerName="FREEBOOZ" duration="00:00:00.0005060" startTime="2026-07-29T09:55:39.8513273+08:00" endTime="2026-07-29T09:55:39.8516791+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="cb545672-3a36-4550-986a-e9f3b8ec992f" />
+    <UnitTestResult executionId="5cc140f0-4a36-4e2c-82c5-0e899f3002ad" testId="d67cd4eb-c0f4-aca0-9c6f-187a14fa50a7" testName="GuiyangMahjong.Lobby.Tests.WebSocketEventTests.ConnectionAndRoomCreation_PublishRequiredEvents" computerName="FREEBOOZ" duration="00:00:01.1328910" startTime="2026-07-29T09:55:39.5658246+08:00" endTime="2026-07-29T09:55:40.6842954+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="5cc140f0-4a36-4e2c-82c5-0e899f3002ad" />
+    <UnitTestResult executionId="a2ba064d-01c9-4c20-96bc-1b21542bd195" testId="f4c689e5-6d6b-cd09-7b20-b1090db4fbec" testName="GuiyangMahjong.Lobby.Tests.ExternalPersistenceIntegrationTests.Redis_AccessRevocationIsSharedAndMonotonicAcrossInstances" computerName="FREEBOOZ" duration="00:00:00.0010000" startTime="2026-07-29T09:55:39.5659006+08:00" endTime="2026-07-29T09:55:39.5671164+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="NotExecuted" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="a2ba064d-01c9-4c20-96bc-1b21542bd195">
+      <Output>
+        <ErrorInfo>
+          <Message>Set LOBBY_TEST_POSTGRES and LOBBY_TEST_REDIS to run external persistence tests.</Message>
+        </ErrorInfo>
+      </Output>
+    </UnitTestResult>
+    <UnitTestResult executionId="d7e6f936-6e63-4049-b017-126dec1ceea8" testId="60eea658-2aa8-bb15-293d-9ead5c338c52" testName="GuiyangMahjong.Lobby.Tests.PlayerManagementCommandTests.RoomControlIsIdempotentAndProhibitsNewPlayers(actionType: &quot;ProhibitNewPlayers&quot;, maintenanceMode: False)" computerName="FREEBOOZ" duration="00:00:00.0013959" startTime="2026-07-29T09:55:40.6907319+08:00" endTime="2026-07-29T09:55:40.6922280+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="d7e6f936-6e63-4049-b017-126dec1ceea8" />
+    <UnitTestResult executionId="c3697120-e841-4f9d-882e-8e1ff21eb047" testId="92786c24-24dc-58c0-1833-c7a931d80b66" testName="GuiyangMahjong.Lobby.Tests.RuntimeTelemetryContractTests.V1Heartbeat_AllFieldsReachLobbyRuntimeSnapshotWithoutLoss" computerName="FREEBOOZ" duration="00:00:00.0086484" startTime="2026-07-29T09:55:39.8520109+08:00" endTime="2026-07-29T09:55:39.8605562+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="c3697120-e841-4f9d-882e-8e1ff21eb047" />
+    <UnitTestResult executionId="5cd11b50-9784-450b-8b64-9e1e84c495da" testId="3ef5842c-585e-34ea-834e-25a19b9b95a0" testName="GuiyangMahjong.Lobby.Tests.RoomDomainTests.ConcurrentCreation_ForSamePlayer_LeavesExactlyOneActiveRoom" computerName="FREEBOOZ" duration="00:00:00.0259865" startTime="2026-07-29T09:55:39.7814688+08:00" endTime="2026-07-29T09:55:39.8077913+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="5cd11b50-9784-450b-8b64-9e1e84c495da" />
+    <UnitTestResult executionId="d671608f-d368-4b10-a2ac-262ec6ab25cb" testId="1ca1abad-4b67-1877-0990-67546a2888e6" testName="GuiyangMahjong.Lobby.Tests.AllocatorIntegrationDomainTests.ReconnectRoute_UsesAuthenticatedPlayerMappingInsteadOfClientHints" computerName="FREEBOOZ" duration="00:00:00.0022916" startTime="2026-07-29T09:55:39.8615142+08:00" endTime="2026-07-29T09:55:39.8632044+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="d671608f-d368-4b10-a2ac-262ec6ab25cb" />
+    <UnitTestResult executionId="38175f85-2eef-4a19-998d-95f4dd3e64cb" testId="1da61a02-f2da-ec4e-547f-c9c0767d0f89" testName="GuiyangMahjong.Lobby.Tests.RoomDomainTests.WaitingRoom_ReclaimsExpiredSeats_BeforeCapacityCheck" computerName="FREEBOOZ" duration="00:00:00.0039728" startTime="2026-07-29T09:55:39.8201006+08:00" endTime="2026-07-29T09:55:39.8238878+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="38175f85-2eef-4a19-998d-95f4dd3e64cb" />
+    <UnitTestResult executionId="e5e56e0f-c8e4-4921-86ec-c4f09a6cb5f8" testId="2947917a-016f-d156-4956-bcc6ce448981" testName="GuiyangMahjong.Lobby.Tests.ExternalPersistenceIntegrationTests.Redis_PresenceAggregatesAndExpiresAcrossStoreInstances" computerName="FREEBOOZ" duration="00:00:00.0010000" startTime="2026-07-29T09:55:39.5779861+08:00" endTime="2026-07-29T09:55:39.5780048+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="NotExecuted" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="e5e56e0f-c8e4-4921-86ec-c4f09a6cb5f8">
+      <Output>
+        <ErrorInfo>
+          <Message>Set LOBBY_TEST_POSTGRES and LOBBY_TEST_REDIS to run external persistence tests.</Message>
+        </ErrorInfo>
+      </Output>
+    </UnitTestResult>
+    <UnitTestResult executionId="6a320b77-dec5-4617-a23a-b7e932772802" testId="2e84a4c2-fc8c-141c-6910-9c8fb7ef3786" testName="GuiyangMahjong.Lobby.Tests.RuntimeTelemetryContractTests.V1Heartbeat_ProcessCpuAboveOneHundredIsRejected" computerName="FREEBOOZ" duration="00:00:00.0005306" startTime="2026-07-29T09:55:39.8727637+08:00" endTime="2026-07-29T09:55:39.8731979+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="6a320b77-dec5-4617-a23a-b7e932772802" />
+    <UnitTestResult executionId="eeee74e2-7779-4df0-80da-420b86fb89d7" testId="88abfadf-44ae-223b-67e3-d5994b3af726" testName="GuiyangMahjong.Lobby.Tests.AllocatorIntegrationDomainTests.RegistrationBootstrap_UsesImmutableAuthoritativeRuleSnapshot" computerName="FREEBOOZ" duration="00:00:00.2973182" startTime="2026-07-29T09:55:39.5658422+08:00" endTime="2026-07-29T09:55:39.8483793+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="eeee74e2-7779-4df0-80da-420b86fb89d7" />
+    <UnitTestResult executionId="f3d6ff35-8061-4695-92cf-6b7981c7d93c" testId="4d49d4e5-aa98-2f25-76c1-30e1a773193c" testName="GuiyangMahjong.Lobby.Tests.LobbyApiTests.ExpiredToken_ReturnsSessionExpired" computerName="FREEBOOZ" duration="00:00:00.0014220" startTime="2026-07-29T09:55:41.4985112+08:00" endTime="2026-07-29T09:55:41.4991840+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="f3d6ff35-8061-4695-92cf-6b7981c7d93c" />
+    <UnitTestResult executionId="b877d55f-f363-4f75-a04d-348f3a646283" testId="28ebb66a-129c-bfe4-b61c-fc33be28352a" testName="GuiyangMahjong.Lobby.Tests.ExternalPersistenceIntegrationTests.PostgreSql_AllowsOnlyOneActiveRoomAcrossStoreInstances" computerName="FREEBOOZ" duration="00:00:00.0010000" startTime="2026-07-29T09:55:39.5782061+08:00" endTime="2026-07-29T09:55:39.5782196+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="NotExecuted" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="b877d55f-f363-4f75-a04d-348f3a646283">
+      <Output>
+        <ErrorInfo>
+          <Message>Set LOBBY_TEST_POSTGRES and LOBBY_TEST_REDIS to run external persistence tests.</Message>
+        </ErrorInfo>
+      </Output>
+    </UnitTestResult>
+    <UnitTestResult executionId="2836886f-99f0-4f3c-908d-22d00d606843" testId="22a043e1-c00e-bb6e-5b19-6f8710e14353" testName="GuiyangMahjong.Lobby.Tests.AllocatorIntegrationDomainTests.EmptyWaitingRoom_ClosesAndDrainsDedicatedServerAfterTimeout" computerName="FREEBOOZ" duration="00:00:00.0006956" startTime="2026-07-29T09:55:39.8633301+08:00" endTime="2026-07-29T09:55:39.8639325+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="2836886f-99f0-4f3c-908d-22d00d606843" />
+    <UnitTestResult executionId="ea262f3f-3d79-40d1-a5b4-2a1af49852ac" testId="fe6e35b2-489b-414d-9368-709aaf3ae47f" testName="GuiyangMahjong.Lobby.Tests.LobbyApiTests.MatchResultRecovery_RequiresInternalTokenAndClosesFailedRoom" computerName="FREEBOOZ" duration="00:00:00.0030056" startTime="2026-07-29T09:55:41.6098736+08:00" endTime="2026-07-29T09:55:41.6129502+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="ea262f3f-3d79-40d1-a5b4-2a1af49852ac" />
+    <UnitTestResult executionId="8175a7a8-e388-4841-a6cf-886191d7cde5" testId="3847fc8f-a5d3-2dc2-ebe9-99cb997f4ada" testName="GuiyangMahjong.Lobby.Tests.LobbyApiTests.Bootstrap_ReturnsAuthenticatedPlayerAndProtocol" computerName="FREEBOOZ" duration="00:00:00.0042460" startTime="2026-07-29T09:55:41.4932522+08:00" endTime="2026-07-29T09:55:41.4975593+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="8175a7a8-e388-4841-a6cf-886191d7cde5" />
+    <UnitTestResult executionId="bc9c079a-7a40-4a7b-aef1-f38166114a02" testId="b1e51925-c22c-da0a-3556-2e671c38ad1f" testName="GuiyangMahjong.Lobby.Tests.SecurityTests.Token_ValidSignature_AcceptsTrustedIdentity" computerName="FREEBOOZ" duration="00:00:00.0003155" startTime="2026-07-29T09:55:39.8963006+08:00" endTime="2026-07-29T09:55:39.8964765+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="bc9c079a-7a40-4a7b-aef1-f38166114a02" />
+    <UnitTestResult executionId="beae930b-a0cc-4448-ae03-c1d0fb923965" testId="e18339d7-73fa-c28b-c17b-5efe3cc5c675" testName="GuiyangMahjong.Lobby.Tests.DistributedStateContractTests.IdempotencyStore_CoalescesConcurrentExecution" computerName="FREEBOOZ" duration="00:00:00.2658733" startTime="2026-07-29T09:55:39.5667413+08:00" endTime="2026-07-29T09:55:39.8176597+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="beae930b-a0cc-4448-ae03-c1d0fb923965" />
+    <UnitTestResult executionId="e01f9931-5a40-4882-8613-3fd508a95c0f" testId="8e03596d-cb1f-5d12-eabc-b72d18492374" testName="GuiyangMahjong.Lobby.Tests.SecurityTests.Password_WrongAttempts_AreRateLimitedAndRecoverAfterWindow" computerName="FREEBOOZ" duration="00:00:00.0762872" startTime="2026-07-29T09:55:39.8199200+08:00" endTime="2026-07-29T09:55:39.8961461+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="e01f9931-5a40-4882-8613-3fd508a95c0f" />
+    <UnitTestResult executionId="758c6f31-3b5e-4a7d-823e-d0a2644e3d41" testId="2a1861f4-1ceb-83f7-3880-3f280259d49f" testName="GuiyangMahjong.Lobby.Tests.MonitoringSecurityTests.MonitoringRoomsRequiresDedicatedReadOnlyCredential" computerName="FREEBOOZ" duration="00:00:01.1295006" startTime="2026-07-29T09:55:39.5657932+08:00" endTime="2026-07-29T09:55:40.6808058+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="758c6f31-3b5e-4a7d-823e-d0a2644e3d41" />
+    <UnitTestResult executionId="5bfa267d-9f07-4baf-96df-0e798f5c055b" testId="04499826-c8df-5c77-e8d2-53e8b7954296" testName="GuiyangMahjong.Lobby.Tests.LobbyApiTests.OpenApi_IsServedByIndependentApplication" computerName="FREEBOOZ" duration="00:00:00.7999856" startTime="2026-07-29T09:55:40.6929374+08:00" endTime="2026-07-29T09:55:41.4930916+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="5bfa267d-9f07-4baf-96df-0e798f5c055b" />
+    <UnitTestResult executionId="21d3a30b-7163-412a-8d55-3dbec136a022" testId="643e4494-a688-526a-859e-e14c10a25a60" testName="GuiyangMahjong.Lobby.Tests.RoomDomainTests.ConcurrentJoin_ForTwoRooms_ReservesOnlyOneActiveMembership" computerName="FREEBOOZ" duration="00:00:00.1602954" startTime="2026-07-29T09:55:39.6201417+08:00" endTime="2026-07-29T09:55:39.7808603+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="21d3a30b-7163-412a-8d55-3dbec136a022" />
+    <UnitTestResult executionId="1644ca20-b442-41a3-ba8e-d3aee2aa5ebd" testId="b96d4299-5e6d-fb50-4f36-4da4291ef100" testName="GuiyangMahjong.Lobby.Tests.PlayerManagementCommandTests.ForceDissolveTransitionsRoomAndTreatsRetryAsTerminalSuccess" computerName="FREEBOOZ" duration="00:00:01.1342824" startTime="2026-07-29T09:55:39.5658576+08:00" endTime="2026-07-29T09:55:40.6854965+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="1644ca20-b442-41a3-ba8e-d3aee2aa5ebd" />
+    <UnitTestResult executionId="d3d48634-e281-4a0b-8e99-663dfcd42e41" testId="60c0030c-092e-e358-406c-85f125dac204" testName="GuiyangMahjong.Lobby.Tests.SecurityTests.Token_Expired_IsRejected" computerName="FREEBOOZ" duration="00:00:00.0031315" startTime="2026-07-29T09:55:39.8167411+08:00" endTime="2026-07-29T09:55:39.8197724+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="d3d48634-e281-4a0b-8e99-663dfcd42e41" />
+    <UnitTestResult executionId="3dc6ecc3-a6dc-4826-a342-239a4bf879f7" testId="fda6fa4a-a13c-53f1-5e74-ed9b40cb8cac" testName="GuiyangMahjong.Lobby.Tests.AllocatorIntegrationDomainTests.MatchResult_RetryAfterDrainFailureDoesNotPersistTwice" computerName="FREEBOOZ" duration="00:00:00.0009123" startTime="2026-07-29T09:55:39.8640691+08:00" endTime="2026-07-29T09:55:39.8648828+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="3dc6ecc3-a6dc-4826-a342-239a4bf879f7" />
+    <UnitTestResult executionId="8a078be0-5820-4808-8ddc-1d8be28d0cd4" testId="aeb0d67e-431a-3429-a938-610d59d40f63" testName="GuiyangMahjong.Lobby.Tests.RuntimeTelemetryContractTests.UnknownTelemetrySchemaVersion_IsRejectedBeforeSideEffects" computerName="FREEBOOZ" duration="00:00:00.3008162" startTime="2026-07-29T09:55:39.5666767+08:00" endTime="2026-07-29T09:55:39.8518757+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="8a078be0-5820-4808-8ddc-1d8be28d0cd4" />
+    <UnitTestResult executionId="6df62f7c-d578-471a-ae48-725b4269c361" testId="c27436cd-3185-2026-3703-e6bf53352f7f" testName="GuiyangMahjong.Lobby.Tests.RoomDomainTests.ConcurrentRoomCreation_AlwaysProducesUniqueRoomCodes" computerName="FREEBOOZ" duration="00:00:00.0151804" startTime="2026-07-29T09:55:39.8252606+08:00" endTime="2026-07-29T09:55:39.8390843+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="6df62f7c-d578-471a-ae48-725b4269c361" />
+    <UnitTestResult executionId="80f9ffde-c44d-42f5-a160-75d75806a53c" testId="6ed982b8-3586-c01d-99a8-4c79f7759845" testName="GuiyangMahjong.Lobby.Tests.RoomDomainTests.ClosingRoom_ReleasesPlayerLease_AndRejectsStaleOverwrite" computerName="FREEBOOZ" duration="00:00:00.0668932" startTime="2026-07-29T09:55:39.5658703+08:00" endTime="2026-07-29T09:55:39.6193066+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="80f9ffde-c44d-42f5-a160-75d75806a53c" />
+    <UnitTestResult executionId="bf21151b-e9e6-431a-8690-f4fd4d98b42a" testId="67acc2c1-dd3a-ebfc-0add-7c23190ed987" testName="GuiyangMahjong.Lobby.Tests.LobbyApiTests.PasswordFailure_IsLimitedAndResponseNeverEchoesPassword" computerName="FREEBOOZ" duration="00:00:00.0708073" startTime="2026-07-29T09:55:41.5053811+08:00" endTime="2026-07-29T09:55:41.5764108+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="bf21151b-e9e6-431a-8690-f4fd4d98b42a" />
+    <UnitTestResult executionId="f0759cb9-47c8-4f17-8034-261ed8c70e64" testId="f8a786b1-e75d-5b3e-9fd8-c69992b5fa7d" testName="GuiyangMahjong.Lobby.Tests.PlayerManagementCommandTests.RoomControlIsIdempotentAndProhibitsNewPlayers(actionType: &quot;EnableMaintenanceMode&quot;, maintenanceMode: True)" computerName="FREEBOOZ" duration="00:00:00.0048998" startTime="2026-07-29T09:55:40.6856422+08:00" endTime="2026-07-29T09:55:40.6906455+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="f0759cb9-47c8-4f17-8034-261ed8c70e64" />
+    <UnitTestResult executionId="26cd3e3b-be63-4560-839d-2bff6224ce6f" testId="17bb06a5-0dcc-e2e6-c596-3cfca30d9791" testName="GuiyangMahjong.Lobby.Tests.AllocatorIntegrationDomainTests.Route_IsUnavailableUntilRegistrationThenGetsShortLivedTicket" computerName="FREEBOOZ" duration="00:00:00.0014819" startTime="2026-07-29T09:55:39.8650506+08:00" endTime="2026-07-29T09:55:39.8664162+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="26cd3e3b-be63-4560-839d-2bff6224ce6f" />
+    <UnitTestResult executionId="ad43a5a9-d2c1-4abf-966d-307b08bb6ff1" testId="047ba55b-f473-4d24-94cd-82554bd3a521" testName="GuiyangMahjong.Lobby.Tests.RoomMonitoringStoreTests.RuntimeSnapshotAndTimelineRoundTripInOrder" computerName="FREEBOOZ" duration="00:00:00.0923731" startTime="2026-07-29T09:55:39.5658852+08:00" endTime="2026-07-29T09:55:39.6434155+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="ad43a5a9-d2c1-4abf-966d-307b08bb6ff1" />
+    <UnitTestResult executionId="dc96cb85-c5d9-4394-b7b3-5b99e399858c" testId="d1212b7e-e734-a380-792e-f106df71a8a4" testName="GuiyangMahjong.Lobby.Tests.RoomDomainTests.StateMachine_RejectsSkippingFromAllocatingToPlaying" computerName="FREEBOOZ" duration="00:00:00.0016758" startTime="2026-07-29T09:55:39.8392171+08:00" endTime="2026-07-29T09:55:39.8408087+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="dc96cb85-c5d9-4394-b7b3-5b99e399858c" />
+    <UnitTestResult executionId="1fa760c2-ba4d-4e9c-8c6e-fc7a37904706" testId="e16386cd-f84c-1d19-6159-4e4f209fa9ba" testName="GuiyangMahjong.Lobby.Tests.RoomDomainTests.SharedPersistentStore_RestoresRoomForNewServiceInstance" computerName="FREEBOOZ" duration="00:00:00.0119260" startTime="2026-07-29T09:55:39.8080436+08:00" endTime="2026-07-29T09:55:39.8199687+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="1fa760c2-ba4d-4e9c-8c6e-fc7a37904706" />
+    <UnitTestResult executionId="0241368b-80e7-42da-ac9d-0b611f5aaea3" testId="9171bb30-6d09-1b0a-85f7-c42599ff640a" testName="GuiyangMahjong.Lobby.Tests.AllocatorIntegrationDomainTests.MatchResult_IsPersistedOnceAndDuplicateIsAcknowledged" computerName="FREEBOOZ" duration="00:00:00.0080522" startTime="2026-07-29T09:55:39.8518360+08:00" endTime="2026-07-29T09:55:39.8597904+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="0241368b-80e7-42da-ac9d-0b611f5aaea3" />
+    <UnitTestResult executionId="27f1457d-8962-432c-b92c-a29ca42778d6" testId="e06d4e60-f112-f9d0-c47b-0fa1fe53369c" testName="GuiyangMahjong.Lobby.Tests.RuntimeTelemetryContractTests.LegacyHeartbeat_MissingOptionalFieldsDefaultsToV1AndPreservesNulls" computerName="FREEBOOZ" duration="00:00:00.0120339" startTime="2026-07-29T09:55:39.8613437+08:00" endTime="2026-07-29T09:55:39.8726284+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="27f1457d-8962-432c-b92c-a29ca42778d6" />
+    <UnitTestResult executionId="ac0639d0-f51a-4ad2-b598-def0fc8bc398" testId="4e10293a-3dac-a73e-5e79-0e9a0cfd66b0" testName="GuiyangMahjong.Lobby.Tests.ExternalPersistenceIntegrationTests.Redis_IdempotencyCoalescesExecutionAcrossStoreInstances" computerName="FREEBOOZ" duration="00:00:00.0010000" startTime="2026-07-29T09:55:39.5775777+08:00" endTime="2026-07-29T09:55:39.5776188+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="NotExecuted" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="ac0639d0-f51a-4ad2-b598-def0fc8bc398">
+      <Output>
+        <ErrorInfo>
+          <Message>Set LOBBY_TEST_POSTGRES and LOBBY_TEST_REDIS to run external persistence tests.</Message>
+        </ErrorInfo>
+      </Output>
+    </UnitTestResult>
+    <UnitTestResult executionId="a5d180ca-de57-4db5-8514-22215c3b2d0a" testId="9b677928-6efb-7d9a-a0c7-ad1d993bbc4c" testName="GuiyangMahjong.Lobby.Tests.AllocatorIntegrationDomainTests.EmptyPlayingRoom_FailsAndDrainsDedicatedServerAfterReconnectWindow" computerName="FREEBOOZ" duration="00:00:00.0010580" startTime="2026-07-29T09:55:39.8599392+08:00" endTime="2026-07-29T09:55:39.8613876+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="a5d180ca-de57-4db5-8514-22215c3b2d0a" />
+    <UnitTestResult executionId="00aaad79-9ff5-41b2-bd61-0fd9a8a0c662" testId="0b2613fd-8687-203d-a0af-04087e0dbbd4" testName="GuiyangMahjong.Lobby.Tests.LobbyApiTests.Readiness_ChecksStoreAndAllocatorDependency" computerName="FREEBOOZ" duration="00:00:01.1156953" startTime="2026-07-29T09:55:39.5649045+08:00" endTime="2026-07-29T09:55:40.6670469+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="00aaad79-9ff5-41b2-bd61-0fd9a8a0c662" />
+    <UnitTestResult executionId="8ccc747a-fed7-442a-9e15-7f2baacd5560" testId="77cd6440-f309-ff39-46d0-b21348d49dab" testName="GuiyangMahjong.Lobby.Tests.LobbyApiTests.OnlyOwnerCanCloseRoom_AndOwnerCanCreateAgainAfterClosing" computerName="FREEBOOZ" duration="00:00:00.0255737" startTime="2026-07-29T09:55:40.6680861+08:00" endTime="2026-07-29T09:55:40.6928467+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="8ccc747a-fed7-442a-9e15-7f2baacd5560" />
+    <UnitTestResult executionId="9555e2e6-7417-4619-98d1-8ec26011f660" testId="144831d1-4a7b-2235-4099-f653a7374974" testName="GuiyangMahjong.Lobby.Tests.ExternalPersistenceIntegrationTests.Redis_EventPublishedByOneHubReachesAnotherHubClient" computerName="FREEBOOZ" duration="00:00:00.0010000" startTime="2026-07-29T09:55:39.5758726+08:00" endTime="2026-07-29T09:55:39.5759446+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="NotExecuted" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="9555e2e6-7417-4619-98d1-8ec26011f660">
+      <Output>
+        <ErrorInfo>
+          <Message>Set LOBBY_TEST_POSTGRES and LOBBY_TEST_REDIS to run external persistence tests.</Message>
+        </ErrorInfo>
+      </Output>
+    </UnitTestResult>
+    <UnitTestResult executionId="2225470b-b30a-4a90-8412-d286630a3e4a" testId="cf56444f-47aa-f08d-e58a-c28b23648c0c" testName="GuiyangMahjong.Lobby.Tests.AllocatorIntegrationDomainTests.AllocatorFailure_RemovesRouteAndFailsRoom" computerName="FREEBOOZ" duration="00:00:00.0027085" startTime="2026-07-29T09:55:39.8485702+08:00" endTime="2026-07-29T09:55:39.8511625+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="2225470b-b30a-4a90-8412-d286630a3e4a" />
+    <UnitTestResult executionId="334eb602-1887-4c26-828a-f30df116e659" testId="863c79e4-efd7-96da-1fcf-450396a1ec34" testName="GuiyangMahjong.Lobby.Tests.LobbyApiTests.ConcurrentHttpCreation_ReturnsUniqueRoomCodes" computerName="FREEBOOZ" duration="00:00:00.0329872" startTime="2026-07-29T09:55:41.5765391+08:00" endTime="2026-07-29T09:55:41.6097441+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="334eb602-1887-4c26-828a-f30df116e659" />
+    <UnitTestResult executionId="1e564c88-c09b-4d33-a220-c95c8b3be23e" testId="b74f756b-d79c-822b-c81c-58a25df24ba9" testName="GuiyangMahjong.Lobby.Tests.PlayerManagementCommandTests.DisconnectRejectsOldTokenRemovesPresenceAndAllowsNewLogin" computerName="FREEBOOZ" duration="00:00:00.0100444" startTime="2026-07-29T09:55:40.6923218+08:00" endTime="2026-07-29T09:55:40.7025355+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="1e564c88-c09b-4d33-a220-c95c8b3be23e" />
+    <UnitTestResult executionId="db1d54be-7cc2-4b9b-b7c6-6258fdfb5439" testId="1d30154b-5e93-006a-775e-b0e68f9e4757" testName="GuiyangMahjong.Lobby.Tests.DistributedStateContractTests.PresenceStore_ExpiresInactivePlayers" computerName="FREEBOOZ" duration="00:00:00.0034644" startTime="2026-07-29T09:55:39.8178601+08:00" endTime="2026-07-29T09:55:39.8211832+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="db1d54be-7cc2-4b9b-b7c6-6258fdfb5439" />
+    <UnitTestResult executionId="8756daed-6c06-4b63-b27f-9db627a903ae" testId="b07e24d9-9293-9239-c663-cd6fc570e5ee" testName="GuiyangMahjong.Lobby.Tests.LobbyApiTests.MatchResultEndpoint_AuthenticatesAndAcknowledgesDuplicate" computerName="FREEBOOZ" duration="00:00:00.0057205" startTime="2026-07-29T09:55:41.4992899+08:00" endTime="2026-07-29T09:55:41.5052119+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="8756daed-6c06-4b63-b27f-9db627a903ae" />
+    <UnitTestResult executionId="9ce206b6-c8ac-4c42-a5a2-39f1a572663f" testId="329a7923-7dfc-67fd-b511-2059cf2c8d23" testName="GuiyangMahjong.Lobby.Tests.SecurityTests.Token_ClientTampering_IsRejected" computerName="FREEBOOZ" duration="00:00:00.2653744" startTime="2026-07-29T09:55:39.5659175+08:00" endTime="2026-07-29T09:55:39.8165926+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="9ce206b6-c8ac-4c42-a5a2-39f1a572663f" />
+  </Results>
+  <TestDefinitions>
+    <UnitTest name="GuiyangMahjong.Lobby.Tests.LobbyApiTests.ExpiredToken_ReturnsSessionExpired" storage="h:\mahjonggame\services\guiyangmahjong.lobby.tests\bin\release\net10.0\guiyangmahjong.lobby.tests.dll" id="4d49d4e5-aa98-2f25-76c1-30e1a773193c">
+      <Execution id="f3d6ff35-8061-4695-92cf-6b7981c7d93c" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Lobby.Tests\bin\Release\net10.0\GuiyangMahjong.Lobby.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Lobby.Tests.LobbyApiTests" name="ExpiredToken_ReturnsSessionExpired" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Lobby.Tests.LobbyApiTests.MatchResultEndpoint_AuthenticatesAndAcknowledgesDuplicate" storage="h:\mahjonggame\services\guiyangmahjong.lobby.tests\bin\release\net10.0\guiyangmahjong.lobby.tests.dll" id="b07e24d9-9293-9239-c663-cd6fc570e5ee">
+      <Execution id="8756daed-6c06-4b63-b27f-9db627a903ae" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Lobby.Tests\bin\Release\net10.0\GuiyangMahjong.Lobby.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Lobby.Tests.LobbyApiTests" name="MatchResultEndpoint_AuthenticatesAndAcknowledgesDuplicate" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Lobby.Tests.PlayerManagementCommandTests.DisconnectRejectsOldTokenRemovesPresenceAndAllowsNewLogin" storage="h:\mahjonggame\services\guiyangmahjong.lobby.tests\bin\release\net10.0\guiyangmahjong.lobby.tests.dll" id="b74f756b-d79c-822b-c81c-58a25df24ba9">
+      <Execution id="1e564c88-c09b-4d33-a220-c95c8b3be23e" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Lobby.Tests\bin\Release\net10.0\GuiyangMahjong.Lobby.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Lobby.Tests.PlayerManagementCommandTests" name="DisconnectRejectsOldTokenRemovesPresenceAndAllowsNewLogin" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Lobby.Tests.AllocatorIntegrationDomainTests.Route_IsUnavailableUntilRegistrationThenGetsShortLivedTicket" storage="h:\mahjonggame\services\guiyangmahjong.lobby.tests\bin\release\net10.0\guiyangmahjong.lobby.tests.dll" id="17bb06a5-0dcc-e2e6-c596-3cfca30d9791">
+      <Execution id="26cd3e3b-be63-4560-839d-2bff6224ce6f" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Lobby.Tests\bin\Release\net10.0\GuiyangMahjong.Lobby.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Lobby.Tests.AllocatorIntegrationDomainTests" name="Route_IsUnavailableUntilRegistrationThenGetsShortLivedTicket" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Lobby.Tests.AllocatorIntegrationDomainTests.AllocatorFailure_RemovesRouteAndFailsRoom" storage="h:\mahjonggame\services\guiyangmahjong.lobby.tests\bin\release\net10.0\guiyangmahjong.lobby.tests.dll" id="cf56444f-47aa-f08d-e58a-c28b23648c0c">
+      <Execution id="2225470b-b30a-4a90-8412-d286630a3e4a" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Lobby.Tests\bin\Release\net10.0\GuiyangMahjong.Lobby.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Lobby.Tests.AllocatorIntegrationDomainTests" name="AllocatorFailure_RemovesRouteAndFailsRoom" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Lobby.Tests.RoomDomainTests.SharedPersistentStore_RestoresRoomForNewServiceInstance" storage="h:\mahjonggame\services\guiyangmahjong.lobby.tests\bin\release\net10.0\guiyangmahjong.lobby.tests.dll" id="e16386cd-f84c-1d19-6159-4e4f209fa9ba">
+      <Execution id="1fa760c2-ba4d-4e9c-8c6e-fc7a37904706" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Lobby.Tests\bin\Release\net10.0\GuiyangMahjong.Lobby.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Lobby.Tests.RoomDomainTests" name="SharedPersistentStore_RestoresRoomForNewServiceInstance" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Lobby.Tests.AllocatorIntegrationDomainTests.FailureBeforeRegistration_FailsAllocatingRoom" storage="h:\mahjonggame\services\guiyangmahjong.lobby.tests\bin\release\net10.0\guiyangmahjong.lobby.tests.dll" id="1b843fd4-74e6-034a-a7ba-391882728cfc">
+      <Execution id="cb545672-3a36-4550-986a-e9f3b8ec992f" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Lobby.Tests\bin\Release\net10.0\GuiyangMahjong.Lobby.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Lobby.Tests.AllocatorIntegrationDomainTests" name="FailureBeforeRegistration_FailsAllocatingRoom" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Lobby.Tests.RuntimeTelemetryContractTests.V1Heartbeat_ProcessCpuAboveOneHundredIsRejected" storage="h:\mahjonggame\services\guiyangmahjong.lobby.tests\bin\release\net10.0\guiyangmahjong.lobby.tests.dll" id="2e84a4c2-fc8c-141c-6910-9c8fb7ef3786">
+      <Execution id="6a320b77-dec5-4617-a23a-b7e932772802" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Lobby.Tests\bin\Release\net10.0\GuiyangMahjong.Lobby.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Lobby.Tests.RuntimeTelemetryContractTests" name="V1Heartbeat_ProcessCpuAboveOneHundredIsRejected" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Lobby.Tests.PlayerManagementCommandTests.RoomControlIsIdempotentAndProhibitsNewPlayers(actionType: &quot;EnableMaintenanceMode&quot;, maintenanceMode: True)" storage="h:\mahjonggame\services\guiyangmahjong.lobby.tests\bin\release\net10.0\guiyangmahjong.lobby.tests.dll" id="f8a786b1-e75d-5b3e-9fd8-c69992b5fa7d">
+      <Execution id="f0759cb9-47c8-4f17-8034-261ed8c70e64" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Lobby.Tests\bin\Release\net10.0\GuiyangMahjong.Lobby.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Lobby.Tests.PlayerManagementCommandTests" name="RoomControlIsIdempotentAndProhibitsNewPlayers" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Lobby.Tests.AllocatorIntegrationDomainTests.EmptyWaitingRoom_ClosesAndDrainsDedicatedServerAfterTimeout" storage="h:\mahjonggame\services\guiyangmahjong.lobby.tests\bin\release\net10.0\guiyangmahjong.lobby.tests.dll" id="22a043e1-c00e-bb6e-5b19-6f8710e14353">
+      <Execution id="2836886f-99f0-4f3c-908d-22d00d606843" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Lobby.Tests\bin\Release\net10.0\GuiyangMahjong.Lobby.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Lobby.Tests.AllocatorIntegrationDomainTests" name="EmptyWaitingRoom_ClosesAndDrainsDedicatedServerAfterTimeout" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Lobby.Tests.DistributedStateContractTests.IdempotencyStore_CoalescesConcurrentExecution" storage="h:\mahjonggame\services\guiyangmahjong.lobby.tests\bin\release\net10.0\guiyangmahjong.lobby.tests.dll" id="e18339d7-73fa-c28b-c17b-5efe3cc5c675">
+      <Execution id="beae930b-a0cc-4448-ae03-c1d0fb923965" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Lobby.Tests\bin\Release\net10.0\GuiyangMahjong.Lobby.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Lobby.Tests.DistributedStateContractTests" name="IdempotencyStore_CoalescesConcurrentExecution" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Lobby.Tests.SecurityTests.Password_WrongAttempts_AreRateLimitedAndRecoverAfterWindow" storage="h:\mahjonggame\services\guiyangmahjong.lobby.tests\bin\release\net10.0\guiyangmahjong.lobby.tests.dll" id="8e03596d-cb1f-5d12-eabc-b72d18492374">
+      <Execution id="e01f9931-5a40-4882-8613-3fd508a95c0f" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Lobby.Tests\bin\Release\net10.0\GuiyangMahjong.Lobby.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Lobby.Tests.SecurityTests" name="Password_WrongAttempts_AreRateLimitedAndRecoverAfterWindow" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Lobby.Tests.ExternalPersistenceIntegrationTests.Redis_AccessRevocationIsSharedAndMonotonicAcrossInstances" storage="h:\mahjonggame\services\guiyangmahjong.lobby.tests\bin\release\net10.0\guiyangmahjong.lobby.tests.dll" id="f4c689e5-6d6b-cd09-7b20-b1090db4fbec">
+      <Execution id="a2ba064d-01c9-4c20-96bc-1b21542bd195" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Lobby.Tests\bin\Release\net10.0\GuiyangMahjong.Lobby.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Lobby.Tests.ExternalPersistenceIntegrationTests" name="Redis_AccessRevocationIsSharedAndMonotonicAcrossInstances" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Lobby.Tests.RoomDomainTests.ConcurrentJoin_ForTwoRooms_ReservesOnlyOneActiveMembership" storage="h:\mahjonggame\services\guiyangmahjong.lobby.tests\bin\release\net10.0\guiyangmahjong.lobby.tests.dll" id="643e4494-a688-526a-859e-e14c10a25a60">
+      <Execution id="21d3a30b-7163-412a-8d55-3dbec136a022" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Lobby.Tests\bin\Release\net10.0\GuiyangMahjong.Lobby.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Lobby.Tests.RoomDomainTests" name="ConcurrentJoin_ForTwoRooms_ReservesOnlyOneActiveMembership" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Lobby.Tests.RuntimeTelemetryContractTests.LegacyHeartbeat_MissingOptionalFieldsDefaultsToV1AndPreservesNulls" storage="h:\mahjonggame\services\guiyangmahjong.lobby.tests\bin\release\net10.0\guiyangmahjong.lobby.tests.dll" id="e06d4e60-f112-f9d0-c47b-0fa1fe53369c">
+      <Execution id="27f1457d-8962-432c-b92c-a29ca42778d6" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Lobby.Tests\bin\Release\net10.0\GuiyangMahjong.Lobby.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Lobby.Tests.RuntimeTelemetryContractTests" name="LegacyHeartbeat_MissingOptionalFieldsDefaultsToV1AndPreservesNulls" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Lobby.Tests.ExternalPersistenceIntegrationTests.Redis_EventPublishedByOneHubReachesAnotherHubClient" storage="h:\mahjonggame\services\guiyangmahjong.lobby.tests\bin\release\net10.0\guiyangmahjong.lobby.tests.dll" id="144831d1-4a7b-2235-4099-f653a7374974">
+      <Execution id="9555e2e6-7417-4619-98d1-8ec26011f660" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Lobby.Tests\bin\Release\net10.0\GuiyangMahjong.Lobby.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Lobby.Tests.ExternalPersistenceIntegrationTests" name="Redis_EventPublishedByOneHubReachesAnotherHubClient" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Lobby.Tests.AllocatorIntegrationDomainTests.EmptyPlayingRoom_FailsAndDrainsDedicatedServerAfterReconnectWindow" storage="h:\mahjonggame\services\guiyangmahjong.lobby.tests\bin\release\net10.0\guiyangmahjong.lobby.tests.dll" id="9b677928-6efb-7d9a-a0c7-ad1d993bbc4c">
+      <Execution id="a5d180ca-de57-4db5-8514-22215c3b2d0a" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Lobby.Tests\bin\Release\net10.0\GuiyangMahjong.Lobby.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Lobby.Tests.AllocatorIntegrationDomainTests" name="EmptyPlayingRoom_FailsAndDrainsDedicatedServerAfterReconnectWindow" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Lobby.Tests.RoomDomainTests.WaitingRoom_ReclaimsExpiredSeats_BeforeCapacityCheck" storage="h:\mahjonggame\services\guiyangmahjong.lobby.tests\bin\release\net10.0\guiyangmahjong.lobby.tests.dll" id="1da61a02-f2da-ec4e-547f-c9c0767d0f89">
+      <Execution id="38175f85-2eef-4a19-998d-95f4dd3e64cb" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Lobby.Tests\bin\Release\net10.0\GuiyangMahjong.Lobby.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Lobby.Tests.RoomDomainTests" name="WaitingRoom_ReclaimsExpiredSeats_BeforeCapacityCheck" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Lobby.Tests.RoomDomainTests.StateMachine_RejectsSkippingFromAllocatingToPlaying" storage="h:\mahjonggame\services\guiyangmahjong.lobby.tests\bin\release\net10.0\guiyangmahjong.lobby.tests.dll" id="d1212b7e-e734-a380-792e-f106df71a8a4">
+      <Execution id="dc96cb85-c5d9-4394-b7b3-5b99e399858c" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Lobby.Tests\bin\Release\net10.0\GuiyangMahjong.Lobby.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Lobby.Tests.RoomDomainTests" name="StateMachine_RejectsSkippingFromAllocatingToPlaying" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Lobby.Tests.RuntimeTelemetryContractTests.V1Heartbeat_AllFieldsReachLobbyRuntimeSnapshotWithoutLoss" storage="h:\mahjonggame\services\guiyangmahjong.lobby.tests\bin\release\net10.0\guiyangmahjong.lobby.tests.dll" id="92786c24-24dc-58c0-1833-c7a931d80b66">
+      <Execution id="c3697120-e841-4f9d-882e-8e1ff21eb047" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Lobby.Tests\bin\Release\net10.0\GuiyangMahjong.Lobby.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Lobby.Tests.RuntimeTelemetryContractTests" name="V1Heartbeat_AllFieldsReachLobbyRuntimeSnapshotWithoutLoss" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Lobby.Tests.SecurityTests.Token_ClientTampering_IsRejected" storage="h:\mahjonggame\services\guiyangmahjong.lobby.tests\bin\release\net10.0\guiyangmahjong.lobby.tests.dll" id="329a7923-7dfc-67fd-b511-2059cf2c8d23">
+      <Execution id="9ce206b6-c8ac-4c42-a5a2-39f1a572663f" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Lobby.Tests\bin\Release\net10.0\GuiyangMahjong.Lobby.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Lobby.Tests.SecurityTests" name="Token_ClientTampering_IsRejected" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Lobby.Tests.PlayerManagementCommandTests.ForceDissolveTransitionsRoomAndTreatsRetryAsTerminalSuccess" storage="h:\mahjonggame\services\guiyangmahjong.lobby.tests\bin\release\net10.0\guiyangmahjong.lobby.tests.dll" id="b96d4299-5e6d-fb50-4f36-4da4291ef100">
+      <Execution id="1644ca20-b442-41a3-ba8e-d3aee2aa5ebd" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Lobby.Tests\bin\Release\net10.0\GuiyangMahjong.Lobby.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Lobby.Tests.PlayerManagementCommandTests" name="ForceDissolveTransitionsRoomAndTreatsRetryAsTerminalSuccess" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Lobby.Tests.RoomDomainTests.ConcurrentCreation_ForSamePlayer_LeavesExactlyOneActiveRoom" storage="h:\mahjonggame\services\guiyangmahjong.lobby.tests\bin\release\net10.0\guiyangmahjong.lobby.tests.dll" id="3ef5842c-585e-34ea-834e-25a19b9b95a0">
+      <Execution id="5cd11b50-9784-450b-8b64-9e1e84c495da" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Lobby.Tests\bin\Release\net10.0\GuiyangMahjong.Lobby.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Lobby.Tests.RoomDomainTests" name="ConcurrentCreation_ForSamePlayer_LeavesExactlyOneActiveRoom" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Lobby.Tests.AllocatorIntegrationDomainTests.MatchResult_IsPersistedOnceAndDuplicateIsAcknowledged" storage="h:\mahjonggame\services\guiyangmahjong.lobby.tests\bin\release\net10.0\guiyangmahjong.lobby.tests.dll" id="9171bb30-6d09-1b0a-85f7-c42599ff640a">
+      <Execution id="0241368b-80e7-42da-ac9d-0b611f5aaea3" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Lobby.Tests\bin\Release\net10.0\GuiyangMahjong.Lobby.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Lobby.Tests.AllocatorIntegrationDomainTests" name="MatchResult_IsPersistedOnceAndDuplicateIsAcknowledged" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Lobby.Tests.DistributedStateContractTests.PresenceStore_ExpiresInactivePlayers" storage="h:\mahjonggame\services\guiyangmahjong.lobby.tests\bin\release\net10.0\guiyangmahjong.lobby.tests.dll" id="1d30154b-5e93-006a-775e-b0e68f9e4757">
+      <Execution id="db1d54be-7cc2-4b9b-b7c6-6258fdfb5439" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Lobby.Tests\bin\Release\net10.0\GuiyangMahjong.Lobby.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Lobby.Tests.DistributedStateContractTests" name="PresenceStore_ExpiresInactivePlayers" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Lobby.Tests.AllocatorIntegrationDomainTests.ReconnectRoute_UsesAuthenticatedPlayerMappingInsteadOfClientHints" storage="h:\mahjonggame\services\guiyangmahjong.lobby.tests\bin\release\net10.0\guiyangmahjong.lobby.tests.dll" id="1ca1abad-4b67-1877-0990-67546a2888e6">
+      <Execution id="d671608f-d368-4b10-a2ac-262ec6ab25cb" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Lobby.Tests\bin\Release\net10.0\GuiyangMahjong.Lobby.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Lobby.Tests.AllocatorIntegrationDomainTests" name="ReconnectRoute_UsesAuthenticatedPlayerMappingInsteadOfClientHints" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Lobby.Tests.LobbyApiTests.OpenApi_IsServedByIndependentApplication" storage="h:\mahjonggame\services\guiyangmahjong.lobby.tests\bin\release\net10.0\guiyangmahjong.lobby.tests.dll" id="04499826-c8df-5c77-e8d2-53e8b7954296">
+      <Execution id="5bfa267d-9f07-4baf-96df-0e798f5c055b" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Lobby.Tests\bin\Release\net10.0\GuiyangMahjong.Lobby.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Lobby.Tests.LobbyApiTests" name="OpenApi_IsServedByIndependentApplication" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Lobby.Tests.AllocatorIntegrationDomainTests.MatchResult_RetryAfterDrainFailureDoesNotPersistTwice" storage="h:\mahjonggame\services\guiyangmahjong.lobby.tests\bin\release\net10.0\guiyangmahjong.lobby.tests.dll" id="fda6fa4a-a13c-53f1-5e74-ed9b40cb8cac">
+      <Execution id="3dc6ecc3-a6dc-4826-a342-239a4bf879f7" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Lobby.Tests\bin\Release\net10.0\GuiyangMahjong.Lobby.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Lobby.Tests.AllocatorIntegrationDomainTests" name="MatchResult_RetryAfterDrainFailureDoesNotPersistTwice" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Lobby.Tests.RuntimeTelemetryContractTests.UnknownTelemetrySchemaVersion_IsRejectedBeforeSideEffects" storage="h:\mahjonggame\services\guiyangmahjong.lobby.tests\bin\release\net10.0\guiyangmahjong.lobby.tests.dll" id="aeb0d67e-431a-3429-a938-610d59d40f63">
+      <Execution id="8a078be0-5820-4808-8ddc-1d8be28d0cd4" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Lobby.Tests\bin\Release\net10.0\GuiyangMahjong.Lobby.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Lobby.Tests.RuntimeTelemetryContractTests" name="UnknownTelemetrySchemaVersion_IsRejectedBeforeSideEffects" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Lobby.Tests.WebSocketEventTests.ConnectionAndRoomCreation_PublishRequiredEvents" storage="h:\mahjonggame\services\guiyangmahjong.lobby.tests\bin\release\net10.0\guiyangmahjong.lobby.tests.dll" id="d67cd4eb-c0f4-aca0-9c6f-187a14fa50a7">
+      <Execution id="5cc140f0-4a36-4e2c-82c5-0e899f3002ad" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Lobby.Tests\bin\Release\net10.0\GuiyangMahjong.Lobby.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Lobby.Tests.WebSocketEventTests" name="ConnectionAndRoomCreation_PublishRequiredEvents" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Lobby.Tests.ExternalPersistenceIntegrationTests.Redis_PresenceAggregatesAndExpiresAcrossStoreInstances" storage="h:\mahjonggame\services\guiyangmahjong.lobby.tests\bin\release\net10.0\guiyangmahjong.lobby.tests.dll" id="2947917a-016f-d156-4956-bcc6ce448981">
+      <Execution id="e5e56e0f-c8e4-4921-86ec-c4f09a6cb5f8" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Lobby.Tests\bin\Release\net10.0\GuiyangMahjong.Lobby.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Lobby.Tests.ExternalPersistenceIntegrationTests" name="Redis_PresenceAggregatesAndExpiresAcrossStoreInstances" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Lobby.Tests.RoomDomainTests.ClosingRoom_ReleasesPlayerLease_AndRejectsStaleOverwrite" storage="h:\mahjonggame\services\guiyangmahjong.lobby.tests\bin\release\net10.0\guiyangmahjong.lobby.tests.dll" id="6ed982b8-3586-c01d-99a8-4c79f7759845">
+      <Execution id="80f9ffde-c44d-42f5-a160-75d75806a53c" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Lobby.Tests\bin\Release\net10.0\GuiyangMahjong.Lobby.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Lobby.Tests.RoomDomainTests" name="ClosingRoom_ReleasesPlayerLease_AndRejectsStaleOverwrite" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Lobby.Tests.LobbyApiTests.OnlyOwnerCanCloseRoom_AndOwnerCanCreateAgainAfterClosing" storage="h:\mahjonggame\services\guiyangmahjong.lobby.tests\bin\release\net10.0\guiyangmahjong.lobby.tests.dll" id="77cd6440-f309-ff39-46d0-b21348d49dab">
+      <Execution id="8ccc747a-fed7-442a-9e15-7f2baacd5560" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Lobby.Tests\bin\Release\net10.0\GuiyangMahjong.Lobby.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Lobby.Tests.LobbyApiTests" name="OnlyOwnerCanCloseRoom_AndOwnerCanCreateAgainAfterClosing" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Lobby.Tests.LobbyApiTests.PasswordFailure_IsLimitedAndResponseNeverEchoesPassword" storage="h:\mahjonggame\services\guiyangmahjong.lobby.tests\bin\release\net10.0\guiyangmahjong.lobby.tests.dll" id="67acc2c1-dd3a-ebfc-0add-7c23190ed987">
+      <Execution id="bf21151b-e9e6-431a-8690-f4fd4d98b42a" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Lobby.Tests\bin\Release\net10.0\GuiyangMahjong.Lobby.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Lobby.Tests.LobbyApiTests" name="PasswordFailure_IsLimitedAndResponseNeverEchoesPassword" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Lobby.Tests.LobbyApiTests.MatchResultRecovery_RequiresInternalTokenAndClosesFailedRoom" storage="h:\mahjonggame\services\guiyangmahjong.lobby.tests\bin\release\net10.0\guiyangmahjong.lobby.tests.dll" id="fe6e35b2-489b-414d-9368-709aaf3ae47f">
+      <Execution id="ea262f3f-3d79-40d1-a5b4-2a1af49852ac" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Lobby.Tests\bin\Release\net10.0\GuiyangMahjong.Lobby.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Lobby.Tests.LobbyApiTests" name="MatchResultRecovery_RequiresInternalTokenAndClosesFailedRoom" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Lobby.Tests.ExternalPersistenceIntegrationTests.PostgreSql_AllowsOnlyOneActiveRoomAcrossStoreInstances" storage="h:\mahjonggame\services\guiyangmahjong.lobby.tests\bin\release\net10.0\guiyangmahjong.lobby.tests.dll" id="28ebb66a-129c-bfe4-b61c-fc33be28352a">
+      <Execution id="b877d55f-f363-4f75-a04d-348f3a646283" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Lobby.Tests\bin\Release\net10.0\GuiyangMahjong.Lobby.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Lobby.Tests.ExternalPersistenceIntegrationTests" name="PostgreSql_AllowsOnlyOneActiveRoomAcrossStoreInstances" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Lobby.Tests.AllocatorIntegrationDomainTests.RegistrationBootstrap_UsesImmutableAuthoritativeRuleSnapshot" storage="h:\mahjonggame\services\guiyangmahjong.lobby.tests\bin\release\net10.0\guiyangmahjong.lobby.tests.dll" id="88abfadf-44ae-223b-67e3-d5994b3af726">
+      <Execution id="eeee74e2-7779-4df0-80da-420b86fb89d7" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Lobby.Tests\bin\Release\net10.0\GuiyangMahjong.Lobby.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Lobby.Tests.AllocatorIntegrationDomainTests" name="RegistrationBootstrap_UsesImmutableAuthoritativeRuleSnapshot" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Lobby.Tests.RoomMonitoringStoreTests.RuntimeSnapshotAndTimelineRoundTripInOrder" storage="h:\mahjonggame\services\guiyangmahjong.lobby.tests\bin\release\net10.0\guiyangmahjong.lobby.tests.dll" id="047ba55b-f473-4d24-94cd-82554bd3a521">
+      <Execution id="ad43a5a9-d2c1-4abf-966d-307b08bb6ff1" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Lobby.Tests\bin\Release\net10.0\GuiyangMahjong.Lobby.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Lobby.Tests.RoomMonitoringStoreTests" name="RuntimeSnapshotAndTimelineRoundTripInOrder" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Lobby.Tests.LobbyApiTests.Readiness_ChecksStoreAndAllocatorDependency" storage="h:\mahjonggame\services\guiyangmahjong.lobby.tests\bin\release\net10.0\guiyangmahjong.lobby.tests.dll" id="0b2613fd-8687-203d-a0af-04087e0dbbd4">
+      <Execution id="00aaad79-9ff5-41b2-bd61-0fd9a8a0c662" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Lobby.Tests\bin\Release\net10.0\GuiyangMahjong.Lobby.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Lobby.Tests.LobbyApiTests" name="Readiness_ChecksStoreAndAllocatorDependency" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Lobby.Tests.ExternalPersistenceIntegrationTests.PostgreSql_RoomAdmissionControlIsVisibleAcrossInstances" storage="h:\mahjonggame\services\guiyangmahjong.lobby.tests\bin\release\net10.0\guiyangmahjong.lobby.tests.dll" id="49b2b52e-4892-5891-82bc-7422bd93b84d">
+      <Execution id="3bb404f7-9f57-4698-bc5d-1dba3b5d1d38" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Lobby.Tests\bin\Release\net10.0\GuiyangMahjong.Lobby.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Lobby.Tests.ExternalPersistenceIntegrationTests" name="PostgreSql_RoomAdmissionControlIsVisibleAcrossInstances" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Lobby.Tests.SecurityTests.Token_ValidSignature_AcceptsTrustedIdentity" storage="h:\mahjonggame\services\guiyangmahjong.lobby.tests\bin\release\net10.0\guiyangmahjong.lobby.tests.dll" id="b1e51925-c22c-da0a-3556-2e671c38ad1f">
+      <Execution id="bc9c079a-7a40-4a7b-aef1-f38166114a02" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Lobby.Tests\bin\Release\net10.0\GuiyangMahjong.Lobby.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Lobby.Tests.SecurityTests" name="Token_ValidSignature_AcceptsTrustedIdentity" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Lobby.Tests.RoomDomainTests.ConcurrentRoomCreation_AlwaysProducesUniqueRoomCodes" storage="h:\mahjonggame\services\guiyangmahjong.lobby.tests\bin\release\net10.0\guiyangmahjong.lobby.tests.dll" id="c27436cd-3185-2026-3703-e6bf53352f7f">
+      <Execution id="6df62f7c-d578-471a-ae48-725b4269c361" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Lobby.Tests\bin\Release\net10.0\GuiyangMahjong.Lobby.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Lobby.Tests.RoomDomainTests" name="ConcurrentRoomCreation_AlwaysProducesUniqueRoomCodes" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Lobby.Tests.PlayerManagementCommandTests.RoomControlIsIdempotentAndProhibitsNewPlayers(actionType: &quot;ProhibitNewPlayers&quot;, maintenanceMode: False)" storage="h:\mahjonggame\services\guiyangmahjong.lobby.tests\bin\release\net10.0\guiyangmahjong.lobby.tests.dll" id="60eea658-2aa8-bb15-293d-9ead5c338c52">
+      <Execution id="d7e6f936-6e63-4049-b017-126dec1ceea8" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Lobby.Tests\bin\Release\net10.0\GuiyangMahjong.Lobby.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Lobby.Tests.PlayerManagementCommandTests" name="RoomControlIsIdempotentAndProhibitsNewPlayers" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Lobby.Tests.LobbyApiTests.ConcurrentHttpCreation_ReturnsUniqueRoomCodes" storage="h:\mahjonggame\services\guiyangmahjong.lobby.tests\bin\release\net10.0\guiyangmahjong.lobby.tests.dll" id="863c79e4-efd7-96da-1fcf-450396a1ec34">
+      <Execution id="334eb602-1887-4c26-828a-f30df116e659" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Lobby.Tests\bin\Release\net10.0\GuiyangMahjong.Lobby.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Lobby.Tests.LobbyApiTests" name="ConcurrentHttpCreation_ReturnsUniqueRoomCodes" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Lobby.Tests.ExternalPersistenceIntegrationTests.Redis_IdempotencyCoalescesExecutionAcrossStoreInstances" storage="h:\mahjonggame\services\guiyangmahjong.lobby.tests\bin\release\net10.0\guiyangmahjong.lobby.tests.dll" id="4e10293a-3dac-a73e-5e79-0e9a0cfd66b0">
+      <Execution id="ac0639d0-f51a-4ad2-b598-def0fc8bc398" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Lobby.Tests\bin\Release\net10.0\GuiyangMahjong.Lobby.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Lobby.Tests.ExternalPersistenceIntegrationTests" name="Redis_IdempotencyCoalescesExecutionAcrossStoreInstances" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Lobby.Tests.MonitoringSecurityTests.MonitoringRoomsRequiresDedicatedReadOnlyCredential" storage="h:\mahjonggame\services\guiyangmahjong.lobby.tests\bin\release\net10.0\guiyangmahjong.lobby.tests.dll" id="2a1861f4-1ceb-83f7-3880-3f280259d49f">
+      <Execution id="758c6f31-3b5e-4a7d-823e-d0a2644e3d41" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Lobby.Tests\bin\Release\net10.0\GuiyangMahjong.Lobby.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Lobby.Tests.MonitoringSecurityTests" name="MonitoringRoomsRequiresDedicatedReadOnlyCredential" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Lobby.Tests.SecurityTests.Token_Expired_IsRejected" storage="h:\mahjonggame\services\guiyangmahjong.lobby.tests\bin\release\net10.0\guiyangmahjong.lobby.tests.dll" id="60c0030c-092e-e358-406c-85f125dac204">
+      <Execution id="d3d48634-e281-4a0b-8e99-663dfcd42e41" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Lobby.Tests\bin\Release\net10.0\GuiyangMahjong.Lobby.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Lobby.Tests.SecurityTests" name="Token_Expired_IsRejected" />
+    </UnitTest>
+    <UnitTest name="GuiyangMahjong.Lobby.Tests.LobbyApiTests.Bootstrap_ReturnsAuthenticatedPlayerAndProtocol" storage="h:\mahjonggame\services\guiyangmahjong.lobby.tests\bin\release\net10.0\guiyangmahjong.lobby.tests.dll" id="3847fc8f-a5d3-2dc2-ebe9-99cb997f4ada">
+      <Execution id="8175a7a8-e388-4841-a6cf-886191d7cde5" />
+      <TestMethod codeBase="H:\MahjongGame\Services\GuiyangMahjong.Lobby.Tests\bin\Release\net10.0\GuiyangMahjong.Lobby.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="GuiyangMahjong.Lobby.Tests.LobbyApiTests" name="Bootstrap_ReturnsAuthenticatedPlayerAndProtocol" />
+    </UnitTest>
+  </TestDefinitions>
+  <TestEntries>
+    <TestEntry testId="49b2b52e-4892-5891-82bc-7422bd93b84d" executionId="3bb404f7-9f57-4698-bc5d-1dba3b5d1d38" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="1b843fd4-74e6-034a-a7ba-391882728cfc" executionId="cb545672-3a36-4550-986a-e9f3b8ec992f" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="d67cd4eb-c0f4-aca0-9c6f-187a14fa50a7" executionId="5cc140f0-4a36-4e2c-82c5-0e899f3002ad" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="f4c689e5-6d6b-cd09-7b20-b1090db4fbec" executionId="a2ba064d-01c9-4c20-96bc-1b21542bd195" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="60eea658-2aa8-bb15-293d-9ead5c338c52" executionId="d7e6f936-6e63-4049-b017-126dec1ceea8" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="92786c24-24dc-58c0-1833-c7a931d80b66" executionId="c3697120-e841-4f9d-882e-8e1ff21eb047" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="3ef5842c-585e-34ea-834e-25a19b9b95a0" executionId="5cd11b50-9784-450b-8b64-9e1e84c495da" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="1ca1abad-4b67-1877-0990-67546a2888e6" executionId="d671608f-d368-4b10-a2ac-262ec6ab25cb" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="1da61a02-f2da-ec4e-547f-c9c0767d0f89" executionId="38175f85-2eef-4a19-998d-95f4dd3e64cb" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="2947917a-016f-d156-4956-bcc6ce448981" executionId="e5e56e0f-c8e4-4921-86ec-c4f09a6cb5f8" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="2e84a4c2-fc8c-141c-6910-9c8fb7ef3786" executionId="6a320b77-dec5-4617-a23a-b7e932772802" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="88abfadf-44ae-223b-67e3-d5994b3af726" executionId="eeee74e2-7779-4df0-80da-420b86fb89d7" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="4d49d4e5-aa98-2f25-76c1-30e1a773193c" executionId="f3d6ff35-8061-4695-92cf-6b7981c7d93c" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="28ebb66a-129c-bfe4-b61c-fc33be28352a" executionId="b877d55f-f363-4f75-a04d-348f3a646283" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="22a043e1-c00e-bb6e-5b19-6f8710e14353" executionId="2836886f-99f0-4f3c-908d-22d00d606843" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="fe6e35b2-489b-414d-9368-709aaf3ae47f" executionId="ea262f3f-3d79-40d1-a5b4-2a1af49852ac" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="3847fc8f-a5d3-2dc2-ebe9-99cb997f4ada" executionId="8175a7a8-e388-4841-a6cf-886191d7cde5" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="b1e51925-c22c-da0a-3556-2e671c38ad1f" executionId="bc9c079a-7a40-4a7b-aef1-f38166114a02" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="e18339d7-73fa-c28b-c17b-5efe3cc5c675" executionId="beae930b-a0cc-4448-ae03-c1d0fb923965" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="8e03596d-cb1f-5d12-eabc-b72d18492374" executionId="e01f9931-5a40-4882-8613-3fd508a95c0f" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="2a1861f4-1ceb-83f7-3880-3f280259d49f" executionId="758c6f31-3b5e-4a7d-823e-d0a2644e3d41" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="04499826-c8df-5c77-e8d2-53e8b7954296" executionId="5bfa267d-9f07-4baf-96df-0e798f5c055b" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="643e4494-a688-526a-859e-e14c10a25a60" executionId="21d3a30b-7163-412a-8d55-3dbec136a022" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="b96d4299-5e6d-fb50-4f36-4da4291ef100" executionId="1644ca20-b442-41a3-ba8e-d3aee2aa5ebd" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="60c0030c-092e-e358-406c-85f125dac204" executionId="d3d48634-e281-4a0b-8e99-663dfcd42e41" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="fda6fa4a-a13c-53f1-5e74-ed9b40cb8cac" executionId="3dc6ecc3-a6dc-4826-a342-239a4bf879f7" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="aeb0d67e-431a-3429-a938-610d59d40f63" executionId="8a078be0-5820-4808-8ddc-1d8be28d0cd4" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="c27436cd-3185-2026-3703-e6bf53352f7f" executionId="6df62f7c-d578-471a-ae48-725b4269c361" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="6ed982b8-3586-c01d-99a8-4c79f7759845" executionId="80f9ffde-c44d-42f5-a160-75d75806a53c" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="67acc2c1-dd3a-ebfc-0add-7c23190ed987" executionId="bf21151b-e9e6-431a-8690-f4fd4d98b42a" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="f8a786b1-e75d-5b3e-9fd8-c69992b5fa7d" executionId="f0759cb9-47c8-4f17-8034-261ed8c70e64" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="17bb06a5-0dcc-e2e6-c596-3cfca30d9791" executionId="26cd3e3b-be63-4560-839d-2bff6224ce6f" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="047ba55b-f473-4d24-94cd-82554bd3a521" executionId="ad43a5a9-d2c1-4abf-966d-307b08bb6ff1" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="d1212b7e-e734-a380-792e-f106df71a8a4" executionId="dc96cb85-c5d9-4394-b7b3-5b99e399858c" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="e16386cd-f84c-1d19-6159-4e4f209fa9ba" executionId="1fa760c2-ba4d-4e9c-8c6e-fc7a37904706" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="9171bb30-6d09-1b0a-85f7-c42599ff640a" executionId="0241368b-80e7-42da-ac9d-0b611f5aaea3" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="e06d4e60-f112-f9d0-c47b-0fa1fe53369c" executionId="27f1457d-8962-432c-b92c-a29ca42778d6" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="4e10293a-3dac-a73e-5e79-0e9a0cfd66b0" executionId="ac0639d0-f51a-4ad2-b598-def0fc8bc398" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="9b677928-6efb-7d9a-a0c7-ad1d993bbc4c" executionId="a5d180ca-de57-4db5-8514-22215c3b2d0a" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="0b2613fd-8687-203d-a0af-04087e0dbbd4" executionId="00aaad79-9ff5-41b2-bd61-0fd9a8a0c662" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="77cd6440-f309-ff39-46d0-b21348d49dab" executionId="8ccc747a-fed7-442a-9e15-7f2baacd5560" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="144831d1-4a7b-2235-4099-f653a7374974" executionId="9555e2e6-7417-4619-98d1-8ec26011f660" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="cf56444f-47aa-f08d-e58a-c28b23648c0c" executionId="2225470b-b30a-4a90-8412-d286630a3e4a" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="863c79e4-efd7-96da-1fcf-450396a1ec34" executionId="334eb602-1887-4c26-828a-f30df116e659" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="b74f756b-d79c-822b-c81c-58a25df24ba9" executionId="1e564c88-c09b-4d33-a220-c95c8b3be23e" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="1d30154b-5e93-006a-775e-b0e68f9e4757" executionId="db1d54be-7cc2-4b9b-b7c6-6258fdfb5439" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="b07e24d9-9293-9239-c663-cd6fc570e5ee" executionId="8756daed-6c06-4b63-b27f-9db627a903ae" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="329a7923-7dfc-67fd-b511-2059cf2c8d23" executionId="9ce206b6-c8ac-4c42-a5a2-39f1a572663f" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+  </TestEntries>
+  <TestLists>
+    <TestList name="列表中未列出的结果" id="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestList name="所有已加载的结果" id="19431567-8539-422a-85d7-44ee4e166bda" />
+  </TestLists>
+  <ResultSummary outcome="Completed">
+    <Counters total="48" executed="42" passed="42" failed="0" error="0" timeout="0" aborted="0" inconclusive="0" passedButRunAborted="0" notRunnable="0" notExecuted="0" disconnected="0" warning="0" completed="0" inProgress="0" pending="0" />
+    <Output>
+      <StdOut>[xUnit.net 00:00:00.06] xUnit.net VSTest Adapter v3.1.4+50e68bbb8b (64-bit .NET 10.0.2)&#xD;
+[xUnit.net 00:00:01.22]   Discovering: GuiyangMahjong.Lobby.Tests&#xD;
+[xUnit.net 00:00:01.34]   Discovered:  GuiyangMahjong.Lobby.Tests&#xD;
+[xUnit.net 00:00:01.36]   Starting:    GuiyangMahjong.Lobby.Tests&#xD;
+[xUnit.net 00:00:01.40]       Set LOBBY_TEST_POSTGRES and LOBBY_TEST_REDIS to run external persistence tests.&#xD;
+[xUnit.net 00:00:01.40]       Set LOBBY_TEST_POSTGRES and LOBBY_TEST_REDIS to run external persistence tests.&#xD;
+[xUnit.net 00:00:01.41]       Set LOBBY_TEST_POSTGRES and LOBBY_TEST_REDIS to run external persistence tests.&#xD;
+[xUnit.net 00:00:01.41]       Set LOBBY_TEST_POSTGRES and LOBBY_TEST_REDIS to run external persistence tests.&#xD;
+[xUnit.net 00:00:01.41]       Set LOBBY_TEST_POSTGRES and LOBBY_TEST_REDIS to run external persistence tests.&#xD;
+[xUnit.net 00:00:01.41]       Set LOBBY_TEST_POSTGRES and LOBBY_TEST_REDIS to run external persistence tests.&#xD;
+在测试运行中跳过测试“GuiyangMahjong.Lobby.Tests.ExternalPersistenceIntegrationTests.Redis_AccessRevocationIsSharedAndMonotonicAcrossInstances”。&#xD;
+在测试运行中跳过测试“GuiyangMahjong.Lobby.Tests.ExternalPersistenceIntegrationTests.Redis_EventPublishedByOneHubReachesAnotherHubClient”。&#xD;
+在测试运行中跳过测试“GuiyangMahjong.Lobby.Tests.ExternalPersistenceIntegrationTests.PostgreSql_RoomAdmissionControlIsVisibleAcrossInstances”。&#xD;
+在测试运行中跳过测试“GuiyangMahjong.Lobby.Tests.ExternalPersistenceIntegrationTests.Redis_IdempotencyCoalescesExecutionAcrossStoreInstances”。&#xD;
+在测试运行中跳过测试“GuiyangMahjong.Lobby.Tests.ExternalPersistenceIntegrationTests.Redis_PresenceAggregatesAndExpiresAcrossStoreInstances”。&#xD;
+在测试运行中跳过测试“GuiyangMahjong.Lobby.Tests.ExternalPersistenceIntegrationTests.PostgreSql_AllowsOnlyOneActiveRoomAcrossStoreInstances”。&#xD;
+info: GuiyangMahjong.Lobby.Services.LobbyStoreInitializer[0]&#xD;
+      大厅存储初始化完成 Store=InMemoryLobbyStore&#xD;
+info: GuiyangMahjong.Lobby.Services.LobbyStoreInitializer[0]&#xD;
+      大厅存储初始化完成 Store=InMemoryLobbyStore&#xD;
+info: GuiyangMahjong.Lobby.Services.LobbyStoreInitializer[0]&#xD;
+      大厅存储初始化完成 Store=InMemoryLobbyStore&#xD;
+info: GuiyangMahjong.Lobby.Services.LobbyStoreInitializer[0]&#xD;
+      大厅存储初始化完成 Store=InMemoryLobbyStore&#xD;
+info: Microsoft.Hosting.Lifetime[0]&#xD;
+      Application started. Press Ctrl+C to shut down.&#xD;
+info: Microsoft.Hosting.Lifetime[0]&#xD;
+      Hosting environment: Development&#xD;
+info: Microsoft.Hosting.Lifetime[0]&#xD;
+      Content root path: H:\MahjongGame\Services\GuiyangMahjong.Lobby.Tests\bin\Release\net10.0\&#xD;
+info: Microsoft.Hosting.Lifetime[0]&#xD;
+      Application started. Press Ctrl+C to shut down.&#xD;
+info: Microsoft.Hosting.Lifetime[0]&#xD;
+      Hosting environment: Development&#xD;
+info: Microsoft.Hosting.Lifetime[0]&#xD;
+      Content root path: H:\MahjongGame\Services\GuiyangMahjong.Lobby.Tests\bin\Release\net10.0\&#xD;
+info: Microsoft.Hosting.Lifetime[0]&#xD;
+      Application started. Press Ctrl+C to shut down.&#xD;
+info: Microsoft.Hosting.Lifetime[0]&#xD;
+      Application started. Press Ctrl+C to shut down.&#xD;
+info: Microsoft.Hosting.Lifetime[0]&#xD;
+      Hosting environment: Development&#xD;
+info: Microsoft.Hosting.Lifetime[0]&#xD;
+      Hosting environment: Development&#xD;
+info: Microsoft.Hosting.Lifetime[0]&#xD;
+      Content root path: H:\MahjongGame\Services\GuiyangMahjong.Lobby.Tests\bin\Release\net10.0\&#xD;
+info: Microsoft.Hosting.Lifetime[0]&#xD;
+      Content root path: H:\MahjongGame\Services\GuiyangMahjong.Lobby.Tests\bin\Release\net10.0\&#xD;
+info: GuiyangMahjong.Lobby.Services.LobbyService[0]&#xD;
+      房间创建请求已接受 RequestId=052bfab0-95a7-4505-82da-aa4066ede4af RoomId=f4ebc723-1246-4614-b531-3a1271091afb PlayerId=close-owner-d2cbe43c8e46413db43b3942b81f5a33 PasswordProtected=False&#xD;
+info: GuiyangMahjong.Lobby.Services.LobbyService[0]&#xD;
+      房间创建请求已接受 RequestId=eb5afb93-2471-4421-9877-0cb19aa06dd0 RoomId=5dd7cc3b-8df3-4cd8-8e8c-314ee73e394f PlayerId=websocket-player PasswordProtected=False&#xD;
+info: Microsoft.Hosting.Lifetime[0]&#xD;
+      Application is shutting down...&#xD;
+info: Microsoft.Hosting.Lifetime[0]&#xD;
+      Application is shutting down...&#xD;
+info: GuiyangMahjong.Lobby.Services.LobbyService[0]&#xD;
+      玩家加入房间 RequestId=db79f605-e5ae-4d4c-943a-8c73941d9d93 RoomId=f4ebc723-1246-4614-b531-3a1271091afb PlayerId=close-member-d2cbe43c8e46413db43b3942b81f5a33&#xD;
+info: GuiyangMahjong.Lobby.Services.LobbyService[0]&#xD;
+      玩家加入房间 RequestId=f3107882-d137-40e6-8aed-ced2d88fcb91 RoomId=f4ebc723-1246-4614-b531-3a1271091afb PlayerId=close-member-d2cbe43c8e46413db43b3942b81f5a33&#xD;
+info: GuiyangMahjong.Lobby.Services.LobbyService[0]&#xD;
+      Owner closed room RequestId=f6b9289f-4617-47e5-a5b2-4ae57bb6ebbd RoomId=f4ebc723-1246-4614-b531-3a1271091afb PlayerId=close-owner-d2cbe43c8e46413db43b3942b81f5a33&#xD;
+info: GuiyangMahjong.Lobby.Services.LobbyService[0]&#xD;
+      房间创建请求已接受 RequestId=d9a2b472-7b92-40ea-a954-810f283760d6 RoomId=e8487e16-c20a-4d06-b89f-fdc770946194 PlayerId=close-owner-d2cbe43c8e46413db43b3942b81f5a33 PasswordProtected=False&#xD;
+info: Microsoft.Hosting.Lifetime[0]&#xD;
+      Application is shutting down...&#xD;
+info: GuiyangMahjong.Lobby.Services.LobbyService[0]&#xD;
+      牌局结算已持久化 RequestId=02f38a16-8838-4615-be26-4ecfa3a1e2d4 RoomId=b67f4f8e-86d7-4893-8767-3c1264cc0d33 MatchId=80089435-9587-4ade-aef2-b9334e4a1873 ResultSequence=7&#xD;
+info: GuiyangMahjong.Lobby.Services.LobbyService[0]&#xD;
+      房间创建请求已接受 RequestId=99ff64ad-b554-4257-86f6-6b9f2fd9f2fe RoomId=0f52ee54-1bdd-4683-9f37-74d4cb5f41e9 PlayerId=password-owner PasswordProtected=True&#xD;
+warn: GuiyangMahjong.Lobby.Services.LobbyService[0]&#xD;
+      房间密码验证失败 RequestId=13ef6d05-4e57-497e-a4fe-0fbf7f653a69 RoomId=0f52ee54-1bdd-4683-9f37-74d4cb5f41e9 PlayerId=password-joiner&#xD;
+warn: GuiyangMahjong.Lobby.Services.LobbyService[0]&#xD;
+      房间密码验证失败 RequestId=98bbbd7a-5d02-4c91-8004-3db09e4a26c5 RoomId=0f52ee54-1bdd-4683-9f37-74d4cb5f41e9 PlayerId=password-joiner&#xD;
+warn: GuiyangMahjong.Lobby.Services.LobbyService[0]&#xD;
+      房间密码验证失败 RequestId=c3568fa4-6870-4e09-b4d4-0297644b5218 RoomId=0f52ee54-1bdd-4683-9f37-74d4cb5f41e9 PlayerId=password-joiner&#xD;
+warn: GuiyangMahjong.Lobby.Services.LobbyService[0]&#xD;
+      房间密码验证失败 RequestId=558e3f2a-e75e-4959-a22e-941327226f4f RoomId=0f52ee54-1bdd-4683-9f37-74d4cb5f41e9 PlayerId=password-joiner&#xD;
+warn: GuiyangMahjong.Lobby.Services.LobbyService[0]&#xD;
+      房间密码验证失败 RequestId=8e11907d-3fef-4d2e-ad7b-1fbc535417fa RoomId=0f52ee54-1bdd-4683-9f37-74d4cb5f41e9 PlayerId=password-joiner&#xD;
+warn: GuiyangMahjong.Lobby.Services.LobbyService[0]&#xD;
+      房间密码尝试被限流 RequestId=79ef233e-bbed-4290-8f07-a80b03e6e56e RoomId=0f52ee54-1bdd-4683-9f37-74d4cb5f41e9 PlayerId=password-joiner&#xD;
+info: GuiyangMahjong.Lobby.Services.LobbyService[0]&#xD;
+      房间创建请求已接受 RequestId=79f5f20a-1bc9-4e35-988f-793808f8acf1 RoomId=29b2491a-7e88-423d-a34c-1470ebb5340a PlayerId=http-player-0 PasswordProtected=False&#xD;
+info: GuiyangMahjong.Lobby.Services.LobbyService[0]&#xD;
+      房间创建请求已接受 RequestId=236343b5-0e0b-4aa0-9c5a-a1cb4afa953a RoomId=9b900502-9e0a-492b-96fa-802f892c22dd PlayerId=http-player-1 PasswordProtected=False&#xD;
+info: GuiyangMahjong.Lobby.Services.LobbyService[0]&#xD;
+      房间创建请求已接受 RequestId=c9e92104-2609-4fd3-9677-1ddba4a66e50 RoomId=22190b34-df3a-4545-ac21-998f2ecdb445 PlayerId=http-player-2 PasswordProtected=False&#xD;
+info: GuiyangMahjong.Lobby.Services.LobbyService[0]&#xD;
+      房间创建请求已接受 RequestId=1c6d6ff5-acae-4f5e-b102-b869943171fa RoomId=d29af27f-965c-48a3-8402-a81b634fd986 PlayerId=http-player-3 PasswordProtected=False&#xD;
+info: GuiyangMahjong.Lobby.Services.LobbyService[0]&#xD;
+      房间创建请求已接受 RequestId=b2030fc6-24c6-4c33-9256-ee1d53311627 RoomId=cbe3d0c4-2ce1-4918-a9a7-e25e2cb0c37d PlayerId=http-player-4 PasswordProtected=False&#xD;
+info: GuiyangMahjong.Lobby.Services.LobbyService[0]&#xD;
+      房间创建请求已接受 RequestId=dbf89203-ea14-4b8f-9b0b-6f7954944ce0 RoomId=6b361230-1e2d-40c0-a3ad-db17a1032281 PlayerId=http-player-5 PasswordProtected=False&#xD;
+info: GuiyangMahjong.Lobby.Services.LobbyService[0]&#xD;
+      房间创建请求已接受 RequestId=b0c127e9-67a5-4fcd-bdf3-ef620a8c76eb RoomId=d042e266-8d11-4339-9a16-6a2535b1d405 PlayerId=http-player-6 PasswordProtected=False&#xD;
+info: GuiyangMahjong.Lobby.Services.LobbyService[0]&#xD;
+      房间创建请求已接受 RequestId=d005564d-6737-4dfb-9121-69ec1e69f691 RoomId=12cce911-881f-474d-a4d6-cb39cebdd3e2 PlayerId=http-player-7 PasswordProtected=False&#xD;
+info: GuiyangMahjong.Lobby.Services.LobbyService[0]&#xD;
+      房间创建请求已接受 RequestId=93acef15-88b6-420e-8606-fda0cb9c4aac RoomId=d0f9238c-37bd-4462-80d3-3d321d50d40a PlayerId=http-player-8 PasswordProtected=False&#xD;
+info: GuiyangMahjong.Lobby.Services.LobbyService[0]&#xD;
+      房间创建请求已接受 RequestId=a593d800-db02-498a-9b0a-c8415e2428c6 RoomId=633afe5d-723b-4df4-8c5c-291004d999ee PlayerId=http-player-9 PasswordProtected=False&#xD;
+info: GuiyangMahjong.Lobby.Services.LobbyService[0]&#xD;
+      房间创建请求已接受 RequestId=cc1125a0-538b-4968-832f-01bb7c88fca0 RoomId=7ed4d244-7f7c-4fe7-a780-cb3558d49158 PlayerId=http-player-14 PasswordProtected=False&#xD;
+info: GuiyangMahjong.Lobby.Services.LobbyService[0]&#xD;
+      房间创建请求已接受 RequestId=c3a37544-cbaa-442f-8324-7a137f1dab79 RoomId=cb77a399-b356-46bf-930e-c1bc13bed83a PlayerId=http-player-12 PasswordProtected=False&#xD;
+info: GuiyangMahjong.Lobby.Services.LobbyService[0]&#xD;
+      房间创建请求已接受 RequestId=9f2c23cd-6ab5-44df-a6fb-bb72f40d8ca8 RoomId=ccca5ae5-31c3-4d6c-8188-fa3f01acbfc5 PlayerId=http-player-17 PasswordProtected=False&#xD;
+info: GuiyangMahjong.Lobby.Services.LobbyService[0]&#xD;
+      房间创建请求已接受 RequestId=09487764-7213-40e1-9152-739d02cc6356 RoomId=713308a8-278f-4c3e-bb9e-ccde3c8bbdea PlayerId=http-player-10 PasswordProtected=False&#xD;
+info: GuiyangMahjong.Lobby.Services.LobbyService[0]&#xD;
+      房间创建请求已接受 RequestId=71d0d1ef-c088-4b66-9d08-4b15640bf54b RoomId=58668393-39db-44c1-a54c-c31fd7a08c77 PlayerId=http-player-11 PasswordProtected=False&#xD;
+info: GuiyangMahjong.Lobby.Services.LobbyService[0]&#xD;
+      房间创建请求已接受 RequestId=a190e158-b4ff-4105-ab5c-a42b0166bfad RoomId=f35af9e2-3ae4-4b31-a7bf-5295ebded0f3 PlayerId=http-player-13 PasswordProtected=False&#xD;
+info: GuiyangMahjong.Lobby.Services.LobbyService[0]&#xD;
+      房间创建请求已接受 RequestId=66c5f742-9842-4017-b620-e7290faf28b3 RoomId=a8ce9f25-4276-4c51-b4c9-9283fb3afc6d PlayerId=http-player-15 PasswordProtected=False&#xD;
+info: GuiyangMahjong.Lobby.Services.LobbyService[0]&#xD;
+      房间创建请求已接受 RequestId=ecef8435-ab72-4384-86f8-216af74375b6 RoomId=100794d4-f283-43b0-a987-bd817042484e PlayerId=http-player-16 PasswordProtected=False&#xD;
+info: GuiyangMahjong.Lobby.Services.LobbyService[0]&#xD;
+      房间创建请求已接受 RequestId=7cccabe1-dee4-480b-b660-2b71fa699ff8 RoomId=974ee61b-0095-4b16-b3d2-f81c4193b50c PlayerId=http-player-18 PasswordProtected=False&#xD;
+info: GuiyangMahjong.Lobby.Services.LobbyService[0]&#xD;
+      房间创建请求已接受 RequestId=0f03f2e3-c1e2-446a-9431-be28a61b9305 RoomId=aa87746e-af9e-4dae-bd86-b7de367a1c88 PlayerId=http-player-21 PasswordProtected=False&#xD;
+info: GuiyangMahjong.Lobby.Services.LobbyService[0]&#xD;
+      房间创建请求已接受 RequestId=7a8ad58c-49f8-48b7-a9f8-49f94334e8cc RoomId=b9f93689-0911-416c-8500-096cdcbb4f7e PlayerId=http-player-19 PasswordProtected=False&#xD;
+info: GuiyangMahjong.Lobby.Services.LobbyService[0]&#xD;
+      房间创建请求已接受 RequestId=4439096f-8506-4bc0-9e0a-87e8f40a7c53 RoomId=10aa02de-5ca3-4009-b8c3-8dcb42cc1758 PlayerId=http-player-23 PasswordProtected=False&#xD;
+info: GuiyangMahjong.Lobby.Services.LobbyService[0]&#xD;
+      房间创建请求已接受 RequestId=ea13cd36-0e17-440e-8bce-9e7ebed66a97 RoomId=f5c2aa4a-c9b3-4ab6-a87f-6d3844fb880f PlayerId=http-player-22 PasswordProtected=False&#xD;
+info: GuiyangMahjong.Lobby.Services.LobbyService[0]&#xD;
+      房间创建请求已接受 RequestId=aaeb8008-7f04-47cc-b85c-5bd9fbe737ce RoomId=7b3a219a-c9b4-4378-9634-c034dc8456d0 PlayerId=http-player-25 PasswordProtected=False&#xD;
+info: GuiyangMahjong.Lobby.Services.LobbyService[0]&#xD;
+      房间创建请求已接受 RequestId=8c5a069a-1c8f-4790-8257-6a3eed3f4a2c RoomId=6a1ffa06-a8e0-4397-a199-589d6da44227 PlayerId=http-player-20 PasswordProtected=False&#xD;
+info: GuiyangMahjong.Lobby.Services.LobbyService[0]&#xD;
+      房间创建请求已接受 RequestId=bedf90ef-2e51-4032-99e6-1e00fa7763c9 RoomId=401e53c4-5d3f-4a01-a0f4-f28f20ddd60a PlayerId=http-player-28 PasswordProtected=False&#xD;
+info: GuiyangMahjong.Lobby.Services.LobbyService[0]&#xD;
+      房间创建请求已接受 RequestId=8e91cd87-0f05-43d5-8ba9-d4cf78951222 RoomId=e3cc7f77-41e1-4032-abdb-1648d416c28a PlayerId=http-player-27 PasswordProtected=False&#xD;
+info: GuiyangMahjong.Lobby.Services.LobbyService[0]&#xD;
+      房间创建请求已接受 RequestId=80e5e8de-6a98-44d2-9a73-c0c5b8e3e2ba RoomId=7ee8887a-dcb7-46fa-ad50-4d4db206b218 PlayerId=http-player-26 PasswordProtected=False&#xD;
+info: GuiyangMahjong.Lobby.Services.LobbyService[0]&#xD;
+      房间创建请求已接受 RequestId=5f57765e-7d80-4c29-bdc3-883b6bda835d RoomId=d20636f1-a684-4ddc-9a11-a265d2430fd7 PlayerId=http-player-29 PasswordProtected=False&#xD;
+info: GuiyangMahjong.Lobby.Services.LobbyService[0]&#xD;
+      房间创建请求已接受 RequestId=5ed75e84-c679-4605-9d99-ab1227666c85 RoomId=3fb1a993-2488-4ea3-aec1-940b0e68a9b8 PlayerId=http-player-30 PasswordProtected=False&#xD;
+info: GuiyangMahjong.Lobby.Services.LobbyService[0]&#xD;
+      房间创建请求已接受 RequestId=5f7b327c-e131-4847-882e-a9916130c1fb RoomId=2237b9b0-5033-489d-a837-68ff6486e68a PlayerId=http-player-31 PasswordProtected=False&#xD;
+info: GuiyangMahjong.Lobby.Services.LobbyService[0]&#xD;
+      房间创建请求已接受 RequestId=931b63c1-c922-4d1b-9f7a-7691c8ff2835 RoomId=c9bbacc4-790e-45fe-8574-9f9cd13e0d04 PlayerId=http-player-32 PasswordProtected=False&#xD;
+info: GuiyangMahjong.Lobby.Services.LobbyService[0]&#xD;
+      房间创建请求已接受 RequestId=e25485c1-0b56-40df-bceb-77421cdfb827 RoomId=3aac257c-ae0b-481c-b8b1-d807f91c7b36 PlayerId=http-player-35 PasswordProtected=False&#xD;
+info: GuiyangMahjong.Lobby.Services.LobbyService[0]&#xD;
+      房间创建请求已接受 RequestId=54fd181b-a915-4fd6-bd3c-704504c540b0 RoomId=ac14a0f3-4b9f-421e-a3d9-93b45461443d PlayerId=http-player-39 PasswordProtected=False&#xD;
+info: GuiyangMahjong.Lobby.Services.LobbyService[0]&#xD;
+      房间创建请求已接受 RequestId=7f8edc15-37be-437c-a3e4-1e3c87b7ebfa RoomId=1fb6c8b8-7c43-428e-a5d3-4fa9468fd381 PlayerId=http-player-24 PasswordProtected=False&#xD;
+info: GuiyangMahjong.Lobby.Services.LobbyService[0]&#xD;
+      房间创建请求已接受 RequestId=d0ff90b7-7dc3-452f-952a-2a5792b1f28c RoomId=0343db00-88a1-4f79-8631-283aaee58bdb PlayerId=http-player-41 PasswordProtected=False&#xD;
+info: GuiyangMahjong.Lobby.Services.LobbyService[0]&#xD;
+      房间创建请求已接受 RequestId=41fb8b20-7e1e-4ffb-b813-249a188e06a4 RoomId=973e2717-388e-4cdc-a691-aadef17680ba PlayerId=http-player-47 PasswordProtected=False&#xD;
+info: GuiyangMahjong.Lobby.Services.LobbyService[0]&#xD;
+      房间创建请求已接受 RequestId=7c85e29b-8b0a-4e54-b1c3-2c2c97528266 RoomId=8a282763-13dc-4a87-b89a-b5e0be8ecd70 PlayerId=http-player-45 PasswordProtected=False&#xD;
+info: GuiyangMahjong.Lobby.Services.LobbyService[0]&#xD;
+      房间创建请求已接受 RequestId=83472d8e-fbae-47ec-94f7-3ae4144bc5a8 RoomId=228167cc-bcbc-490d-8460-5182f647211d PlayerId=http-player-34 PasswordProtected=False&#xD;
+info: GuiyangMahjong.Lobby.Services.LobbyService[0]&#xD;
+      房间创建请求已接受 RequestId=9ba18aeb-4f46-4571-89d9-01c3946aff58 RoomId=3e2dedbf-b149-4c9c-ac13-145b561d7732 PlayerId=http-player-36 PasswordProtected=False&#xD;
+info: GuiyangMahjong.Lobby.Services.LobbyService[0]&#xD;
+      房间创建请求已接受 RequestId=2ed1471d-7c02-49fa-85e6-8ed38a02fa8c RoomId=902ff983-d7e1-40b1-950e-d43613d0b435 PlayerId=http-player-43 PasswordProtected=False&#xD;
+info: GuiyangMahjong.Lobby.Services.LobbyService[0]&#xD;
+      房间创建请求已接受 RequestId=46a5c278-1941-4521-8965-b4fa15fa9d93 RoomId=5477a025-de37-48ce-a5a8-86caa0fe9c96 PlayerId=http-player-44 PasswordProtected=False&#xD;
+info: GuiyangMahjong.Lobby.Services.LobbyService[0]&#xD;
+      房间创建请求已接受 RequestId=a39e30d2-c3b8-44dd-8e90-90e0c61eee8a RoomId=348c843f-4dff-45c4-8dbc-8abaf9d00ac4 PlayerId=http-player-33 PasswordProtected=False&#xD;
+info: GuiyangMahjong.Lobby.Services.LobbyService[0]&#xD;
+      房间创建请求已接受 RequestId=292a1ec3-ad41-4e25-8f2a-8341ef8d0f55 RoomId=70ace9c2-c3fc-4369-b38e-9c9ea55fe28b PlayerId=http-player-49 PasswordProtected=False&#xD;
+info: GuiyangMahjong.Lobby.Services.LobbyService[0]&#xD;
+      房间创建请求已接受 RequestId=b2de4182-afa8-4fcd-be86-621322d29d40 RoomId=ede4ccf8-e9d4-4cbc-9592-327fa2a42a20 PlayerId=http-player-42 PasswordProtected=False&#xD;
+info: GuiyangMahjong.Lobby.Services.LobbyService[0]&#xD;
+      房间创建请求已接受 RequestId=913e7557-b8b4-41c0-a82c-4253b1f121ef RoomId=f943acc3-5c67-4225-9d37-80c3a1395825 PlayerId=http-player-40 PasswordProtected=False&#xD;
+info: GuiyangMahjong.Lobby.Services.LobbyService[0]&#xD;
+      房间创建请求已接受 RequestId=02fb0563-0c3b-4113-b43f-d19e0dfe3e4a RoomId=dd2dce6a-d67e-40c4-a551-6af0f7653b07 PlayerId=http-player-37 PasswordProtected=False&#xD;
+info: GuiyangMahjong.Lobby.Services.LobbyService[0]&#xD;
+      房间创建请求已接受 RequestId=036b7cb6-5d66-4b99-84f6-08181cff889a RoomId=519a2f86-fd50-4b63-a2cf-3e752de43bbe PlayerId=http-player-38 PasswordProtected=False&#xD;
+info: GuiyangMahjong.Lobby.Services.LobbyService[0]&#xD;
+      房间创建请求已接受 RequestId=2546f554-1846-421d-9402-b7da9bf98e64 RoomId=8b06904b-4087-4a71-9943-81b5ec3b2e9c PlayerId=http-player-48 PasswordProtected=False&#xD;
+info: GuiyangMahjong.Lobby.Services.LobbyService[0]&#xD;
+      房间创建请求已接受 RequestId=726bd703-b0a4-44b5-9c1e-61dfab8b1353 RoomId=d1280fcd-ae48-4c68-bf91-d0fb94151379 PlayerId=http-player-46 PasswordProtected=False&#xD;
+info: GuiyangMahjong.Lobby.Services.LobbyService[0]&#xD;
+      牌局结算已持久化 RequestId=91ce9a52-f1a0-46d6-9a12-18adef65be7f RoomId=c873bdd5-6540-4151-984c-2a53567e2074 MatchId=aabe04ab-6674-4de7-be57-9328569267c3 ResultSequence=11&#xD;
+info: Microsoft.Hosting.Lifetime[0]&#xD;
+      Application is shutting down...&#xD;
+[xUnit.net 00:00:03.44]   Finished:    GuiyangMahjong.Lobby.Tests&#xD;
+</StdOut>
+    </Output>
+    <RunInfos>
+      <RunInfo computerName="FREEBOOZ" outcome="Warning" timestamp="2026-07-29T09:55:39.5838825+08:00">
+        <Text>[xUnit.net 00:00:01.40]     GuiyangMahjong.Lobby.Tests.ExternalPersistenceIntegrationTests.Redis_AccessRevocationIsSharedAndMonotonicAcrossInstances [SKIP]</Text>
+      </RunInfo>
+      <RunInfo computerName="FREEBOOZ" outcome="Warning" timestamp="2026-07-29T09:55:39.5840679+08:00">
+        <Text>[xUnit.net 00:00:01.40]     GuiyangMahjong.Lobby.Tests.ExternalPersistenceIntegrationTests.Redis_EventPublishedByOneHubReachesAnotherHubClient [SKIP]</Text>
+      </RunInfo>
+      <RunInfo computerName="FREEBOOZ" outcome="Warning" timestamp="2026-07-29T09:55:39.5840850+08:00">
+        <Text>[xUnit.net 00:00:01.41]     GuiyangMahjong.Lobby.Tests.ExternalPersistenceIntegrationTests.PostgreSql_RoomAdmissionControlIsVisibleAcrossInstances [SKIP]</Text>
+      </RunInfo>
+      <RunInfo computerName="FREEBOOZ" outcome="Warning" timestamp="2026-07-29T09:55:39.5841026+08:00">
+        <Text>[xUnit.net 00:00:01.41]     GuiyangMahjong.Lobby.Tests.ExternalPersistenceIntegrationTests.Redis_IdempotencyCoalescesExecutionAcrossStoreInstances [SKIP]</Text>
+      </RunInfo>
+      <RunInfo computerName="FREEBOOZ" outcome="Warning" timestamp="2026-07-29T09:55:39.5841167+08:00">
+        <Text>[xUnit.net 00:00:01.41]     GuiyangMahjong.Lobby.Tests.ExternalPersistenceIntegrationTests.Redis_PresenceAggregatesAndExpiresAcrossStoreInstances [SKIP]</Text>
+      </RunInfo>
+      <RunInfo computerName="FREEBOOZ" outcome="Warning" timestamp="2026-07-29T09:55:39.5841291+08:00">
+        <Text>[xUnit.net 00:00:01.41]     GuiyangMahjong.Lobby.Tests.ExternalPersistenceIntegrationTests.PostgreSql_AllowsOnlyOneActiveRoomAcrossStoreInstances [SKIP]</Text>
+      </RunInfo>
+    </RunInfos>
+  </ResultSummary>
+</TestRun>

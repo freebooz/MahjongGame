@@ -9,6 +9,7 @@
 #include "GuiyangMahjongGameMode.generated.h"
 
 struct FGuiyangManagedRoomDefinition;
+struct FGuiyangPlayerConnectionTelemetry;
 
 /** Dedicated Server 权威入口；为牌桌复制指定 GameState 和玩家请求入口。 */
 UCLASS()
@@ -32,6 +33,12 @@ public:
 
     /** 使用控制面 Bootstrap 创建本进程唯一的权威房间。 */
     bool InitializeManagedRoomAuthority(const FGuiyangManagedRoomDefinition& Definition, FString& OutError);
+    /** 向心跳桥接层提供玩家连接状态，不暴露 RoomManager 的可写引用。 */
+    bool GetPlayerConnectionTelemetry(
+        const FString& PlayerId, FGuiyangPlayerConnectionTelemetry& OutTelemetry) const;
+    /** 返回当前托管状态及最近变化时间；无记录时返回 false，调用方应发送 null。 */
+    bool GetPlayerTrusteeTelemetry(
+        const FString& PlayerId, bool& OutTrustee, FDateTime& OutChangedAtUtc) const;
 
     /** 实现共享 Controller 转发的鉴权、大厅和牌桌请求。 */
     virtual void HandleCreateRoom(class AGuiyangMahjongPlayerController* Controller, const FMahjongCreateRoomRequest& Request) override;
@@ -66,6 +73,13 @@ private:
     TMap<FString, int64> PendingTicketExpiryByDigest;
     /** 已完成身份绑定的网络连接到玩家 ID 映射。 */
     TMap<TObjectPtr<APlayerController>, FString> AuthorizedPlayerIdsByController;
+    /** 每名玩家的超时自动托管状态；玩家主动完成合法操作后自动解除。 */
+    struct FPlayerTrusteeState
+    {
+        bool bTrustee = false;
+        FDateTime ChangedAtUtc;
+    };
+    TMap<FString, FPlayerTrusteeState> TrusteeStateByPlayer;
     /** 当前编排模式及托管世界初始化状态。 */
     bool bManagedGameServer = false;
     bool bAgonesGameServer = false;
@@ -86,6 +100,8 @@ private:
     void FinalizeRoundIfNeeded();
     void RefreshActionTimeoutTimer();
     void HandleActionTimeout(int32 ExpectedRoundId, int32 ExpectedTurnId, EMahjongTablePhase ExpectedPhase);
+    /** 按座位更新托管状态；只有真实变化才刷新时间，避免重复心跳制造事件。 */
+    void SetSeatTrusteeState(int32 SeatIndex, bool bTrustee);
     void PublishReconnectSnapshot(class AGuiyangMahjongPlayerController* Controller,
         const FMahjongRoomState& RoomState, int32 RemainingReconnectSeconds);
     void PublishFinalSettlement(const FMahjongRoomState& RoomState);

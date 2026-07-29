@@ -1,0 +1,28 @@
+{
+  "uid": "mahjong-admin",
+  "title": "管理服务与聚合可靠性",
+  "timezone": "browser",
+  "schemaVersion": 41,
+  "refresh": "15s",
+  "tags": ["mahjong", "admin"],
+  "panels": [
+    {
+      "id": 1, "type": "timeseries", "title": "Admin 请求速率",
+      "datasource": {"type": "prometheus", "uid": "mahjong-prometheus"},
+      "targets": [{"refId": "A", "expr": "sum(rate(mahjong_http_server_requests_total{service=\"GuiyangMahjong.Admin\"}[5m]))"}],
+      "gridPos": {"x": 0, "y": 0, "w": 12, "h": 8}
+    },
+    {
+      "id": 2, "type": "timeseries", "title": "Admin 5xx",
+      "datasource": {"type": "prometheus", "uid": "mahjong-prometheus"},
+      "targets": [{"refId": "A", "expr": "sum(rate(mahjong_http_server_failures_total{service=\"GuiyangMahjong.Admin\"}[5m]))"}],
+      "gridPos": {"x": 12, "y": 0, "w": 12, "h": 8}
+    },
+    {
+      "id": 3, "type": "logs", "title": "Admin 异常日志（点击 TraceId 跳转）",
+      "datasource": {"type": "loki", "uid": "mahjong-loki"},
+      "targets": [{"refId": "A", "expr": "{service_name=\"GuiyangMahjong.Admin\"} | severity_text=~\"Error|Critical\""}],
+      "gridPos": {"x": 0, "y": 8, "w": 24, "h": 10}
+    }
+  ]
+}

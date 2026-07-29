@@ -73,6 +73,32 @@ public sealed class InMemoryLobbyStore : ILobbyStore
         }
     }
 
+    /// <summary>在同一锁内建立玩家到房间的稳定快照，避免监控读取观察到半完成的成员变更。</summary>
+    public Task<IReadOnlyDictionary<string, LobbyRoom>> GetActiveRoomsByPlayersAsync(
+        IReadOnlyCollection<string> playerIds,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        lock (mutationGate)
+        {
+            IReadOnlyDictionary<string, LobbyRoom> result = playerIds
+                .Distinct(StringComparer.Ordinal)
+                .Select(playerId => new
+                {
+                    PlayerId = playerId,
+                    Room = activeRoomByPlayer.TryGetValue(playerId, out var roomId)
+                        ? GetRoomByIdUnsafe(roomId)
+                        : null
+                })
+                .Where(item => item.Room is not null)
+                .ToDictionary(
+                    item => item.PlayerId,
+                    item => item.Room!,
+                    StringComparer.Ordinal);
+            return Task.FromResult(result);
+        }
+    }
+
     public Task<IReadOnlyList<LobbyRoom>> ListPublicRoomsAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -85,14 +111,57 @@ public sealed class InMemoryLobbyStore : ILobbyStore
     }
 
     public Task<IReadOnlyList<LobbyRoom>> ListRoomsForMonitoringAsync(
-        int limit, CancellationToken cancellationToken)
+        int limit,
+        DateTimeOffset? afterCreatedAtUtc,
+        string? afterRoomId,
+        string? lifecycle,
+        string? gameMode,
+        string? search,
+        CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         IReadOnlyList<LobbyRoom> rooms = roomsByCode.Values
-            .OrderByDescending(room => room.UpdatedAtUtc)
+            .Where(room => string.IsNullOrWhiteSpace(lifecycle)
+                || room.Lifecycle.ToString().Equals(
+                    lifecycle,
+                    StringComparison.OrdinalIgnoreCase))
+            .Where(room => string.IsNullOrWhiteSpace(gameMode)
+                || GetMonitoringGameMode(room).Equals(
+                    gameMode,
+                    StringComparison.OrdinalIgnoreCase))
+            .Where(room => string.IsNullOrWhiteSpace(search)
+                || room.RoomId.Contains(search, StringComparison.OrdinalIgnoreCase)
+                || room.RoomCode.Contains(search, StringComparison.OrdinalIgnoreCase)
+                || room.MatchId.Contains(search, StringComparison.OrdinalIgnoreCase)
+                || room.PlayerIds.Any(playerId =>
+                    playerId.Contains(search, StringComparison.OrdinalIgnoreCase)))
+            .Where(room => afterCreatedAtUtc is null
+                || room.CreatedAtUtc < afterCreatedAtUtc
+                || (room.CreatedAtUtc == afterCreatedAtUtc
+                    && string.CompareOrdinal(room.RoomId, afterRoomId) < 0))
+            .OrderByDescending(room => room.CreatedAtUtc)
+            .ThenByDescending(room => room.RoomId, StringComparer.Ordinal)
             .Take(limit)
             .ToArray();
         return Task.FromResult(rooms);
+    }
+
+    /// <summary>提取监控筛选使用的玩法标识，并兼容现有规则字段命名。</summary>
+    private static string GetMonitoringGameMode(LobbyRoom room)
+    {
+        foreach (var key in new[] { "gameMode", "playMode", "variant" })
+        {
+            if (!room.RuleSnapshot.TryGetValue(key, out var value))
+                continue;
+            if (value is string text)
+                return text;
+            if (value is JsonElement
+                {
+                    ValueKind: JsonValueKind.String
+                } element)
+                return element.GetString() ?? "Standard";
+        }
+        return "Standard";
     }
 
     public Task<LobbyRoom?> ReconcileWaitingRoomMembersAsync(

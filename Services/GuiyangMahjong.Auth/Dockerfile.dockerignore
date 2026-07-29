@@ -5,3 +5,8 @@
 !Services/GuiyangMahjong.Auth/**
 Services/GuiyangMahjong.Auth/bin/
 Services/GuiyangMahjong.Auth/obj/
+# 共享可观测性项目参与镜像内编译，只排除本地产物。
+!Services/GuiyangMahjong.Observability/
+!Services/GuiyangMahjong.Observability/**
+Services/GuiyangMahjong.Observability/bin/
+Services/GuiyangMahjong.Observability/obj/

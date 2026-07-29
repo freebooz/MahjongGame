@@ -22,6 +22,7 @@ public sealed class InMemoryOnlinePresenceService(
 {
     private readonly ConcurrentDictionary<string, DateTimeOffset> lastSeen = new(StringComparer.Ordinal);
     private readonly TimeSpan timeout = TimeSpan.FromSeconds(options.Value.PresenceTimeoutSeconds);
+    private readonly string lobbyId = options.Value.LobbyId;
 
     public Task TouchAsync(string playerId, CancellationToken cancellationToken)
     {
@@ -60,7 +61,7 @@ public sealed class InMemoryOnlinePresenceService(
                     playerId,
                     found && observedAt >= cutoff,
                     found ? observedAt : null,
-                    "primary");
+                    lobbyId);
             })
             .ToArray();
         return Task.FromResult(result);
@@ -73,6 +74,7 @@ public sealed class RedisOnlinePresenceService : IOnlinePresenceService
     private readonly RedisKey presenceKey;
     private readonly TimeSpan timeout;
     private readonly TimeProvider timeProvider;
+    private readonly string lobbyId;
 
     public RedisOnlinePresenceService(
         LobbyPersistenceConnections connections,
@@ -82,6 +84,7 @@ public sealed class RedisOnlinePresenceService : IOnlinePresenceService
         database = connections.Redis.GetDatabase();
         presenceKey = $"{options.Value.Persistence.RedisKeyPrefix}:presence";
         timeout = TimeSpan.FromSeconds(options.Value.PresenceTimeoutSeconds);
+        lobbyId = options.Value.LobbyId;
         this.timeProvider = timeProvider;
     }
 
@@ -119,7 +122,7 @@ public sealed class RedisOnlinePresenceService : IOnlinePresenceService
                 playerId,
                 observedAt >= cutoff,
                 observedAt,
-                "primary");
+                lobbyId);
         }).ToArray();
     }
 }

@@ -18,5 +18,13 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\GuiyangMahjong.Admin\GuiyangMahjong.Admin.csproj" />
+    <ProjectReference Include="..\GuiyangMahjong.Observability\GuiyangMahjong.Observability.csproj" />
+    <ProjectReference Include="..\GuiyangMahjong.Lobby\GuiyangMahjong.Lobby.csproj"
+                      Aliases="LobbyContract" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="..\..\Contracts\OpenAPI\lobby-v1.openapi.yaml"
+             Link="Contracts\lobby-v1.openapi.yaml"
+             CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

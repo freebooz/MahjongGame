@@ -1,0 +1,11 @@
+apiVersion: 1
+
+providers:
+  - name: Mahjong Observability
+    orgId: 1
+    folder: 贵阳麻将实时监控
+    type: file
+    disableDeletion: true
+    updateIntervalSeconds: 30
+    options:
+      path: /var/lib/grafana/dashboards

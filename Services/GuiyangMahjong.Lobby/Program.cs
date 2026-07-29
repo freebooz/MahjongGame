@@ -4,6 +4,7 @@ using GuiyangMahjong.Lobby.Realtime;
 using GuiyangMahjong.Lobby.Security;
 using GuiyangMahjong.Lobby.Services;
 using GuiyangMahjong.Lobby.Storage;
+using GuiyangMahjong.Observability;
 using Microsoft.Extensions.Options;
 using System.Text;
 
@@ -14,6 +15,7 @@ var builder = WebApplication.CreateBuilder(new WebApplicationOptions
     Args = args,
     ContentRootPath = AppContext.BaseDirectory
 });
+builder.AddMahjongObservability("GuiyangMahjong.Lobby");
 
 builder.Services
     .AddOptions<LobbyOptions>()
@@ -41,6 +43,17 @@ builder.Services
         "Lobby management credential must be dedicated.")
     .Validate(options => !options.Allocator.Enabled || options.Allocator.ServiceToken.Length >= 32,
         "Lobby:Allocator:ServiceToken must contain at least 32 characters when enabled.")
+    .Validate(options => !options.TopologyRegistration.Enabled
+            || (options.TopologyRegistration.RegistrationToken.Length >= 32
+                && !string.Equals(
+                    options.TopologyRegistration.RegistrationToken,
+                    options.MonitoringReadOnlyToken,
+                    StringComparison.Ordinal)
+                && !string.Equals(
+                    options.TopologyRegistration.RegistrationToken,
+                    options.ManagementCommandToken,
+                    StringComparison.Ordinal)),
+        "Lobby topology registration requires a dedicated 32+ character credential.")
     .Validate(options => options.TokenSigningKey.Length >= 32, "Lobby:TokenSigningKey 至少需要 32 个字符")
     .Validate(options =>
         !builder.Environment.IsProduction()
@@ -51,6 +64,9 @@ builder.Services
         || (!string.IsNullOrWhiteSpace(options.Persistence.RedisConnectionString)
             && !string.IsNullOrWhiteSpace(options.Persistence.PostgresConnectionString)),
         "RedisPostgres 模式必须配置 Redis 与 PostgreSQL 连接字符串")
+    .Validate(options => !builder.Environment.IsProduction()
+                         || !options.Persistence.ApplyDatabaseMigrations,
+        "Production Lobby runtime must not execute database migrations.")
     .ValidateOnStart();
 
 builder.Services.AddSingleton(TimeProvider.System);
@@ -98,9 +114,18 @@ builder.Services.AddSingleton<IRoomMonitoringStore>(provider =>
         .Equals("RedisPostgres", StringComparison.OrdinalIgnoreCase)
         ? ActivatorUtilities.CreateInstance<RedisRoomMonitoringStore>(provider)
         : new InMemoryRoomMonitoringStore());
+builder.Services.AddSingleton<IPlayerHistoryStore>(provider =>
+    provider.GetRequiredService<IOptions<LobbyOptions>>().Value.Persistence.Mode
+        .Equals("RedisPostgres", StringComparison.OrdinalIgnoreCase)
+        ? ActivatorUtilities.CreateInstance<PostgresPlayerHistoryStore>(provider)
+        : new InMemoryPlayerHistoryStore());
 builder.Services.AddHostedService<LobbyStoreInitializer>();
+builder.Services.AddHostedService<LobbyTopologyRegistrationService>();
 
 var app = builder.Build();
+app.UseMahjongObservability(
+    "GuiyangMahjong.Lobby",
+    app.Environment.EnvironmentName);
 
 if (app.Services.GetRequiredService<IOptions<LobbyOptions>>().Value.EnableHttpsRedirection)
     app.UseHttpsRedirection();

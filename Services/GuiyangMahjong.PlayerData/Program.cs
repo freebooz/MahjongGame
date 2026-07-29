@@ -4,6 +4,7 @@ using GuiyangMahjong.PlayerData.Api;
 using GuiyangMahjong.PlayerData.Options;
 using GuiyangMahjong.PlayerData.Services;
 using GuiyangMahjong.PlayerData.Storage;
+using GuiyangMahjong.Observability;
 using Microsoft.Extensions.Options;
 using Npgsql;
 
@@ -14,6 +15,7 @@ var builder = WebApplication.CreateBuilder(new WebApplicationOptions
     Args = args,
     ContentRootPath = AppContext.BaseDirectory
 });
+builder.AddMahjongObservability("GuiyangMahjong.PlayerData");
 
 builder.Services
     .AddOptions<PlayerDataOptions>()
@@ -28,6 +30,9 @@ builder.Services
         || !string.IsNullOrWhiteSpace(
             options.PostgresConnectionString),
         "PlayerData PostgreSQL connection string is required.")
+    .Validate(options => !builder.Environment.IsProduction()
+                         || !options.ApplyDatabaseMigrations,
+        "Production PlayerData runtime must not execute database migrations.")
     .Validate(options =>
         !options.ProjectionEnabled
         || options.AdminEvidenceIngestionToken.Length >= 32,
@@ -96,6 +101,9 @@ builder.Services.AddHostedService<PlayerDataStoreInitializer>();
 builder.Services.AddHostedService<ProjectionDispatcherService>();
 
 var app = builder.Build();
+app.UseMahjongObservability(
+    "GuiyangMahjong.PlayerData",
+    app.Environment.EnvironmentName);
 app.Use(async (context, next) =>
 {
     context.Response.Headers["X-Content-Type-Options"] = "nosniff";

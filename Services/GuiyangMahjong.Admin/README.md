@@ -6,6 +6,24 @@ controlled, audited management workflow.
 The complete player-management security design and phased delivery boundary are
 documented in `../../Docs/PLAYER_MONITORING_ADMIN_DESIGN.md`.
 
+## Angular 22 client
+
+The production web console is an Angular 22 standalone application written in
+TypeScript. Source files are under `ClientApp/`; `wwwroot/` contains generated
+production assets and must not be edited by hand.
+
+```powershell
+cd Services/GuiyangMahjong.Admin/ClientApp
+npm ci
+npm run typecheck
+npm run build
+```
+
+`dotnet publish` runs the same reproducible client install, type check, and
+production build automatically. Set `SkipAdminClientBuild=true` only when a
+trusted CI stage has already generated the exact `wwwroot` assets for that
+source revision.
+
 ## Current scope
 
 - Room totals and grouping by lifecycle, game mode, and cluster.
@@ -36,6 +54,15 @@ documented in `../../Docs/PLAYER_MONITORING_ADMIN_DESIGN.md`.
   control history. Those fields are disclosed independently according to the
   operator's duties.
 - Separate read-only credentials for Admin-to-Lobby and Admin-to-Allocator calls.
+- Independent Auth, Lobby, Allocator, and PlayerData hard timeouts with
+  cancellation propagation, bounded/versioned last-success snapshots, source
+  circuit breakers, safe Chinese error summaries, and low-cardinality timeout
+  metrics. Room and player reads return partial data instead of failing the
+  entire console; cached data is always marked `Stale`.
+- `/admin/v1/source-health` and response reliability metadata expose the last
+  success time, data age, stale threshold, circuit state, snapshot version, and
+  whether the data is safe for a high-risk operation. High-risk workflows
+  always re-read live authoritative state and reject stale snapshots.
 - Role-scoped room management requests with a mandatory second confirmation.
 - Role-scoped player actions for logout/session reset, sanctions, risk tagging,
   compensation/reward reversal, replay access, and support-ticket creation.
@@ -127,6 +154,19 @@ Admin__Management__MuteHours=24
 Admin__Management__RiskLabelTtlDays=30
 Admin__Management__PersistenceMode=Postgres
 Admin__Management__PostgresConnectionString=<secret PostgreSQL connection string>
+Admin__MonitoringReliability__CircuitFailureThreshold=3
+Admin__MonitoringReliability__CircuitBreakSeconds=10
+Admin__MonitoringReliability__CircuitMaxBreakSeconds=120
+Admin__MonitoringReliability__StaleAfterSeconds=15
+Admin__MonitoringReliability__SnapshotTtlSeconds=300
+Admin__MonitoringReliability__MaxSnapshotEntries=128
+Admin__Auth__TimeoutSeconds=5
+Admin__Lobby__TimeoutSeconds=5
+Admin__Allocators__0__TimeoutSeconds=5
+Admin__PlayerData__Enabled=true
+Admin__PlayerData__BaseUrl=http://mahjong-player-data:8080
+Admin__PlayerData__MonitoringToken=<dedicated PlayerData monitoring token>
+Admin__PlayerData__TimeoutSeconds=5
 Admin__Wallet__Enabled=true
 Admin__Wallet__BaseUrl=http://mahjong-player-data:8080
 Admin__Wallet__CommandToken=<dedicated PlayerData admin command token>
