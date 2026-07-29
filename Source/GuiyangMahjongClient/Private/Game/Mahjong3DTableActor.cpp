@@ -169,16 +169,98 @@ int32 AMahjong3DTableActor::GetLocalHandTileUnderCursor(
     {
         return INDEX_NONE;
     }
-    FHitResult Hit;
-    if (!PlayerController->GetHitResultUnderCursor(ECC_Visibility, false, Hit))
+    float MouseX = 0.0f;
+    float MouseY = 0.0f;
+    if (!PlayerController->GetMousePosition(MouseX, MouseY))
     {
         return INDEX_NONE;
     }
-    if (const int32* UniqueId = LocalHandTileIds.Find(Hit.GetComponent()))
+
+    const FVector2D Cursor(MouseX, MouseY);
+    int32 ClosestContainedTileId = INDEX_NONE;
+    double ClosestContainedDistanceSquared = TNumericLimits<double>::Max();
+    int32 ClosestTileId = INDEX_NONE;
+    double ClosestDistanceSquared = TNumericLimits<double>::Max();
+
+    for (const TPair<int32, UStaticMeshComponent*>& Pair :
+         LocalHandTileComponents)
     {
-        return *UniqueId;
+        const UStaticMeshComponent* Component = Pair.Value;
+        if (!IsValid(Component) || !Component->IsVisible())
+        {
+            continue;
+        }
+
+        FVector2D ProjectedCenter;
+        if (!PlayerController->ProjectWorldLocationToScreen(
+            Component->Bounds.Origin, ProjectedCenter, true))
+        {
+            continue;
+        }
+
+        const double CenterDistanceSquared =
+            FVector2D::DistSquared(Cursor, ProjectedCenter);
+        if (CenterDistanceSquared < ClosestDistanceSquared)
+        {
+            ClosestDistanceSquared = CenterDistanceSquared;
+            ClosestTileId = Pair.Key;
+        }
+
+        // Static-mesh simple collision can overlap the adjacent tile after the
+        // authored tilt/scale is applied. Project the visible world bounds
+        // instead, then choose the closest centre among overlapping boxes.
+        const FVector Origin = Component->Bounds.Origin;
+        const FVector Extent = Component->Bounds.BoxExtent;
+        FVector2D MinScreen(
+            TNumericLimits<double>::Max(),
+            TNumericLimits<double>::Max());
+        FVector2D MaxScreen(
+            TNumericLimits<double>::Lowest(),
+            TNumericLimits<double>::Lowest());
+        bool bProjectedAnyCorner = false;
+        for (int32 CornerIndex = 0; CornerIndex < 8; ++CornerIndex)
+        {
+            const FVector Corner = Origin + FVector(
+                (CornerIndex & 1) ? Extent.X : -Extent.X,
+                (CornerIndex & 2) ? Extent.Y : -Extent.Y,
+                (CornerIndex & 4) ? Extent.Z : -Extent.Z);
+            FVector2D ProjectedCorner;
+            if (PlayerController->ProjectWorldLocationToScreen(
+                Corner, ProjectedCorner, true))
+            {
+                MinScreen.X = FMath::Min(MinScreen.X, ProjectedCorner.X);
+                MinScreen.Y = FMath::Min(MinScreen.Y, ProjectedCorner.Y);
+                MaxScreen.X = FMath::Max(MaxScreen.X, ProjectedCorner.X);
+                MaxScreen.Y = FMath::Max(MaxScreen.Y, ProjectedCorner.Y);
+                bProjectedAnyCorner = true;
+            }
+        }
+
+        constexpr float ScreenHitMargin = 3.0f;
+        if (bProjectedAnyCorner
+            && Cursor.X >= MinScreen.X - ScreenHitMargin
+            && Cursor.X <= MaxScreen.X + ScreenHitMargin
+            && Cursor.Y >= MinScreen.Y - ScreenHitMargin
+            && Cursor.Y <= MaxScreen.Y + ScreenHitMargin
+            && CenterDistanceSquared < ClosestContainedDistanceSquared)
+        {
+            ClosestContainedDistanceSquared = CenterDistanceSquared;
+            ClosestContainedTileId = Pair.Key;
+        }
     }
-    return INDEX_NONE;
+
+    if (ClosestContainedTileId != INDEX_NONE)
+    {
+        return ClosestContainedTileId;
+    }
+
+    // Small fallback tolerance covers anti-aliased edges while preventing a
+    // click in the operation-button area from selecting a hand tile.
+    constexpr double MaxFallbackDistancePixels = 54.0;
+    return ClosestDistanceSquared
+            <= MaxFallbackDistancePixels * MaxFallbackDistancePixels
+        ? ClosestTileId
+        : INDEX_NONE;
 }
 
 FRotator AMahjong3DTableActor::ResolveTileMeshRotation(
@@ -251,7 +333,7 @@ void AMahjong3DTableActor::ApplyLocalHandTileVisualState(const int32 UniqueId)
     // The Mahjong50 material exposes a Fresnel rim-emissive parameter. It
     // produces a real mesh-aligned glow without spawning helper geometry.
     Component->SetScalarParameterValueOnMaterials(
-        TEXT("SelectionGlow"), bSelected ? 5.0f : (bHovered ? 1.6f : 0.0f));
+        TEXT("SelectionGlow"), bSelected ? 50.0f : (bHovered ? 1.6f : 0.0f));
     Component->SetVectorParameterValueOnMaterials(
         TEXT("SelectionGlowColor"),
         bSelected
@@ -355,7 +437,7 @@ UStaticMeshComponent* AMahjong3DTableActor::AddTile(
 
         Component->SetScalarParameterValueOnMaterials(
             TEXT("SelectionGlow"),
-            bSelectionOutline ? 5.0f : (bHoverOutline ? 1.6f : 0.0f));
+            bSelectionOutline ? 50.0f : (bHoverOutline ? 1.6f : 0.0f));
         Component->SetVectorParameterValueOnMaterials(
             TEXT("SelectionGlowColor"),
             bSelectionOutline

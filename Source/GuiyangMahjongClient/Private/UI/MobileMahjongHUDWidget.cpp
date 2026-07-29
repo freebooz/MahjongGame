@@ -553,6 +553,10 @@ FReply UMobileMahjongHUDWidget::NativeOnPreviewMouseButtonDown(
             Table3DActor->GetLocalHandTileUnderCursor(GetOwningPlayer());
         if (HitTileId != INDEX_NONE)
         {
+            // Lock hover and click to the same screen-space resolved tile ID.
+            // This prevents a stale physics hit or previous-frame hover from
+            // highlighting one tile while another tile is selected.
+            Table3DActor->SetHoveredTile(HitTileId);
             for (int32 ChildIndex = 0;
                  ChildIndex < Panel_SelfHandTiles->GetChildrenCount();
                  ++ChildIndex)
@@ -563,6 +567,9 @@ FReply UMobileMahjongHUDWidget::NativeOnPreviewMouseButtonDown(
                 {
                     if (TileWidget->GetTileData().UniqueId == HitTileId)
                     {
+                        UE_LOG(LogMahjongUI, Verbose,
+                            TEXT("Local hand screen hit resolved UniqueId=%d child=%d"),
+                            HitTileId, ChildIndex);
                         TileWidget->TriggerTableHitClick();
                         return FReply::Handled();
                     }
