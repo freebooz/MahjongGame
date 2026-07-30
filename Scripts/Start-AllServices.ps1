@@ -156,6 +156,7 @@ $defaultValues = [ordered]@{
     GAME_PORT_END = '19099'
     MAHJONG_CLUSTER_ID = 'local-docker'
     MAHJONG_NODE_ID = 'game-node'
+    ADMIN_ASPNETCORE_ENVIRONMENT = 'Development'
     ADMIN_ENTERPRISE_IDENTITY_ENABLED = 'false'
     ADMIN_AUDIT_ARCHIVE_ENABLED = 'false'
     ADMIN_MANAGEMENT_ENABLED = 'false'

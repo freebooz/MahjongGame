@@ -283,11 +283,11 @@ services:
       context: ../..
       dockerfile: Services/GuiyangMahjong.Admin/Dockerfile
     environment:
-      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_ENVIRONMENT: ${ADMIN_ASPNETCORE_ENVIRONMENT:-Production}
       Observability__Enabled: ${OBSERVABILITY_ENABLED:-false}
       Observability__OtlpEndpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://host.docker.internal:4317}
       Observability__TraceSampleRatio: ${OTEL_TRACE_SAMPLE_RATIO:-0.1}
-      Admin__ReadOnlyAccessToken: ""
+      Admin__ReadOnlyAccessToken: ${ADMIN_READ_ONLY_TOKEN:?ADMIN_READ_ONLY_TOKEN is required}
       Admin__EvidenceIngestionToken: ${ADMIN_EVIDENCE_INGESTION_TOKEN:?ADMIN_EVIDENCE_INGESTION_TOKEN is required}
       Admin__CentralLogs__Enabled: ${CENTRAL_LOGS_ENABLED:-false}
       Admin__CentralLogs__BaseUrl: ${LOKI_QUERY_BASE_URL:-http://host.docker.internal:13100}
