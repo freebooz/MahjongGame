@@ -290,12 +290,12 @@ foreach ($relative in $testSourceFiles) {
     }
 }
 
-# 人工维护代码必须至少包含一个中文维护说明，先阻止新文件完全脱离项目中文审查语境。
+# 需要中文审查的人工维护代码必须至少包含一个中文维护说明，先阻止新文件完全脱离项目语境。
+# 按项目约定，Python 与 PowerShell 属于工具脚本，不要求中文注释，因此不纳入该语言门禁。
 # 该门禁是最低基线，不替代 AGENTS.md 对类型、成员、方法和关键分支的详细注释要求；
 # 后续专项门禁会继续检查公共 API XML 文档和高风险异步/事务边界。
 $maintainedCodeExtensions = @(
-    '.cs', '.cpp', '.h', '.hpp', '.ts', '.ps1', '.psm1', '.py', '.sh',
-    '.cshtml')
+    '.cs', '.cpp', '.h', '.hpp', '.ts', '.sh', '.cshtml')
 $maintainedCodeExclusions = @(
     '/Binaries/',
     '/Intermediate/',
@@ -398,6 +398,82 @@ foreach ($relative in $trackedExistingFiles) {
         if ($lookBehind -notmatch '[\p{IsCJKUnifiedIdeographs}]') {
             Add-GovernanceFailure (
                 "Unreal 反射类型缺少宏前职责说明：{0}:{1}" -f
+                $relative,
+                ($index + 1))
+        }
+    }
+}
+
+# UFUNCTION 会暴露给蓝图或网络层，其中 Server/Client RPC 尤其需要明确权威边界、隐私和失败行为。
+# 与反射类型使用同一生产头文件范围；连续的同职责处理器可以共享八行内的分组说明。
+$unrealFunctionDeclarationPattern =
+    '^\s*UFUNCTION\s*\('
+foreach ($relative in $trackedExistingFiles) {
+    $normalized = $relative.Replace('\', '/')
+    $extension = [IO.Path]::GetExtension($relative).ToLowerInvariant()
+    if (!$normalized.StartsWith(
+            'Source/',
+            [StringComparison]::OrdinalIgnoreCase) `
+        -or $extension -notin @('.h', '.hpp') `
+        -or $normalized.IndexOf(
+            '/Tests/',
+            [StringComparison]::OrdinalIgnoreCase) -ge 0) {
+        continue
+    }
+    $path = Join-Path $projectRoot $relative
+    $lines = @(Get-Content -LiteralPath $path -Encoding UTF8)
+    for ($index = 0; $index -lt $lines.Count; $index++) {
+        if ($lines[$index] -notmatch $unrealFunctionDeclarationPattern) {
+            continue
+        }
+        $lookBehindStart = [Math]::Max(0, $index - 8)
+        $lookBehind = if ($index -eq 0) {
+            ''
+        }
+        else {
+            $lines[$lookBehindStart..($index - 1)] -join "`n"
+        }
+        if ($lookBehind -notmatch '[\p{IsCJKUnifiedIdeographs}]') {
+            Add-GovernanceFailure (
+                "Unreal UFUNCTION 缺少就近职责说明：{0}:{1}" -f
+                $relative,
+                ($index + 1))
+        }
+    }
+}
+
+# Unreal 生命周期与接口覆写常承担委托注册、资源释放、复制和权威请求转发，必须说明其副作用。
+# 五行窗口允许同一生命周期对共享分组说明；测试覆写不纳入生产维护门禁。
+$unrealOverrideDeclarationPattern =
+    '^\s*virtual\s+.+\boverride\s*;\s*$'
+foreach ($relative in $trackedExistingFiles) {
+    $normalized = $relative.Replace('\', '/')
+    $extension = [IO.Path]::GetExtension($relative).ToLowerInvariant()
+    if (!$normalized.StartsWith(
+            'Source/',
+            [StringComparison]::OrdinalIgnoreCase) `
+        -or $extension -notin @('.h', '.hpp') `
+        -or $normalized.IndexOf(
+            '/Tests/',
+            [StringComparison]::OrdinalIgnoreCase) -ge 0) {
+        continue
+    }
+    $path = Join-Path $projectRoot $relative
+    $lines = @(Get-Content -LiteralPath $path -Encoding UTF8)
+    for ($index = 0; $index -lt $lines.Count; $index++) {
+        if ($lines[$index] -notmatch $unrealOverrideDeclarationPattern) {
+            continue
+        }
+        $lookBehindStart = [Math]::Max(0, $index - 5)
+        $lookBehind = if ($index -eq 0) {
+            ''
+        }
+        else {
+            $lines[$lookBehindStart..($index - 1)] -join "`n"
+        }
+        if ($lookBehind -notmatch '[\p{IsCJKUnifiedIdeographs}]') {
+            Add-GovernanceFailure (
+                "Unreal override 缺少就近副作用说明：{0}:{1}" -f
                 $relative,
                 ($index + 1))
         }

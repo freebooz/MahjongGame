@@ -31,6 +31,7 @@ public:
     void EnterRoomServer(const FString& InRoomCode, int32 InSeatIndex, bool bIsReady = false);
     void LeaveRoomServer();
 
+    /** 注册公开账号与房间字段的复制规则；ServerSessionId 等敏感会话字段必须保持服务端私有。 */
     virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 private:

@@ -16,5 +16,6 @@ protected:
     UPROPERTY(meta=(BindWidget)) TObjectPtr<UBorder> Border_Tile;
     UPROPERTY(meta=(BindWidget)) TObjectPtr<UTextBlock> Txt_TileName;
 public:
+    /** 用只读牌数据刷新牌面，并按 bLatest 标记最近弃牌；不保留牌对象引用。 */
     UFUNCTION(BlueprintCallable, Category="麻将|UI") void SetDiscard(const FMahjongTile& Tile, bool bLatest);
 };

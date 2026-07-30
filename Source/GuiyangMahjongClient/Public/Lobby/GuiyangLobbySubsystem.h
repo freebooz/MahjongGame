@@ -28,6 +28,7 @@ class GUIYANGMAHJONGCLIENT_API UGuiyangLobbySubsystem final : public UGameInstan
     GENERATED_BODY()
 
 public:
+    /** 初始化时选择并创建大厅后端；销毁时释放异步后端，避免回调进入失效 GameInstance。 */
     virtual void Initialize(FSubsystemCollectionBase& Collection) override;
     virtual void Deinitialize() override;
 

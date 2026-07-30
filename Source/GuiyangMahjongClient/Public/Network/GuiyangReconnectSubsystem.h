@@ -20,6 +20,7 @@ class GUIYANGMAHJONGCLIENT_API UGuiyangReconnectSubsystem : public UGameInstance
     GENERATED_BODY()
 
 public:
+    /** 注册全局网络/旅行失败监听；销毁时解除句柄，防止跨 PIE 会话重复响应。 */
     virtual void Initialize(FSubsystemCollectionBase& Collection) override;
     virtual void Deinitialize() override;
 

@@ -27,8 +27,11 @@ public:
         const FUniqueNetIdRepl& UniqueId, FString& ErrorMessage) override;
     virtual FString InitNewPlayer(APlayerController* NewPlayerController, const FUniqueNetIdRepl& UniqueId,
         const FString& Options, const FString& Portal = TEXT("")) override;
+    /** 登录完成后绑定票据授权身份并发布在线状态；未授权连接必须立即拒绝进入房间。 */
     virtual void PostLogin(APlayerController* NewPlayer) override;
+    /** 连接退出时释放权威映射并启动房间断线宽限流程，不立即删除可重连座位。 */
     virtual void Logout(AController* Exiting) override;
+    /** 世界结束时停止动作/下一局计时器并关闭控制面桥接，防止进程退出期间继续上报。 */
     virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
     /** 使用控制面 Bootstrap 创建本进程唯一的权威房间。 */
@@ -39,19 +42,27 @@ public:
     /** 返回当前托管状态及最近变化时间；无记录时返回 false，调用方应发送 null。 */
     bool GetPlayerTrusteeTelemetry(
         const FString& PlayerId, bool& OutTrustee, FDateTime& OutChangedAtUtc) const;
-    /** Return player ids bound to live, ticket-authorized network connections. */
+    /** 返回绑定到存活且票据授权连接的玩家 ID，不包含等待重连的离线座位。 */
     void GetConnectedAuthorizedPlayerIds(TArray<FString>& OutPlayerIds) const;
 
-    /** 实现共享 Controller 转发的鉴权、大厅和牌桌请求。 */
+    /** 处理默认或完整规则开房请求；托管模式下不允许客户端创建第二个权威房间。 */
     virtual void HandleCreateRoom(class AGuiyangMahjongPlayerController* Controller, const FMahjongCreateRoomRequest& Request) override;
+    /** 为已认证玩家选择或创建快速房间，失败结果通过定向客户端错误返回。 */
     virtual void HandleQuickStart(class AGuiyangMahjongPlayerController* Controller) override;
+    /** 验证短期会话并绑定 PlayerState；不得信任 RPC 中可伪造的玩家标识。 */
     void HandleAuthenticateSession(class AGuiyangMahjongPlayerController* Controller, const FString& PlayerId,
         const FString& DisplayName, EGuiyangLoginProvider Provider, const FString& SessionToken) override;
+    /** 校验房间码和密码后占用座位，密码正文不会进入复制状态或日志。 */
     virtual void HandleJoinRoom(class AGuiyangMahjongPlayerController* Controller, const FMahjongJoinRoomRequest& Request) override;
+    /** 切换准备状态并在满足规则时触发开局；非成员和错误生命周期请求会被拒绝。 */
     virtual void HandleToggleReady(class AGuiyangMahjongPlayerController* Controller) override;
+    /** 结算阶段确认下一局，依靠房间状态序列保证重复 RPC 幂等。 */
     virtual void HandleNextRound(class AGuiyangMahjongPlayerController* Controller) override;
+    /** 释放当前座位并发布新房间状态；断线重连与主动离开采用不同清理语义。 */
     virtual void HandleLeaveRoom(class AGuiyangMahjongPlayerController* Controller) override;
+    /** 验证状态版本、座位权限和客户端序号后交给权威牌桌执行统一动作。 */
     virtual void HandleTableAction(class AGuiyangMahjongPlayerController* Controller, const FMahjongActionRequest& Request) override;
+    /** 将旧版出牌 RPC 转换为统一动作请求，保留兼容性但不绕过任何权威校验。 */
     virtual void HandleLegacyPlayTile(class AGuiyangMahjongPlayerController* Controller, const FMahjongTile& Tile, int32 ClientSequence) override;
 
 private:
@@ -92,7 +103,7 @@ private:
     FGuiyangGameServerLaunchConfig PendingManagedConfig;
     /** 带局/回合/阶段版本的动作超时定时器。 */
     FTimerHandle ActionTimeoutHandle;
-    /** Intermediate settlement auto-advance fallback shared by all clients. */
+    /** 所有客户端共享的中间局自动推进兜底计时器；任一有效确认后必须取消。 */
     FTimerHandle NextRoundAutoStartHandle;
     int32 ArmedTimeoutRoundId = INDEX_NONE;
     int32 ArmedTimeoutTurnId = INDEX_NONE;

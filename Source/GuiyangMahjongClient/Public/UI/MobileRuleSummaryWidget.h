@@ -19,11 +19,14 @@ protected:
     UPROPERTY(meta=(BindWidget)) TObjectPtr<UTextBlock> Txt_RuleHash;
 
 public:
+    /** 从可编辑配置创建规范快照后显示摘要；主要用于创建房间确认阶段。 */
     UFUNCTION(BlueprintCallable, Category="麻将|规则")
     void SetRuleConfig(const FMahjongRuleConfig& Config, int32 RoundCount, bool bPasswordProtected);
 
+    /** 直接显示服务端冻结的规则快照和短哈希，用于房间内一致性核对。 */
     UFUNCTION(BlueprintCallable, Category="麻将|规则")
     void SetRuleSnapshot(const FGuiyangRuleSnapshot& Snapshot, int32 RoundCount, bool bPasswordProtected);
 
+    /** 生成纯展示文本，不修改快照；密码仅显示保护状态，不接收密码正文。 */
     static FString BuildSummaryText(const FGuiyangRuleSnapshot& Snapshot, int32 RoundCount, bool bPasswordProtected);
 };

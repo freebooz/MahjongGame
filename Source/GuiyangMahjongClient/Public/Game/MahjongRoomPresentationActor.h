@@ -28,10 +28,11 @@ public:
     AActor* GetRoomCameraActor() const;
 
 private:
+    /** 世界进入运行态后定位蓝图组件并抑制服务端兼容几何；结束时清除相关计时器。 */
     virtual void BeginPlay() override;
     virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
     void SuppressUnexpectedRoomGeometry();
 
-    /** Keeps older deployed servers from showing late-replicated fallback pawns. */
+    /** 周期检查并隐藏旧部署服务端延迟复制的回退 Pawn，离开房间时必须取消。 */
     FTimerHandle UnexpectedGeometryTimer;
 };

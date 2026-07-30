@@ -14,5 +14,6 @@ public:
     static EStretch::Type ResolveStretchForViewport(FIntPoint ViewportSize);
 
 protected:
+    /** 属性同步时根据当前视口重新选择等比适配策略，不改变背景层的全屏覆盖规则。 */
     virtual void SynchronizeProperties() override;
 };

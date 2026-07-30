@@ -11,5 +11,6 @@ class GUIYANGMAHJONGCLIENT_API UMahjongUIScalingRule final : public UDPICustomSc
     GENERATED_BODY()
 
 public:
+    /** 根据短边和宽高比返回受限 DPI 比例；无效尺寸返回安全默认缩放。 */
     virtual float GetDPIScaleBasedOnSize(FIntPoint Size) const override;
 };

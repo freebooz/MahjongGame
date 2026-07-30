@@ -11,5 +11,6 @@ class GUIYANGMAHJONGEDITORTOOLS_API UGenerateMahjongUICommandlet : public UComma
     GENERATED_BODY()
 public:
     UGenerateMahjongUICommandlet();
+    /** 解析生成参数并创建规范 UI 资产；任何资产保存失败均返回非零退出码供 CI 判定。 */
     virtual int32 Main(const FString& Params) override;
 };
