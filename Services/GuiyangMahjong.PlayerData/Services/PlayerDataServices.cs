@@ -9,13 +9,19 @@ using Microsoft.Extensions.Options;
 
 namespace GuiyangMahjong.PlayerData.Services;
 
+/// <summary>PlayerData 查询 Auth 玩家禁言策略的最小只读客户端边界。</summary>
 public interface IChatPolicyClient
 {
+    /// <summary>读取玩家当前聊天策略；失败不得默认允许发送。</summary>
     Task<ChatPolicyResult> GetPolicyAsync(
         string playerId,
         CancellationToken cancellationToken);
 }
 
+/// <summary>
+/// 使用独立服务身份调用 Auth 聊天策略端点。
+/// 请求不携带消息正文；网络、身份或协议失败采用关闭式拒绝语义。
+/// </summary>
 public sealed class HttpChatPolicyClient(
     IHttpClientFactory httpClientFactory,
     IOptions<PlayerDataOptions> options,
@@ -23,6 +29,7 @@ public sealed class HttpChatPolicyClient(
 {
     private readonly PlayerDataOptions settings = options.Value;
 
+    /// <inheritdoc/>
     public async Task<ChatPolicyResult> GetPolicyAsync(
         string playerId,
         CancellationToken cancellationToken)
@@ -79,6 +86,11 @@ public sealed class HttpChatPolicyClient(
     }
 }
 
+/// <summary>
+/// 玩家证据投影 Outbox 的单批次执行器。
+/// 使用 workerId 租约领取记录，以 EventId 调用 Admin 幂等接入；
+/// 成功/冲突确认完成，瞬态失败退避，永久失败保留供调查。
+/// </summary>
 public sealed class ProjectionDispatcher(
     IPlayerDataStore store,
     IHttpClientFactory httpClientFactory,
@@ -88,6 +100,10 @@ public sealed class ProjectionDispatcher(
 {
     private readonly PlayerDataOptions settings = options.Value;
 
+    /// <summary>
+    /// 领取并投递一批证据投影，返回本次领取数量。
+    /// 单条失败不会阻断同批其他记录；取消会传播且不错误确认未完成项。
+    /// </summary>
     public async Task<int> DispatchOnceAsync(
         string workerId,
         CancellationToken cancellationToken)
@@ -171,6 +187,10 @@ public sealed class ProjectionDispatcher(
     }
 }
 
+/// <summary>
+/// 周期驱动 ProjectionDispatcher 的后台服务。
+/// 使用实例唯一 workerId，宿主取消时退出，循环异常记录后继续以防投影静默停摆。
+/// </summary>
 public sealed class ProjectionDispatcherService(
     ProjectionDispatcher dispatcher,
     IOptions<PlayerDataOptions> options,
@@ -204,6 +224,10 @@ public sealed class ProjectionDispatcherService(
     }
 }
 
+/// <summary>
+/// PlayerData 存储启动初始化器。
+/// 开发环境可显式执行幂等建表；生产关闭迁移时运行身份不需要 DDL 权限。
+/// </summary>
 public sealed class PlayerDataStoreInitializer(
     IPlayerDataStore store,
     IOptions<PlayerDataOptions> options,
@@ -222,6 +246,7 @@ public sealed class PlayerDataStoreInitializer(
         logger.LogInformation("PlayerData 数据库迁移已关闭，运行身份不会执行 DDL。");
     }
 
+    /// <summary>停止阶段无额外副作用；连接池由注册的数据源/存储生命周期释放。</summary>
     public Task StopAsync(CancellationToken cancellationToken) =>
         Task.CompletedTask;
 }

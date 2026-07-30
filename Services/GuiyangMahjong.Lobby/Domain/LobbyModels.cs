@@ -2,6 +2,7 @@ using System.Text.Json.Serialization;
 
 namespace GuiyangMahjong.Lobby.Domain;
 
+/// <summary>房间生命周期状态机的稳定线协议值；迁移规则由 RoomStateMachine 集中维护。</summary>
 [JsonConverter(typeof(JsonStringEnumConverter<RoomLifecycle>))]
 public enum RoomLifecycle
 {
@@ -14,6 +15,7 @@ public enum RoomLifecycle
     Failed
 }
 
+/// <summary>Lobby 可预期错误分类；API 通过稳定机器码映射，不能把内部异常直接替代该枚举。</summary>
 public enum LobbyErrorCode
 {
     InvalidRequest,
@@ -34,10 +36,16 @@ public enum LobbyErrorCode
     InternalError
 }
 
+/// <summary>从 Auth 令牌解析出的最小玩家身份；不包含访问令牌、设备或网络地址。</summary>
 public sealed record PlayerIdentity(string PlayerId, string DisplayName, string Provider);
 
+/// <summary>房间密码的 PBKDF2 持久化值；Salt/Hash 使用 Base64，Iterations 是创建时冻结的迭代次数。</summary>
 public sealed record ProtectedPassword(string SaltBase64, string HashBase64, int Iterations);
 
+/// <summary>
+/// 玩家加入 Dedicated Server 的短期路由。
+/// JoinTicket 与玩家、房间、比赛和实例绑定，ServerPort 为客户端连接端口，过期后必须重新申请。
+/// </summary>
 public sealed record GameServerRoute(
     string RequestId,
     string PlayerId,
@@ -49,33 +57,53 @@ public sealed record GameServerRoute(
     string JoinTicket,
     DateTimeOffset TicketExpireAtUtc);
 
+/// <summary>
+/// Lobby 房间聚合的不可变快照。
+/// 修改通过 with 创建新版本并递增 StateSequence；密码和结果凭据只保存不可逆值，
+/// Route 中的短期票据不得进入长期监控历史。
+/// </summary>
 public sealed record LobbyRoom
 {
+    // 房间标识、短码和房主在房间生命周期内不可变；短码用于玩家输入但不是授权凭据。
     public required string RoomId { get; init; }
     public required string RoomCode { get; init; }
     public required string OwnerPlayerId { get; init; }
+
+    // 基础规则在创建时冻结；RuleSnapshot 的值必须来自服务端白名单和范围校验。
     public required int RoundCount { get; init; }
     public required bool PublicRoom { get; init; }
     public required bool AutoStart { get; init; }
     public required int MaximumPlayers { get; init; }
     public required Dictionary<string, object?> RuleSnapshot { get; init; }
+
+    // 生命周期和玩家数组共同表示当前权威房间状态；玩家标识去重且最多 MaximumPlayers 个。
     public required RoomLifecycle Lifecycle { get; init; }
     public required string[] PlayerIds { get; init; }
+
+    // 敏感/路由字段：密码和结果凭据只保存哈希，Route 仅包含当前有效加入路由。
     public ProtectedPassword? Password { get; init; }
     public GameServerRoute? Route { get; init; }
     public string? LastServerInstanceId { get; init; }
     public string? ResultCredentialHash { get; init; }
     public string? PendingServerInstanceId { get; init; }
+
+    // MatchId 每场分配唯一；StateSequence 单调递增，时间均使用服务端 UTC。
     public string MatchId { get; init; } = Guid.Empty.ToString();
     public long StateSequence { get; init; }
     public DateTimeOffset CreatedAtUtc { get; init; }
     public DateTimeOffset UpdatedAtUtc { get; init; }
     public DateTimeOffset? EmptySinceUtc { get; init; }
+
+    // 三个管理控制标记只允许经审批后的内部端点修改，普通房间 API 不得清除或覆盖。
     public bool NewPlayersProhibited { get; init; }
     public bool MaintenanceMode { get; init; }
     public bool MarkedAbnormal { get; init; }
 }
 
+/// <summary>
+/// 创建房间输入；规则、局数、人数和密码在事务前校验，
+/// Password 仅在当前请求内使用并立即派生哈希，不得持久化明文。
+/// </summary>
 public sealed record CreateRoomRequest(
     int RoundCount,
     bool PublicRoom,
@@ -84,15 +112,23 @@ public sealed record CreateRoomRequest(
     string? Password,
     Dictionary<string, object?> RuleSnapshot);
 
+/// <summary>加入房间输入；协议版本用于拒绝不兼容客户端，密码只在验证期间短暂使用。</summary>
 public sealed record JoinRoomRequest(string? Password, int ClientProtocolVersion);
+
+/// <summary>断线重连路由查询；RoomId 或 MatchId 至少提供一个且必须匹配当前玩家房间。</summary>
 public sealed record ReconnectRouteRequest(string? RoomId = null, string? MatchId = null);
 
+/// <summary>结算中的单个玩家结果；座位、名次和总分由 Dedicated Server 权威产生。</summary>
 public sealed record MatchPlayerResult(
     string PlayerId,
     int SeatIndex,
     int Rank,
     int TotalScore);
 
+/// <summary>
+/// Dedicated Server 提交的整场结果。
+/// ResultSequence 对同一比赛单调递增，Players 必须覆盖房间参与者且不能由普通运营修改。
+/// </summary>
 public sealed record MatchResultReport(
     string RoomId,
     string ServerInstanceId,
@@ -100,6 +136,7 @@ public sealed record MatchResultReport(
     int CompletedRounds,
     MatchPlayerResult[] Players);
 
+/// <summary>结果接收回执；Duplicate 表示同序号同载荷的幂等重放，Accepted=false 不代表已结算。</summary>
 public sealed record MatchResultAck(
     string RequestId,
     string MatchId,
@@ -107,6 +144,10 @@ public sealed record MatchResultAck(
     bool Accepted,
     bool Duplicate);
 
+/// <summary>
+/// Dedicated Server 启动后的注册载荷。
+/// RegistrationCredential 是一次性秘密，监听地址/端口和版本必须与 Allocator 预期绑定。
+/// </summary>
 public sealed record GameServerRegistration(
     string ServerInstanceId,
     string RoomId,
@@ -116,6 +157,10 @@ public sealed record GameServerRegistration(
     string BuildVersion,
     string RegistrationCredential);
 
+/// <summary>
+/// 注册成功回执。
+/// 心跳与结果凭据用途隔离且只能返回目标实例；RoomBootstrap 是不含房间密码的只读启动配置。
+/// </summary>
 public sealed record GameServerRegistrationAck(
     string RequestId,
     bool Accepted,
@@ -124,6 +169,7 @@ public sealed record GameServerRegistrationAck(
     string ResultCredential,
     ManagedRoomBootstrap RoomBootstrap);
 
+/// <summary>游戏服启动所需房间规则快照；PasswordProtected 只表明策略，不下发密码或哈希。</summary>
 public sealed record ManagedRoomBootstrap(
     string RoomId,
     string RoomCode,
@@ -305,6 +351,10 @@ public sealed record RoomRuntimeTelemetry(
     RpcMethodTelemetry[]? RpcMethods = null,
     SettlementRuntimeTelemetry? Settlement = null);
 
+/// <summary>
+/// 房间事件时间线的持久化条目。
+/// EventId 提供幂等，StateSequence 保证同房间排序，Data 只允许脱敏后的受控字段。
+/// </summary>
 public sealed record RoomTimelineEvent(
     string EventId,
     string EventType,
@@ -313,6 +363,7 @@ public sealed record RoomTimelineEvent(
     string TraceId,
     Dictionary<string, object?> Data);
 
+/// <summary>玩家在 Lobby/房间/实例上的实时在线投影；LastSeenAtUtc 为空表示尚无可信观察。</summary>
 public sealed record PlayerPresenceSnapshot(
     string PlayerId,
     bool Online,
@@ -322,22 +373,26 @@ public sealed record PlayerPresenceSnapshot(
     string? RoomCode = null,
     string? ServerInstanceId = null);
 
+/// <summary>Admin 强制下线命令；原因和 TraceId 进入审计，生效时间为服务端认可的 UTC。</summary>
 public sealed record AdminDisconnectPlayerRequest(
     string Reason,
     string TraceId,
     DateTimeOffset EffectiveAtUtc);
 
+/// <summary>强制下线结果；RevokedBeforeUtc 是拒绝旧访问的时间界线，Duplicate 支持命令重放。</summary>
 public sealed record AdminDisconnectPlayerResult(
     string PlayerId,
     DateTimeOffset RevokedBeforeUtc,
     bool Duplicate);
 
+/// <summary>Admin 房间控制命令；ExpectedStateSequence 防止基于陈旧页面修改已变化房间。</summary>
 public sealed record AdminUpdateRoomControlRequest(
     string ActionType,
     long ExpectedStateSequence,
     string Reason,
     string TraceId);
 
+/// <summary>房间控制结果；返回最新序号、控制标志、生命周期和实例关联供审计记录后状态。</summary>
 public sealed record AdminUpdateRoomControlResult(
     string RoomId,
     string ActionType,
@@ -349,11 +404,13 @@ public sealed record AdminUpdateRoomControlResult(
     string? ServerInstanceId,
     bool AlreadyTerminal);
 
+/// <summary>Allocator 通知的实例故障；原因必须脱敏，Lobby 据此迁移关联房间并写时间线。</summary>
 public sealed record GameServerFailure(
     string ServerInstanceId,
     string RoomId,
     string Reason);
 
+/// <summary>异步房间操作受理回执；RetryAfterMilliseconds 是轮询建议而非完成保证。</summary>
 public sealed record RoomOperation(
     string RequestId,
     string RoomId,
@@ -361,6 +418,7 @@ public sealed record RoomOperation(
     RoomLifecycle Lifecycle,
     int RetryAfterMilliseconds = 1000);
 
+/// <summary>大厅启动响应；公告为公开内容，协议版本决定客户端兼容性。</summary>
 public sealed record LobbyBootstrapResponse(
     string RequestId,
     string PlayerId,
@@ -369,6 +427,7 @@ public sealed record LobbyBootstrapResponse(
     string[] Announcements,
     int ProtocolVersion);
 
+/// <summary>公开房间目录的最小列表投影；不暴露玩家身份、规则细节或服务器路由。</summary>
 public sealed record RoomDirectoryItem(
     string RoomCode,
     RoomLifecycle Lifecycle,
@@ -377,8 +436,10 @@ public sealed record RoomDirectoryItem(
     bool PasswordProtected,
     int RoundCount);
 
+/// <summary>Lobby 统一错误响应；RetryAfterMilliseconds 仅在可重试失败时提供。</summary>
 public sealed record ApiError(string RequestId, string Code, string Message, int? RetryAfterMilliseconds = null);
 
+/// <summary>Lobby 实时事件信封；Sequence 在发布源内单调递增，Data 必须是可序列化的脱敏投影。</summary>
 public sealed record LobbyEventEnvelope(
     string Type,
     long Sequence,

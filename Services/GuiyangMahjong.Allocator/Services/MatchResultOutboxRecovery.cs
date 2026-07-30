@@ -6,8 +6,13 @@ using Microsoft.Extensions.Options;
 
 namespace GuiyangMahjong.Allocator.Services;
 
+/// <summary>
+/// Dedicated Server 本地结算 Outbox 的受控路径解析器。
+/// 路径以配置目录为根并规范化为绝对路径，实例文件名只接受服务端生成的安全实例标识。
+/// </summary>
 public static class MatchResultOutboxPaths
 {
+    /// <summary>解析 Outbox 根目录；相对路径以应用目录为基准，不创建目录。</summary>
     public static string GetDirectory(AllocatorOptions options)
     {
         var configured = options.MatchResultOutboxDirectory.Trim();
@@ -17,16 +22,19 @@ public static class MatchResultOutboxPaths
         return Path.GetFullPath(path);
     }
 
+    /// <summary>返回指定实例唯一 JSON Outbox 路径；调用前实例标识必须已通过业务校验。</summary>
     public static string GetInstancePath(AllocatorOptions options, string serverInstanceId) =>
         Path.Combine(GetDirectory(options), $"{serverInstanceId}.json");
 }
 
+/// <summary>结算 Outbox 中的单个玩家结果；座位、名次和总分来自 Dedicated Server 权威状态。</summary>
 public sealed record MatchResultOutboxPlayer(
     string PlayerId,
     int SeatIndex,
     int Rank,
     int TotalScore);
 
+/// <summary>待恢复的结算报告；ResultSequence 对同一比赛单调，Players 必须覆盖结算参与者。</summary>
 public sealed record MatchResultOutboxReport(
     string RoomId,
     string ServerInstanceId,
@@ -34,11 +42,13 @@ public sealed record MatchResultOutboxReport(
     int CompletedRounds,
     MatchResultOutboxPlayer[] Players);
 
+/// <summary>结算文件信封；Version 控制文件兼容性，MatchId 必须与报告房间当前比赛一致。</summary>
 public sealed record MatchResultOutboxEnvelope(
     int Version,
     string MatchId,
     MatchResultOutboxReport Report);
 
+/// <summary>Lobby 对恢复提交的幂等回执；Duplicate 表示同序号同载荷已接受。</summary>
 public sealed record MatchResultRecoveryAck(
     string RequestId,
     string MatchId,
@@ -46,6 +56,11 @@ public sealed record MatchResultRecoveryAck(
     bool Accepted,
     bool Duplicate);
 
+/// <summary>
+/// 扫描 Dedicated Server 遗留结算文件并可靠重投 Lobby。
+/// 文件大小、版本、标识和时间先校验；只有 Lobby 明确接受或确认重复后才删除文件，
+/// 网络失败和不确定响应保留文件等待下轮重试。
+/// </summary>
 public sealed class MatchResultOutboxRecovery(
     IHttpClientFactory httpClientFactory,
     IOptions<AllocatorOptions> options,
@@ -57,6 +72,10 @@ public sealed class MatchResultOutboxRecovery(
     private readonly AllocatorOptions options = options.Value;
     private readonly string outboxDirectory = MatchResultOutboxPaths.GetDirectory(options.Value);
 
+    /// <summary>
+    /// 扫描根目录第一层达到恢复延迟的 JSON 文件并逐个尝试提交。
+    /// 取消会停止扫描；单个损坏或失败文件记录后保留，不阻断其他文件。
+    /// </summary>
     public async Task RecoverAvailableAsync(CancellationToken cancellationToken)
     {
         Directory.CreateDirectory(outboxDirectory);
@@ -171,6 +190,10 @@ public sealed class MatchResultOutboxRecovery(
     }
 }
 
+/// <summary>
+/// 周期驱动结算恢复器的后台服务。
+/// 宿主取消时退出，循环异常记录后继续；扫描频率由配置限制，避免磁盘和 Lobby 压力。
+/// </summary>
 public sealed class MatchResultOutboxRecoveryService(
     MatchResultOutboxRecovery recovery,
     IOptions<AllocatorOptions> options,

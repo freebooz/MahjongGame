@@ -2,14 +2,21 @@ using System.Text.Json;
 
 namespace GuiyangMahjong.Admin.Domain;
 
+/// <summary>Admin 从 Lobby 获得的 Dedicated Server 路由投影；不包含加入票据或服务凭据。</summary>
 public sealed record GameServerRouteSnapshot(
     string ServerInstanceId,
     string MatchId,
     string ServerIp,
     int ServerPort);
 
+/// <summary>
+/// Admin 使用的房间配置与控制快照。
+/// StateSequence 是管理操作的乐观并发依据；来源/区域/集群/节点字段标识多集群归属，
+/// RuleSnapshot 和玩家数组在聚合边界复制后只读使用。
+/// </summary>
 public sealed record RoomMonitorSnapshot
 {
+    // 房间标识、短码、房主及冻结规则来自 Lobby 权威状态。
     public required string RoomId { get; init; }
     public required string RoomCode { get; init; }
     public required string OwnerPlayerId { get; init; }
@@ -18,18 +25,26 @@ public sealed record RoomMonitorSnapshot
     public required bool AutoStart { get; init; }
     public required int MaximumPlayers { get; init; }
     public required Dictionary<string, JsonElement> RuleSnapshot { get; init; }
+
+    // 生命周期、玩家和实例路由描述当前业务状态；Route 不携带客户端加入票据。
     public required string Lifecycle { get; init; }
     public required string[] PlayerIds { get; init; }
     public GameServerRouteSnapshot? Route { get; init; }
     public string? LastServerInstanceId { get; init; }
     public string? PendingServerInstanceId { get; init; }
+
+    // MatchId、序号和 UTC 时间用于跨源关联、并发控制与调查排序。
     public required string MatchId { get; init; }
     public required long StateSequence { get; init; }
     public required DateTimeOffset CreatedAtUtc { get; init; }
     public required DateTimeOffset UpdatedAtUtc { get; init; }
+
+    // 管理控制标记为只读投影，改变它们必须走二次确认与审批工作流。
     public bool NewPlayersProhibited { get; init; }
     public bool MaintenanceMode { get; init; }
     public bool MarkedAbnormal { get; init; }
+
+    // 拓扑来源字段具有稳定默认值以兼容旧单集群数据，生产聚合应填入实际身份。
     public string RegionId { get; init; } = "local";
     public string ClusterId { get; init; } = "local";
     public string LobbyId { get; init; } = "lobby-local-1";
@@ -37,6 +52,10 @@ public sealed record RoomMonitorSnapshot
     public string SourceId { get; init; } = "legacy-lobby";
 }
 
+/// <summary>
+/// Admin 使用的 Allocator 实例快照。
+/// ProcessId 仅在所属节点有意义，时间均为 UTC，FailureReason 必须脱敏且不含启动参数。
+/// </summary>
 public sealed record GameServerInstanceSnapshot(
     string ServerInstanceId,
     string RoomId,
@@ -51,6 +70,7 @@ public sealed record GameServerInstanceSnapshot(
     string BuildVersion,
     string? FailureReason);
 
+/// <summary>带集群、节点、区域和数据源身份的实例投影，用于多集群聚合与命令路由。</summary>
 public sealed record MonitoredInstance(
     string ClusterId,
     string NodeId,
@@ -58,6 +78,7 @@ public sealed record MonitoredInstance(
     string RegionId = "local",
     string SourceId = "legacy-allocator");
 
+/// <summary>概览中的稳定分组计数；Key 由受控玩法、状态或集群枚举产生，不能使用玩家标识。</summary>
 public sealed record CountGroup(string Key, int Count);
 
 /// <summary>
@@ -176,6 +197,10 @@ public sealed record RoomRuntimeTelemetry(
     RpcMethodTelemetry[]? RpcMethods = null,
     SettlementRuntimeTelemetry? Settlement = null);
 
+/// <summary>
+/// Admin 房间事件时间线条目。
+/// EventId/StateSequence 用于去重排序，TraceId 关联跨服务调用，Data 是脱敏 JSON 字段集合。
+/// </summary>
 public sealed record RoomTimelineEvent(
     string EventId,
     string EventType,
@@ -184,6 +209,10 @@ public sealed record RoomTimelineEvent(
     string TraceId,
     Dictionary<string, JsonElement> Data);
 
+/// <summary>
+/// 监控总览的单次聚合快照。
+/// 所有计数来自同一聚合时刻，Reliability 描述各来源新鲜度和降级状态。
+/// </summary>
 public sealed record MonitoringOverview(
     DateTimeOffset ObservedAtUtc,
     int TotalRooms,
@@ -196,6 +225,10 @@ public sealed record MonitoringOverview(
     CountGroup[] RoomsByCluster,
     MonitoringReliabilityMetadata? Reliability = null);
 
+/// <summary>
+/// 房间列表的分页行模型。
+/// 玩家数、局数和控制序号是查询时点值；拓扑字段决定详情与管理命令应路由到哪个来源。
+/// </summary>
 public sealed record RoomListItem(
     string RoomId,
     string RoomCode,
@@ -216,6 +249,11 @@ public sealed record RoomListItem(
     string LobbyId = "lobby-local-1",
     string SourceId = "legacy-lobby");
 
+/// <summary>
+/// 房间详情聚合。
+/// 配置、实例、运行遥测和时间线可独立降级；TelemetryStatus/Reliability 明示缺失或陈旧来源，
+/// 该模型不提供修改结算结果的字段。
+/// </summary>
 public sealed record RoomDetail(
     RoomListItem Summary,
     Dictionary<string, JsonElement> Rules,
@@ -232,6 +270,7 @@ public sealed record RoomDetail(
     string TelemetryStatus,
     MonitoringReliabilityMetadata? Reliability = null);
 
+/// <summary>Auth 玩家目录的 Admin 线协议模型；IP 已脱敏，风险标签和控制时间来自 Auth 权威状态。</summary>
 public sealed record AuthPlayerDirectoryItem(
     string PlayerId,
     string DisplayName,
@@ -248,6 +287,7 @@ public sealed record AuthPlayerDirectoryItem(
     DateTimeOffset? MutedUntilUtc,
     string[] RiskLabels);
 
+/// <summary>玩家刷新会话的只读监控投影；SessionReference 不能用于认证或换取令牌。</summary>
 public sealed record AuthSessionMonitor(
     string SessionReference,
     DateTimeOffset CreatedAtUtc,
@@ -255,6 +295,7 @@ public sealed record AuthSessionMonitor(
     DateTimeOffset? RevokedAtUtc,
     bool Active);
 
+/// <summary>脱敏登录事件；设备为内部引用，MaskedIp 不得还原完整地址。</summary>
 public sealed record AuthLoginEvent(
     string EventId,
     string PlayerId,
@@ -264,6 +305,7 @@ public sealed record AuthLoginEvent(
     string Outcome,
     DateTimeOffset OccurredAtUtc);
 
+/// <summary>Auth 玩家详情线协议；历史数组有界，返回前仍按 RBAC 执行字段级脱敏。</summary>
 public sealed record AuthPlayerDirectoryDetail(
     AuthPlayerDirectoryItem Player,
     AuthSessionMonitor[] Sessions,
@@ -271,6 +313,7 @@ public sealed record AuthPlayerDirectoryDetail(
     string[] KnownDeviceIds,
     PlayerControlEvent[] ControlHistory);
 
+/// <summary>玩家封禁、冻结、禁言和风险标签的版本化只读状态。</summary>
 public sealed record PlayerControlState(
     long Version,
     string AccountStatus,
@@ -280,6 +323,10 @@ public sealed record PlayerControlState(
     DateTimeOffset? RiskLabelsExpireAtUtc,
     DateTimeOffset UpdatedAtUtc);
 
+/// <summary>
+/// 玩家控制审计事件；保存双人身份、工单/TraceId、前后状态和撤销会话数量，
+/// 普通运营只能读取其授权范围，不能重写历史。
+/// </summary>
 public sealed record PlayerControlEvent(
     string CommandId,
     string PlayerId,
@@ -296,6 +343,7 @@ public sealed record PlayerControlEvent(
     PlayerControlState BeforeState,
     PlayerControlState AfterState);
 
+/// <summary>Lobby 玩家在线位置投影；LastSeenAtUtc 为空表示无可信在线观察。</summary>
 public sealed record PlayerPresenceSnapshot(
     string PlayerId,
     bool Online,
@@ -305,6 +353,10 @@ public sealed record PlayerPresenceSnapshot(
     string? RoomCode = null,
     string? ServerInstanceId = null);
 
+/// <summary>
+/// 玩家监控列表行，合并 Auth 身份/控制和 Lobby 在线/房间状态。
+/// 延迟单位毫秒，IP 已脱敏，任何来源陈旧性在详情可靠性元数据中解释。
+/// </summary>
 public sealed record PlayerMonitorListItem(
     string PlayerId,
     string DisplayName,
@@ -326,6 +378,11 @@ public sealed record PlayerMonitorListItem(
     DateTimeOffset? MutedUntilUtc,
     string[] RiskLabels);
 
+/// <summary>
+/// 玩家监控详情聚合。
+/// 登录、设备、房间、掉线和 GM 控制历史均为授权后的有界投影；
+/// DataScope 与 Reliability 明确字段范围、来源和降级情况。
+/// </summary>
 public sealed record PlayerMonitorDetail(
     PlayerMonitorListItem Summary,
     AuthSessionMonitor[] Sessions,

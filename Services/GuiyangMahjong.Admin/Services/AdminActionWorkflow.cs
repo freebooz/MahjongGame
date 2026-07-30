@@ -10,6 +10,11 @@ using Microsoft.Extensions.Options;
 
 namespace GuiyangMahjong.Admin.Services;
 
+/// <summary>
+/// Admin 高风险操作的领域工作流。
+/// 依次执行 RBAC/ABAC、输入与前置状态校验、二次确认、职责分离审批和持久化迁移；
+/// 实际下游副作用由事务 Outbox 执行器完成，工作流不允许普通运营直接修改对局结果。
+/// </summary>
 public sealed partial class AdminActionWorkflow(
     IAdminActionStore store,
     IAdminCaseStore caseStore,
@@ -19,8 +24,13 @@ public sealed partial class AdminActionWorkflow(
     IOptions<AdminOptions> options,
     TimeProvider timeProvider)
 {
+    // 管理策略在服务启动时验证并冻结，定义开关、确认/审批 TTL 和限制阈值。
     private readonly AdminManagementOptions management = options.Value.Management;
 
+    /// <summary>
+    /// 创建非显式幂等调用的管理动作；服务端生成随机动作标识。
+    /// 仅供兼容入口使用，新 HTTP 写入口应优先传入 Idempotency-Key 重载。
+    /// </summary>
     public async Task<AdminActionRecord> CreateAsync(
         AdminPrincipal principal,
         CreateAdminActionRequest request,
@@ -33,6 +43,11 @@ public sealed partial class AdminActionWorkflow(
             null,
             cancellationToken);
 
+    /// <summary>
+    /// 创建 AwaitingConfirmation 动作并写首条审计。
+    /// 同一操作者的 Idempotency-Key 确定性映射为动作标识，冲突载荷被拒绝；
+    /// 创建前读取目标快照并校验预期序号、案件和制裁引用，不执行下游命令。
+    /// </summary>
     public async Task<AdminActionRecord> CreateAsync(
         AdminPrincipal principal,
         CreateAdminActionRequest request,
@@ -126,6 +141,10 @@ public sealed partial class AdminActionWorkflow(
         && (!left.HasValue
             || JsonElement.DeepEquals(left.Value, right!.Value));
 
+    /// <summary>
+    /// 在确认 TTL 内校验操作者本人和目标确认文本，将动作迁移到 PendingApproval。
+    /// 版本或状态已变化时失败，不延长原审批过期时间。
+    /// </summary>
     public async Task<AdminActionRecord> ConfirmAsync(
         AdminPrincipal principal,
         string actionRequestId,
@@ -170,6 +189,10 @@ public sealed partial class AdminActionWorkflow(
         return replacement;
     }
 
+    /// <summary>
+    /// 不带 HTTP 上下文的审批入口，适用于受控内部调用和测试。
+    /// 仍执行审批角色、申请/审批人分离、状态及过期校验。
+    /// </summary>
     public async Task<AdminActionRecord> ApproveAsync(
         AdminPrincipal principal,
         string actionRequestId,
@@ -254,6 +277,10 @@ public sealed partial class AdminActionWorkflow(
         return replacement;
     }
 
+    /// <summary>
+    /// 按当前主体角色过滤并返回有界管理动作列表。
+    /// 审计查看者可跨操作类型读取，其他人员只看到其职责范围或本人申请记录。
+    /// </summary>
     public async Task<IReadOnlyList<AdminActionRecord>> ListAsync(
         AdminPrincipal principal,
         int limit,
@@ -277,6 +304,7 @@ public sealed partial class AdminActionWorkflow(
             .ToArray();
     }
 
+    /// <summary>要求审计查看角色后读取不可变审计链；limit 由 API 层限制为有界值。</summary>
     public Task<IReadOnlyList<AdminAuditRecord>> ListAuditAsync(
         AdminPrincipal principal,
         int limit,
@@ -286,6 +314,7 @@ public sealed partial class AdminActionWorkflow(
         return store.ListAuditAsync(Math.Clamp(limit, 1, 1000), cancellationToken);
     }
 
+    /// <summary>要求管理审计角色后读取命令 Outbox 观察视图，不领取或改变命令。</summary>
     public Task<IReadOnlyList<AdminCommandOutboxRecord>> ListOutboxAsync(
         AdminPrincipal principal,
         int limit,
@@ -755,20 +784,34 @@ public sealed partial class AdminActionWorkflow(
         string StateHash);
 }
 
+/// <summary>
+/// 可安全映射为 Admin API 错误响应的领域异常。
+/// 消息用于授权用户界面，不能包含服务凭据、连接串或内部堆栈。
+/// </summary>
 public sealed class AdminOperationException(
     string code,
     string message,
     int statusCode) : Exception(message)
 {
+    /// <summary>稳定机器错误码，供 Angular 页面按类型显示和降级。</summary>
     public string Code { get; } = code;
+
+    /// <summary>由统一异常边界采用的 HTTP 状态码。</summary>
     public int StatusCode { get; } = statusCode;
 
+    /// <summary>创建输入格式、范围或组合不合法的 400 错误。</summary>
     public static AdminOperationException Invalid(string message) =>
         new("ADMIN_INVALID_REQUEST", message, StatusCodes.Status400BadRequest);
+
+    /// <summary>创建当前身份/角色/属性策略不允许操作的 403 错误。</summary>
     public static AdminOperationException Forbidden(string message) =>
         new("ADMIN_FORBIDDEN", message, StatusCodes.Status403Forbidden);
+
+    /// <summary>创建目标或关联调查实体不存在的 404 错误。</summary>
     public static AdminOperationException NotFound(string message) =>
         new("ADMIN_NOT_FOUND", message, StatusCodes.Status404NotFound);
+
+    /// <summary>创建幂等键复用、版本或状态前置条件冲突的 409 错误。</summary>
     public static AdminOperationException Conflict(string message) =>
         new("ADMIN_STATE_CONFLICT", message, StatusCodes.Status409Conflict);
 }

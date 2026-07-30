@@ -11,6 +11,7 @@ namespace GuiyangMahjong.Lobby.Storage;
 /// <summary>
 /// Redis 保存热房间快照，PostgreSQL 通过唯一约束提供房间号原子性和重启恢复。
 /// 任何密码字段均已是盐化摘要，原始密码不会传入本类型或日志。
+/// 所有业务写入先提交 PostgreSQL，再以 StateSequence 条件刷新缓存，陈旧缓存不能覆盖新状态。
 /// </summary>
 public sealed class RedisPostgresLobbyStore : ILobbyStore
 {
@@ -29,6 +30,7 @@ public sealed class RedisPostgresLobbyStore : ILobbyStore
     private readonly NpgsqlDataSource postgres;
     private readonly ILogger<RedisPostgresLobbyStore> logger;
 
+    /// <summary>取得进程共享 Redis/PostgreSQL 客户端和已验证配置；连接生命周期由容器拥有。</summary>
     public RedisPostgresLobbyStore(
         IOptions<LobbyOptions> options,
         LobbyPersistenceConnections connections,
@@ -40,6 +42,7 @@ public sealed class RedisPostgresLobbyStore : ILobbyStore
         this.logger = logger;
     }
 
+    /// <inheritdoc/>
     public async Task InitializeAsync(CancellationToken cancellationToken)
     {
         var schemaPath = LobbyStoragePaths.SchemaPath;
@@ -49,6 +52,7 @@ public sealed class RedisPostgresLobbyStore : ILobbyStore
         logger.LogInformation("PostgreSQL 大厅表结构已验证，Redis 前缀={RedisKeyPrefix}", options.RedisKeyPrefix);
     }
 
+    /// <inheritdoc/>
     public async Task<bool> CheckHealthAsync(CancellationToken cancellationToken)
     {
         try
@@ -65,6 +69,7 @@ public sealed class RedisPostgresLobbyStore : ILobbyStore
         }
     }
 
+    /// <inheritdoc/>
     public async Task<CreateRoomResult> TryCreateRoomAsync(LobbyRoom room, CancellationToken cancellationToken)
     {
         var payload = JsonSerializer.Serialize(room, JsonOptions);
@@ -111,12 +116,15 @@ public sealed class RedisPostgresLobbyStore : ILobbyStore
         return new CreateRoomResult(CreateRoomStatus.Created);
     }
 
+    /// <inheritdoc/>
     public Task<LobbyRoom?> GetRoomByCodeAsync(string roomCode, CancellationToken cancellationToken) =>
         GetRoomAsync("room_code", roomCode, cancellationToken);
 
+    /// <inheritdoc/>
     public Task<LobbyRoom?> GetRoomByIdAsync(string roomId, CancellationToken cancellationToken) =>
         GetRoomAsync("room_id", roomId, cancellationToken);
 
+    /// <inheritdoc/>
     public async Task<LobbyRoom?> GetActiveRoomByPlayerAsync(
         string playerId, CancellationToken cancellationToken)
     {
@@ -169,6 +177,7 @@ public sealed class RedisPostgresLobbyStore : ILobbyStore
         return result;
     }
 
+    /// <inheritdoc/>
     public async Task<IReadOnlyList<LobbyRoom>> ListPublicRoomsAsync(CancellationToken cancellationToken)
     {
         await using var command = postgres.CreateCommand(
@@ -187,6 +196,7 @@ public sealed class RedisPostgresLobbyStore : ILobbyStore
         return result;
     }
 
+    /// <inheritdoc/>
     public async Task<IReadOnlyList<LobbyRoom>> ListRoomsForMonitoringAsync(
         int limit,
         DateTimeOffset? afterCreatedAtUtc,
@@ -245,6 +255,7 @@ public sealed class RedisPostgresLobbyStore : ILobbyStore
         return result;
     }
 
+    /// <inheritdoc/>
     public async Task<LobbyRoom?> ReconcileWaitingRoomMembersAsync(
         string roomCode,
         string prospectivePlayerId,
@@ -347,6 +358,7 @@ public sealed class RedisPostgresLobbyStore : ILobbyStore
         return updated;
     }
 
+    /// <inheritdoc/>
     public async Task RefreshConnectedPlayersAsync(
         string roomId,
         IReadOnlyCollection<string> connectedPlayerIds,
@@ -365,6 +377,7 @@ public sealed class RedisPostgresLobbyStore : ILobbyStore
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
+    /// <inheritdoc/>
     public async Task<AddPlayerResult> TryAddPlayerAsync(
         string roomCode, string playerId, CancellationToken cancellationToken)
     {
@@ -443,6 +456,7 @@ public sealed class RedisPostgresLobbyStore : ILobbyStore
         return new AddPlayerResult(AddPlayerStatus.Added, updated);
     }
 
+    /// <inheritdoc/>
     public async Task<bool> UpdateRoomAsync(LobbyRoom room, CancellationToken cancellationToken)
     {
         var payload = JsonSerializer.Serialize(room, JsonOptions);
@@ -477,6 +491,7 @@ public sealed class RedisPostgresLobbyStore : ILobbyStore
         return true;
     }
 
+    /// <inheritdoc/>
     public async Task<FinalizeMatchStatus> FinalizeMatchAsync(
         LobbyRoom closedRoom, MatchResultReport report, CancellationToken cancellationToken)
     {

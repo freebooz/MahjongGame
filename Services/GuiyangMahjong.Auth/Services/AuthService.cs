@@ -9,6 +9,11 @@ using Microsoft.Extensions.Options;
 
 namespace GuiyangMahjong.Auth.Services;
 
+/// <summary>
+/// Auth 应用服务，协调游客身份、刷新令牌、访问令牌和登录审计。
+/// 明文刷新令牌只在生成和响应期间存在，存储层仅接收哈希；
+/// 每次登录/刷新均重新执行账号冻结与封禁策略。
+/// </summary>
 public sealed partial class AuthService(
     IAuthStore store,
     PlayerAccessTokenIssuer accessTokenIssuer,
@@ -16,14 +21,20 @@ public sealed partial class AuthService(
     IOptions<AuthOptions> options,
     TimeProvider timeProvider)
 {
+    // 启动时验证并冻结的令牌 TTL、密钥和身份策略；请求处理中不动态接受客户端覆盖。
     private readonly AuthOptions options = options.Value;
 
+    /// <summary>兼容无网络观察值的内部登录入口；生产 HTTP 入口应使用带脱敏观察值的重载。</summary>
     public async Task<AuthSessionResponse> LoginGuestAsync(
         GuestLoginRequest request,
         CancellationToken cancellationToken) =>
         await LoginGuestAsync(
             request, new LoginObservation("Unknown", "Unknown"), cancellationToken);
 
+    /// <summary>
+    /// 校验安装标识和展示名，取得稳定游客身份，创建刷新会话并记录脱敏登录事件。
+    /// 冻结或封禁状态不会签发任何令牌；返回值为敏感认证响应。
+    /// </summary>
     public async Task<AuthSessionResponse> LoginGuestAsync(
         GuestLoginRequest request,
         LoginObservation observation,
@@ -76,6 +87,10 @@ public sealed partial class AuthService(
         return CreateResponse(identity, refresh, now);
     }
 
+    /// <summary>
+    /// 单次消费刷新令牌并签发后继会话和访问令牌。
+    /// 格式错误、过期、撤销、重放、冻结或封禁统一失败，旧令牌不能继续使用。
+    /// </summary>
     public async Task<AuthSessionResponse> RefreshAsync(
         RefreshSessionRequest request,
         CancellationToken cancellationToken)
@@ -98,6 +113,7 @@ public sealed partial class AuthService(
         return CreateResponse(rotation.Identity, replacement, now);
     }
 
+    /// <summary>幂等撤销有效刷新令牌；格式损坏或已撤销时无副作用，不泄漏会话是否存在。</summary>
     public async Task LogoutAsync(LogoutRequest request, CancellationToken cancellationToken)
     {
         if (!TryParseRefreshToken(request.RefreshToken, out var sessionId, out var tokenHash)) return;
@@ -201,8 +217,12 @@ public sealed partial class AuthService(
     private sealed record IssuedRefreshToken(string Plaintext, RefreshSession Session);
 }
 
+/// <summary>可安全映射为 Auth API 错误码和 HTTP 状态的领域异常。</summary>
 public sealed class AuthOperationException(string code, string message, int statusCode) : Exception(message)
 {
+    /// <summary>稳定机器错误码，客户端只能据此选择重新登录等受控行为。</summary>
     public string Code { get; } = code;
+
+    /// <summary>由统一异常边界返回的 HTTP 状态码。</summary>
     public int StatusCode { get; } = statusCode;
 }

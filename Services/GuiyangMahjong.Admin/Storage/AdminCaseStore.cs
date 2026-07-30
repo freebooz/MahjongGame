@@ -5,19 +5,36 @@ using NpgsqlTypes;
 
 namespace GuiyangMahjong.Admin.Storage;
 
+/// <summary>
+/// 争议调查、客服和补偿案件的持久化边界。
+/// sourceCommandId 保证由同一管理命令只创建一个案件，关闭只能从 Open 单向迁移，
+/// 结案人、结论和证据包哈希必须作为不可覆盖的调查事实保存。
+/// </summary>
 public interface IAdminCaseStore
 {
+    /// <summary>初始化或验证案件表结构；失败时 Admin 不得进入就绪状态。</summary>
     Task InitializeAsync(CancellationToken cancellationToken);
+
+    /// <summary>检查案件存储的读写可用性，不创建或关闭案件。</summary>
     Task<bool> CheckHealthAsync(CancellationToken cancellationToken);
+
+    /// <summary>
+    /// 从已审批管理动作创建案件；相同来源命令仅允许相同案件类型和目标的幂等重放。
+    /// createdAtUtc 由服务端时间源生成。
+    /// </summary>
     Task<AdminCaseCreateResult> CreateAsync(
         string sourceCommandId,
         AdminCaseType caseType,
         AdminActionRecord action,
         DateTimeOffset createdAtUtc,
         CancellationToken cancellationToken);
+
+    /// <summary>按案件 UUID 读取当前记录；不存在或标识无效时返回空。</summary>
     Task<AdminCaseRecord?> GetAsync(
         string caseId,
         CancellationToken cancellationToken);
+
+    /// <summary>按创建时间倒序读取有界案件列表，调用方负责 RBAC 与字段脱敏。</summary>
     Task<IReadOnlyList<AdminCaseRecord>> ListAsync(
         int limit,
         CancellationToken cancellationToken);
@@ -31,17 +48,26 @@ public interface IAdminCaseStore
         CancellationToken cancellationToken);
 }
 
+/// <summary>
+/// 单进程开发/测试用案件存储。
+/// gate 把幂等检查、创建和结案更新组成原子临界区；数据不持久化，禁止用于生产调查。
+/// </summary>
 public sealed class InMemoryAdminCaseStore : IAdminCaseStore
 {
+    // 字典以 sourceCommandId 为键，确保一个执行命令只能派生一个案件。
     private readonly Dictionary<string, AdminCaseRecord> cases =
         new(StringComparer.Ordinal);
     private readonly object gate = new();
 
+    /// <inheritdoc/>
     public Task InitializeAsync(CancellationToken cancellationToken) =>
         Task.CompletedTask;
+
+    /// <inheritdoc/>
     public Task<bool> CheckHealthAsync(CancellationToken cancellationToken) =>
         Task.FromResult(true);
 
+    /// <inheritdoc/>
     public Task<AdminCaseCreateResult> CreateAsync(
         string sourceCommandId,
         AdminCaseType caseType,
@@ -67,6 +93,7 @@ public sealed class InMemoryAdminCaseStore : IAdminCaseStore
         }
     }
 
+    /// <inheritdoc/>
     public Task<IReadOnlyList<AdminCaseRecord>> ListAsync(
         int limit,
         CancellationToken cancellationToken)
@@ -82,6 +109,7 @@ public sealed class InMemoryAdminCaseStore : IAdminCaseStore
         }
     }
 
+    /// <inheritdoc/>
     public Task<AdminCaseRecord?> GetAsync(
         string caseId,
         CancellationToken cancellationToken)
@@ -94,6 +122,7 @@ public sealed class InMemoryAdminCaseStore : IAdminCaseStore
         }
     }
 
+    /// <inheritdoc/>
     public Task<AdminCaseRecord?> CloseAsync(
         string caseId,
         string closedBy,
@@ -121,6 +150,10 @@ public sealed class InMemoryAdminCaseStore : IAdminCaseStore
         }
     }
 
+    /// <summary>
+    /// 从带独立审批的动作创建不可变案件记录。
+    /// 缺少审批时失败，BeforeState 作为发起时证据保留，后续目标变化不能覆盖。
+    /// </summary>
     internal static AdminCaseRecord CreateRecord(
         string sourceCommandId,
         AdminCaseType caseType,
@@ -147,6 +180,7 @@ public sealed class InMemoryAdminCaseStore : IAdminCaseStore
             "Open");
     }
 
+    /// <summary>验证 sourceCommandId 重放的案件类型、动作、目标及调查关联完全一致。</summary>
     internal static void EnsureSame(
         AdminCaseRecord existing,
         AdminCaseType caseType,
@@ -165,12 +199,18 @@ public sealed class InMemoryAdminCaseStore : IAdminCaseStore
     }
 }
 
+/// <summary>
+/// PostgreSQL 案件生产存储。
+/// 使用事务级 advisory lock 和唯一来源命令保证多副本幂等，
+/// 结案 SQL 只更新 Open 记录；该实例拥有数据源生命周期。
+/// </summary>
 public sealed class PostgresAdminCaseStore(NpgsqlDataSource postgres)
     : IAdminCaseStore, IAsyncDisposable
 {
     private static readonly JsonSerializerOptions JsonOptions =
         new(JsonSerializerDefaults.Web);
 
+    /// <inheritdoc/>
     public async Task InitializeAsync(CancellationToken cancellationToken)
     {
         var path = AdminStoragePaths.SchemaPath;
@@ -179,6 +219,7 @@ public sealed class PostgresAdminCaseStore(NpgsqlDataSource postgres)
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
+    /// <inheritdoc/>
     public async Task<bool> CheckHealthAsync(CancellationToken cancellationToken)
     {
         try
@@ -193,6 +234,7 @@ public sealed class PostgresAdminCaseStore(NpgsqlDataSource postgres)
         }
     }
 
+    /// <inheritdoc/>
     public async Task<AdminCaseCreateResult> CreateAsync(
         string sourceCommandId,
         AdminCaseType caseType,
@@ -244,6 +286,7 @@ public sealed class PostgresAdminCaseStore(NpgsqlDataSource postgres)
         return new AdminCaseCreateResult(proposed, false);
     }
 
+    /// <inheritdoc/>
     public async Task<IReadOnlyList<AdminCaseRecord>> ListAsync(
         int limit,
         CancellationToken cancellationToken)
@@ -262,6 +305,7 @@ public sealed class PostgresAdminCaseStore(NpgsqlDataSource postgres)
         return result;
     }
 
+    /// <inheritdoc/>
     public async Task<AdminCaseRecord?> GetAsync(
         string caseId,
         CancellationToken cancellationToken)
@@ -274,6 +318,7 @@ public sealed class PostgresAdminCaseStore(NpgsqlDataSource postgres)
         return await reader.ReadAsync(cancellationToken) ? Read(reader) : null;
     }
 
+    /// <inheritdoc/>
     public async Task<AdminCaseRecord?> CloseAsync(
         string caseId,
         string closedBy,
@@ -372,5 +417,6 @@ public sealed class PostgresAdminCaseStore(NpgsqlDataSource postgres)
         FROM admin_monitor.management_cases
         """;
 
+    /// <summary>异步释放该存储独占的 PostgreSQL 数据源和连接池。</summary>
     public ValueTask DisposeAsync() => postgres.DisposeAsync();
 }

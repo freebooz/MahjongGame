@@ -3,8 +3,15 @@ using GuiyangMahjong.Auth.Domain;
 
 namespace GuiyangMahjong.Auth.Storage;
 
+/// <summary>
+/// 单进程开发/测试用 Auth 存储。
+/// gate 把身份、会话轮换、管理幂等和控制事件组成原子临界区；
+/// 数据不持久化且无法跨副本共享，生产环境禁止注册此实现。
+/// </summary>
 public sealed class InMemoryAuthStore : IAuthStore
 {
+    // 各集合分别保存安装/玩家身份索引、会话、管理回执、控制状态/历史和登录事件。
+    // 所有复合读写必须持有 gate，避免轮换和控制撤销交错产生两个有效会话。
     private readonly Dictionary<string, AuthIdentity> identitiesByInstallation = new(StringComparer.Ordinal);
     private readonly Dictionary<string, AuthIdentity> identitiesByPlayer = new(StringComparer.Ordinal);
     private readonly Dictionary<string, RefreshSession> sessions = new(StringComparer.Ordinal);
@@ -17,9 +24,13 @@ public sealed class InMemoryAuthStore : IAuthStore
     private readonly List<AuthLoginEvent> loginEvents = [];
     private readonly object gate = new();
 
+    /// <inheritdoc/>
     public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+    /// <inheritdoc/>
     public Task<bool> CheckHealthAsync(CancellationToken cancellationToken) => Task.FromResult(true);
 
+    /// <inheritdoc/>
     public Task<AuthIdentity> GetOrCreateGuestAsync(
         string installationHash,
         AuthIdentity proposedIdentity,
@@ -36,6 +47,7 @@ public sealed class InMemoryAuthStore : IAuthStore
         }
     }
 
+    /// <inheritdoc/>
     public Task<SessionCreationStatus> CreateRefreshSessionAsync(
         RefreshSession session,
         DateTimeOffset now,
@@ -54,6 +66,7 @@ public sealed class InMemoryAuthStore : IAuthStore
         }
     }
 
+    /// <inheritdoc/>
     public Task<RefreshRotationResult> RotateRefreshSessionAsync(
         string currentSessionId,
         byte[] currentTokenHash,
@@ -86,6 +99,7 @@ public sealed class InMemoryAuthStore : IAuthStore
         }
     }
 
+    /// <inheritdoc/>
     public Task<bool> RevokeRefreshSessionAsync(
         string sessionId,
         byte[] tokenHash,
@@ -103,6 +117,7 @@ public sealed class InMemoryAuthStore : IAuthStore
         }
     }
 
+    /// <inheritdoc/>
     public Task<AdminRevokePlayerSessionsResult> RevokePlayerSessionsAsync(
         string commandId,
         string playerId,
@@ -141,6 +156,7 @@ public sealed class InMemoryAuthStore : IAuthStore
         }
     }
 
+    /// <inheritdoc/>
     public Task<AdminPlayerControlStoreResult> ApplyPlayerControlAsync(
         string commandId,
         string playerId,
@@ -253,6 +269,7 @@ public sealed class InMemoryAuthStore : IAuthStore
         }
     }
 
+    /// <inheritdoc/>
     public Task RecordLoginAsync(AuthLoginEvent loginEvent, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -264,6 +281,7 @@ public sealed class InMemoryAuthStore : IAuthStore
         return Task.CompletedTask;
     }
 
+    /// <inheritdoc/>
     public Task<IReadOnlyList<PlayerDirectoryItem>> ListPlayersAsync(
         string? search,
         int limit,
@@ -294,6 +312,7 @@ public sealed class InMemoryAuthStore : IAuthStore
         }
     }
 
+    /// <inheritdoc/>
     public Task<PlayerDirectoryDetail?> GetPlayerDetailAsync(
         string playerId,
         DateTimeOffset now,

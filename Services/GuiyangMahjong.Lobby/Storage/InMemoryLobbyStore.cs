@@ -4,9 +4,14 @@ using GuiyangMahjong.Lobby.Domain;
 
 namespace GuiyangMahjong.Lobby.Storage;
 
-/// <summary>本地开发与自动化测试存储；生产环境不得使用。</summary>
+/// <summary>
+/// 本地开发与自动化测试存储；生产环境不得使用。
+/// mutationGate 把房间、反向索引、活动玩家及比赛结果的复合更新组成原子临界区，
+/// 用于模拟生产唯一约束，但数据随进程退出丢失。
+/// </summary>
 public sealed class InMemoryLobbyStore : ILobbyStore
 {
+    // 并发字典承担只读索引；涉及多个集合的一致性变更始终在 mutationGate 内完成。
     private readonly ConcurrentDictionary<string, LobbyRoom> roomsByCode = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, string> codeById = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, string> matchResults = new(StringComparer.Ordinal);
@@ -14,9 +19,13 @@ public sealed class InMemoryLobbyStore : ILobbyStore
     private readonly Dictionary<string, DateTimeOffset> activePlayerObservedAtUtc = new(StringComparer.Ordinal);
     private readonly object mutationGate = new();
 
+    /// <inheritdoc/>
     public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+    /// <inheritdoc/>
     public Task<bool> CheckHealthAsync(CancellationToken cancellationToken) => Task.FromResult(true);
 
+    /// <inheritdoc/>
     public Task<CreateRoomResult> TryCreateRoomAsync(LobbyRoom room, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -45,6 +54,7 @@ public sealed class InMemoryLobbyStore : ILobbyStore
         }
     }
 
+    /// <inheritdoc/>
     public Task<LobbyRoom?> GetRoomByCodeAsync(string roomCode, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -52,6 +62,7 @@ public sealed class InMemoryLobbyStore : ILobbyStore
         return Task.FromResult(room);
     }
 
+    /// <inheritdoc/>
     public Task<LobbyRoom?> GetRoomByIdAsync(string roomId, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -62,6 +73,7 @@ public sealed class InMemoryLobbyStore : ILobbyStore
         return Task.FromResult<LobbyRoom?>(null);
     }
 
+    /// <inheritdoc/>
     public Task<LobbyRoom?> GetActiveRoomByPlayerAsync(string playerId, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -99,6 +111,7 @@ public sealed class InMemoryLobbyStore : ILobbyStore
         }
     }
 
+    /// <inheritdoc/>
     public Task<IReadOnlyList<LobbyRoom>> ListPublicRoomsAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -110,6 +123,7 @@ public sealed class InMemoryLobbyStore : ILobbyStore
         return Task.FromResult(rooms);
     }
 
+    /// <inheritdoc/>
     public Task<IReadOnlyList<LobbyRoom>> ListRoomsForMonitoringAsync(
         int limit,
         DateTimeOffset? afterCreatedAtUtc,
@@ -164,6 +178,7 @@ public sealed class InMemoryLobbyStore : ILobbyStore
         return "Standard";
     }
 
+    /// <inheritdoc/>
     public Task<LobbyRoom?> ReconcileWaitingRoomMembersAsync(
         string roomCode,
         string prospectivePlayerId,
@@ -219,6 +234,7 @@ public sealed class InMemoryLobbyStore : ILobbyStore
         }
     }
 
+    /// <inheritdoc/>
     public Task RefreshConnectedPlayersAsync(
         string roomId,
         IReadOnlyCollection<string> connectedPlayerIds,
@@ -240,6 +256,7 @@ public sealed class InMemoryLobbyStore : ILobbyStore
         return Task.CompletedTask;
     }
 
+    /// <inheritdoc/>
     public Task<AddPlayerResult> TryAddPlayerAsync(
         string roomCode, string playerId, CancellationToken cancellationToken)
     {
@@ -289,6 +306,7 @@ public sealed class InMemoryLobbyStore : ILobbyStore
         }
     }
 
+    /// <inheritdoc/>
     public Task<bool> UpdateRoomAsync(LobbyRoom room, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -307,6 +325,7 @@ public sealed class InMemoryLobbyStore : ILobbyStore
         }
     }
 
+    /// <inheritdoc/>
     public Task<FinalizeMatchStatus> FinalizeMatchAsync(
         LobbyRoom closedRoom, MatchResultReport report, CancellationToken cancellationToken)
     {

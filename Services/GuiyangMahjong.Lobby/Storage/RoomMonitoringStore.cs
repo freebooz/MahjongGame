@@ -9,18 +9,34 @@ using StackExchange.Redis;
 
 namespace GuiyangMahjong.Lobby.Storage;
 
+/// <summary>
+/// 房间运行遥测与事件时间线存储边界。
+/// Runtime 是可覆盖的最新快照，事件按 EventId 幂等追加且用于调查；
+/// 生产实现必须先持久化事件再更新易失缓存。
+/// </summary>
 public interface IRoomMonitoringStore
 {
+    /// <summary>读取指定房间最新运行快照；不存在返回空，调用方负责新鲜度判定。</summary>
     Task<RoomRuntimeTelemetry?> GetRuntimeAsync(
         string roomId, CancellationToken cancellationToken);
+
+    /// <summary>保存最新运行快照；ObservedAtUtc 不得倒退覆盖较新样本。</summary>
     Task SetRuntimeAsync(
         RoomRuntimeTelemetry runtime, CancellationToken cancellationToken);
+
+    /// <summary>按 EventId 幂等追加调查事件；失败时不得声称事件已保存。</summary>
     Task AppendEventAsync(
         string roomId, RoomTimelineEvent roomEvent, CancellationToken cancellationToken);
+
+    /// <summary>按发生/状态顺序返回指定房间最近的有界事件列表。</summary>
     Task<IReadOnlyList<RoomTimelineEvent>> ListEventsAsync(
         string roomId, int limit, CancellationToken cancellationToken);
 }
 
+/// <summary>
+/// 单进程开发/测试用房间监控存储。
+/// 运行快照、事件队列和幂等集合只驻留内存，每房间最多保留 500 条时间线事件。
+/// </summary>
 public sealed class InMemoryRoomMonitoringStore : IRoomMonitoringStore
 {
     private readonly ConcurrentDictionary<string, RoomRuntimeTelemetry> runtimes =
@@ -33,6 +49,7 @@ public sealed class InMemoryRoomMonitoringStore : IRoomMonitoringStore
     private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, byte>> eventIds =
         new(StringComparer.Ordinal);
 
+    /// <inheritdoc/>
     public Task<RoomRuntimeTelemetry?> GetRuntimeAsync(
         string roomId, CancellationToken cancellationToken)
     {
@@ -41,6 +58,7 @@ public sealed class InMemoryRoomMonitoringStore : IRoomMonitoringStore
         return Task.FromResult(runtime);
     }
 
+    /// <inheritdoc/>
     public Task SetRuntimeAsync(
         RoomRuntimeTelemetry runtime, CancellationToken cancellationToken)
     {
@@ -69,6 +87,7 @@ public sealed class InMemoryRoomMonitoringStore : IRoomMonitoringStore
         return Task.CompletedTask;
     }
 
+    /// <inheritdoc/>
     public Task<IReadOnlyList<RoomTimelineEvent>> ListEventsAsync(
         string roomId, int limit, CancellationToken cancellationToken)
     {
@@ -80,6 +99,10 @@ public sealed class InMemoryRoomMonitoringStore : IRoomMonitoringStore
     }
 }
 
+/// <summary>
+/// Redis 热遥测与 PostgreSQL 权威事件历史的生产实现。
+/// 最新 Runtime 通过 TTL 自动过期以暴露数据陈旧，时间线先写 PostgreSQL 再维护 Redis 有界列表。
+/// </summary>
 public sealed class RedisRoomMonitoringStore : IRoomMonitoringStore
 {
     private static readonly JsonSerializerOptions JsonOptions =
@@ -88,6 +111,7 @@ public sealed class RedisRoomMonitoringStore : IRoomMonitoringStore
     private readonly NpgsqlDataSource postgres;
     private readonly string prefix;
 
+    /// <summary>取得共享 Redis/PostgreSQL 连接并冻结键前缀；连接生命周期由容器拥有。</summary>
     public RedisRoomMonitoringStore(
         LobbyPersistenceConnections connections,
         IOptions<LobbyOptions> options)
@@ -97,6 +121,7 @@ public sealed class RedisRoomMonitoringStore : IRoomMonitoringStore
         prefix = options.Value.Persistence.RedisKeyPrefix;
     }
 
+    /// <inheritdoc/>
     public async Task<RoomRuntimeTelemetry?> GetRuntimeAsync(
         string roomId, CancellationToken cancellationToken)
     {
@@ -107,6 +132,7 @@ public sealed class RedisRoomMonitoringStore : IRoomMonitoringStore
             : JsonSerializer.Deserialize<RoomRuntimeTelemetry>(value.ToString(), JsonOptions);
     }
 
+    /// <inheritdoc/>
     public async Task SetRuntimeAsync(
         RoomRuntimeTelemetry runtime, CancellationToken cancellationToken)
     {
@@ -164,6 +190,7 @@ public sealed class RedisRoomMonitoringStore : IRoomMonitoringStore
             .WaitAsync(cancellationToken);
     }
 
+    /// <inheritdoc/>
     public async Task<IReadOnlyList<RoomTimelineEvent>> ListEventsAsync(
         string roomId, int limit, CancellationToken cancellationToken)
     {

@@ -7,39 +7,48 @@ using Microsoft.Extensions.Options;
 
 namespace GuiyangMahjong.Lobby.Security;
 
+/// <summary>验证 Auth 签发的短期玩家访问令牌并提取最小身份的安全边界。</summary>
 public interface IPlayerTokenValidator
 {
+    /// <summary>验证格式、HMAC、必需声明、签发/过期时间；失败返回原因而不抛出凭据内容。</summary>
     PlayerTokenValidationResult Validate(string token);
 }
 
+/// <summary>玩家令牌验证结果；失败时 Player 为空，IssuedAtUtc 不可用于会话撤销判断。</summary>
 public sealed record PlayerTokenValidationResult(
     bool IsValid,
     PlayerIdentity? Player,
     DateTimeOffset IssuedAtUtc,
     string ChineseReason)
 {
+    /// <summary>构造已验证结果；player 与签发时间均来自通过签名校验的载荷。</summary>
     public static PlayerTokenValidationResult Success(
         PlayerIdentity player,
         DateTimeOffset issuedAtUtc) =>
         new(true, player, issuedAtUtc, string.Empty);
+
+    /// <summary>构造脱敏失败结果，不保留原始令牌或解析出的未验证声明。</summary>
     public static PlayerTokenValidationResult Failure(string reason) =>
         new(false, null, DateTimeOffset.MinValue, reason);
 }
 
 /// <summary>
 /// 使用服务端密钥验证短期玩家 Token。服务不提供公开签发端点，客户端无法自行产生有效签名。
+/// HMAC 比较采用固定时间算法，任何未验证载荷都不能创建 PlayerIdentity。
 /// </summary>
 public sealed class HmacPlayerTokenValidator : IPlayerTokenValidator
 {
     private readonly byte[] signingKey;
     private readonly TimeProvider timeProvider;
 
+    /// <summary>取得 Auth/Lobby 共享签名密钥和可测试 UTC 时间源；密钥只驻留服务内存。</summary>
     public HmacPlayerTokenValidator(IOptions<LobbyOptions> options, TimeProvider timeProvider)
     {
         signingKey = Encoding.UTF8.GetBytes(options.Value.TokenSigningKey);
         this.timeProvider = timeProvider;
     }
 
+    /// <inheritdoc/>
     public PlayerTokenValidationResult Validate(string token)
     {
         if (string.IsNullOrWhiteSpace(token) || token.Length > 4096)
