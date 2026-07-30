@@ -2,7 +2,7 @@ import {AfterViewInit, Component, OnDestroy} from '@angular/core';
 import {
   disposeAdminConsole,
   initializeAdminConsole
-} from './admin-console';
+} from './admin-console/admin-console';
 
 /**
  * Admin 管理台根组件。

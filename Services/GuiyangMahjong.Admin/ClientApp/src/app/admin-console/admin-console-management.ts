@@ -4,7 +4,7 @@
  */
 import {
   actionNames,byId,date,esc,hasRole,reliabilityHtml,request,requestRefresh,setConnection,state
-} from "./admin-console-core";
+} from "./admin-console-state";
 
 // 通过临时对象 URL 下载已授权结果，完成后立即释放浏览器内存。
 function saveBlob(blob,fileName){

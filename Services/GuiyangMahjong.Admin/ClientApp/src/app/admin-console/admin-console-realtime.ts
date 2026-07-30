@@ -3,7 +3,7 @@
  */
 import {
   appendPager,byId,requestRefresh,resetPage,setConnection,state
-} from "./admin-console-core";
+} from "./admin-console-state";
 import {renderInstances,renderPlayers,renderRooms} from "./admin-console-dashboard";
 
 // 将 SSE upsert/remove 幂等应用到当前可见页；游标页之外的数据等待翻页或受控重同步加载。

@@ -120,7 +120,10 @@ public sealed class ProjectArchitectureTests
         Assert.Contains("ValidateMahjongSchemaConfiguration", targetsText);
         Assert.Contains("ValidateMahjongSchemaBuildOutput", targetsText);
         Assert.Contains("ValidateMahjongSchemaPublishOutput", targetsText);
-        Assert.Contains("ServiceSchemaPath.cs", targetsText);
+        // 共享运行时源码必须位于语义明确的 Schema 目录，防止再次混入仅承载构建配置的 Build 目录。
+        Assert.Contains(
+            @"Schema\ServiceSchemaPath.cs",
+            targetsText);
 
         foreach (var serviceName in expectedServiceNames)
         {

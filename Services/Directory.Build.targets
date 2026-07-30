@@ -6,7 +6,7 @@
   <PropertyGroup Condition="'$(MahjongSchemaServiceName)' != ''">
     <MahjongSchemaSourcePath>$(MSBuildProjectDirectory)\Storage\schema.sql</MahjongSchemaSourcePath>
     <MahjongSchemaRelativeOutputPath>Schemas/$(MahjongSchemaServiceName)/schema.sql</MahjongSchemaRelativeOutputPath>
-    <MahjongSchemaRuntimeSourcePath>$(MSBuildThisFileDirectory)Build\ServiceSchemaPath.cs</MahjongSchemaRuntimeSourcePath>
+    <MahjongSchemaRuntimeSourcePath>$(MSBuildThisFileDirectory)Schema\ServiceSchemaPath.cs</MahjongSchemaRuntimeSourcePath>
   </PropertyGroup>
 
   <ItemGroup Condition="'$(MahjongSchemaServiceName)' != ''">

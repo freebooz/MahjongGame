@@ -11,9 +11,12 @@
 | `Services` | .NET 服务、测试以及 Admin Angular 源码 |
 | `Contracts` | OpenAPI、监控、容量、治理和 SLO 契约 |
 | `Deploy` | Linux、Docker Compose、Kubernetes、Agones 与可观测性部署 |
+| `Build` | Unreal 平台构建配置、目标规则及构建工具所需静态输入 |
 | `Scripts` | 构建、部署、测试、资产生成/导入/验证入口 |
 | `Docs` | 当前架构、设计、安全规范与运行手册 |
-| `Artifacts` | 本地可重建产物或有明确保留要求的审查证据 |
+| `Artifacts` | 本地可重建的构建、打包、发布与验证产物 |
+| `Evidence` | 需要跨构建保留、可关联需求或工单的长期审查证据 |
+| `Saved` | Unreal 和本地工具产生的可删除缓存、日志与临时验证输出 |
 
 ## 常用命令
 
@@ -43,5 +46,6 @@ Pop-Location
 - 修改代码时遵守根目录 `AGENTS.md` 的中文注释和前端技术栈策略。
 - 更新美术资产必须精确删除目标旧资源后全量生成或导入，不使用覆盖导入保留旧设置。
 - `Services/GuiyangMahjong.Admin/ClientApp` 是 Admin 前端唯一源码；`wwwroot` 是可重建发布目录。
+- `Artifacts`、`Evidence`、`Saved` 分别承载可重建产物、长期证据和临时输出，不得混用。
 - UE `.uasset/.umap` 的移动和重命名必须在 Unreal Editor 内完成并修复重定向器。
 - 密钥、`.env`、数据库备份、诊断日志和本机缓存不得提交。

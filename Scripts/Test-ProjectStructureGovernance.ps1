@@ -57,6 +57,7 @@ $requiredFiles = @(
     'Artifacts/README.md',
     'Evidence/README.md',
     'Contracts/README.md',
+    'Services/Schema/ServiceSchemaPath.cs',
     'Services/Directory.Build.props',
     'Services/Directory.Packages.props',
     'Contracts/Authentication/player-access-token-v1.contract.json',
@@ -67,6 +68,54 @@ $requiredFiles = @(
 foreach ($relative in $requiredFiles) {
     if (!(Test-Path -LiteralPath (Join-Path $projectRoot $relative) -PathType Leaf)) {
         Add-GovernanceFailure "缺少结构治理入口：$relative"
+    }
+}
+
+# 已完成迁移的旧入口不得重新出现；该清单把本轮目录与命名决策固化为可执行契约，
+# 防止后续合并把共享源码、Angular 功能文件或混合领域测试放回模糊位置。
+$deprecatedStructureFiles = @(
+    'Services/Build/ServiceSchemaPath.cs',
+    'Services/GuiyangMahjong.Admin/ClientApp/src/app/admin-console-core.ts',
+    'Services/GuiyangMahjong.Admin/ClientApp/src/app/admin-console-dashboard.ts',
+    'Services/GuiyangMahjong.Admin/ClientApp/src/app/admin-console-management.ts',
+    'Services/GuiyangMahjong.Admin/ClientApp/src/app/admin-console-realtime.ts',
+    'Services/GuiyangMahjong.Admin/ClientApp/src/app/admin-console.ts',
+    'Services/GuiyangMahjong.Lobby/Services/IdempotencyStores.cs',
+    'Services/GuiyangMahjong.Lobby/Services/PresenceServices.cs',
+    'Services/GuiyangMahjong.Lobby/Services/PlayerAccessRevocationStores.cs',
+    'Source/GuiyangMahjongEditorTools/Private/Tests/MahjongDeckAndPresentationTests.cpp',
+    'Source/GuiyangMahjongEditorTools/Private/Tests/MahjongRulesAndPersistenceTests.cpp'
+)
+foreach ($relative in $deprecatedStructureFiles) {
+    if (Test-Path -LiteralPath (Join-Path $projectRoot $relative)) {
+        Add-GovernanceFailure "已废弃的目录或文件命名重新出现：$relative"
+    }
+}
+
+$requiredNormalizedFiles = @(
+    'Services/GuiyangMahjong.Admin/ClientApp/src/app/admin-console/admin-console-state.ts',
+    'Services/GuiyangMahjong.Admin/ClientApp/src/app/admin-console/admin-console-dashboard.ts',
+    'Services/GuiyangMahjong.Admin/ClientApp/src/app/admin-console/admin-console-management.ts',
+    'Services/GuiyangMahjong.Admin/ClientApp/src/app/admin-console/admin-console-realtime.ts',
+    'Services/GuiyangMahjong.Admin/ClientApp/src/app/admin-console/admin-console.ts',
+    'Services/GuiyangMahjong.Lobby/Services/IdempotentHttpResponse.cs',
+    'Services/GuiyangMahjong.Lobby/Services/IIdempotencyStore.cs',
+    'Services/GuiyangMahjong.Lobby/Services/InMemoryIdempotencyStore.cs',
+    'Services/GuiyangMahjong.Lobby/Services/RedisIdempotencyStore.cs',
+    'Services/GuiyangMahjong.Lobby/Services/IOnlinePresenceService.cs',
+    'Services/GuiyangMahjong.Lobby/Services/InMemoryOnlinePresenceService.cs',
+    'Services/GuiyangMahjong.Lobby/Services/RedisOnlinePresenceService.cs',
+    'Services/GuiyangMahjong.Lobby/Services/IPlayerAccessRevocationStore.cs',
+    'Services/GuiyangMahjong.Lobby/Services/InMemoryPlayerAccessRevocationStore.cs',
+    'Services/GuiyangMahjong.Lobby/Services/RedisPlayerAccessRevocationStore.cs',
+    'Source/GuiyangMahjongEditorTools/Private/Tests/MahjongDeckAndRuleSnapshotTests.cpp',
+    'Source/GuiyangMahjongEditorTools/Private/Tests/MahjongPresentationTests.cpp',
+    'Source/GuiyangMahjongEditorTools/Private/Tests/MahjongRuleTests.cpp',
+    'Source/GuiyangMahjongEditorTools/Private/Tests/MahjongClientPersistenceTests.cpp'
+)
+foreach ($relative in $requiredNormalizedFiles) {
+    if (!(Test-Path -LiteralPath (Join-Path $projectRoot $relative) -PathType Leaf)) {
+        Add-GovernanceFailure "缺少已归一化的结构入口：$relative"
     }
 }
 

@@ -4,7 +4,7 @@
  */
 import {
   byId,configureRefreshHandler,resetPage,setConnection,state
-} from "./admin-console-core";
+} from "./admin-console-state";
 import {refresh} from "./admin-console-dashboard";
 import {
   submitAction,submitApproval,updateActionParameterFields

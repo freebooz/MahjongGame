@@ -4,7 +4,7 @@
 import {
   actionNames,appendPager,byId,date,emptyOverview,esc,hasRole,renderSourceHealth,
   request,setConnection,settle,state,withPage
-} from "./admin-console-core";
+} from "./admin-console-state";
 import {
   closeInvestigationCase,downloadEvidencePackage,openActionDialog,openCaseResult,
   renderAssetOperations,showPlayer,showRoom
