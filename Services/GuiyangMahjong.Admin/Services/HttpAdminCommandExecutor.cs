@@ -1,3 +1,5 @@
+// Admin 命令执行器：把已审批操作转换为对 Auth、Lobby、Allocator 或 PlayerData 的受控 HTTP 调用。
+// 所有请求必须携带幂等键、短期服务凭据和 TraceId；超时或不确定结果不得伪装为成功。
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -9,6 +11,11 @@ using Microsoft.Extensions.Options;
 
 namespace GuiyangMahjong.Admin.Services;
 
+/// <summary>
+/// 已审批管理命令的 HTTP 执行适配器。
+/// 只接受工作流生成的 Outbox 记录并按动作白名单路由到下游服务，
+/// 所有调用携带幂等键、TraceId 和最小权限服务凭据；资产操作还需先固化案件证据。
+/// </summary>
 public sealed class HttpAdminCommandExecutor(
     IHttpClientFactory httpClientFactory,
     IOptions<AdminOptions> options,
@@ -19,6 +26,10 @@ public sealed class HttpAdminCommandExecutor(
         new(JsonSerializerDefaults.Web);
     private readonly AdminOptions admin = options.Value;
 
+    /// <summary>
+    /// 执行一个已领取命令并分类返回成功、可重试失败或永久失败。
+    /// 方法不直接迁移 Admin 动作状态；调用方负责根据结果原子完成 Outbox 与审计。
+    /// </summary>
     public async Task<AdminCommandExecutionResult> ExecuteAsync(
         AdminCommandOutboxRecord command,
         CancellationToken cancellationToken)

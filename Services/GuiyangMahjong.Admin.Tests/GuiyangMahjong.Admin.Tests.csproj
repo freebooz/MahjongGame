@@ -1,4 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
+  <!-- Admin API、RBAC、审批、审计、监控聚合与证据闭环测试项目。测试依赖只用于验证，不得被生产项目反向引用。 -->
+  <!-- 外部 PostgreSQL/Redis 测试由显式环境变量启用；默认测试必须保持可重复且不访问开发者本机服务。 -->
   <PropertyGroup>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>

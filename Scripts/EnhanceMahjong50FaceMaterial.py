@@ -1,3 +1,5 @@
+# 调整 Mahjong50 牌面材质以增强雕刻锐度和远距离可读性，保持图集映射与 PBR 能量守恒。
+# 更新前精确清理目标材质实例；修改后必须验证移动端性能、文字方向和不同光照。
 """Apply the sharper engraved-face material to the imported Mahjong50 assets."""
 
 from pathlib import Path

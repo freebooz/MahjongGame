@@ -1,3 +1,5 @@
+# 为批准的自动麻将桌确定性生成 2K PBR 纹理，包括颜色、法线、粗糙度和金属度通道。
+# 仅重建目标纹理集合；输入参数和随机种子固定，失败时不得留下混合新旧版本。
 """Generate deterministic 2K PBR textures for the approved Mahjong table."""
 
 from __future__ import annotations

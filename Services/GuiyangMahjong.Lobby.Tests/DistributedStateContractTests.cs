@@ -1,3 +1,4 @@
+// 验证 Lobby 多副本共享状态契约，包括在线状态、幂等结果、事件传播和访问撤销水位。
 using System.Text.Json;
 using GuiyangMahjong.Lobby.Options;
 using GuiyangMahjong.Lobby.Services;

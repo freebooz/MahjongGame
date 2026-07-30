@@ -1,3 +1,7 @@
+<#
+检查客户端、Dedicated Server 和服务发布包之间的模块、配置、Schema 与敏感文件隔离。
+发现服务端代码、开发凭据或不应发布的资产进入客户端包时立即失败。
+#>
 [CmdletBinding()]
 param(
     [string]$Root = '',

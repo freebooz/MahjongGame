@@ -1,3 +1,5 @@
+# 无界面验证 Blender 圆角 PBR 麻将桌在 Unreal 中的网格、尺度、材质、纹理、碰撞和引用替换。
+# 验证只读且覆盖全部目标依赖；发现旧资源残留或混合导入状态时失败。
 """Headless validation for the Blender 5.1 rounded PBR Unreal tabletop."""
 
 from __future__ import annotations

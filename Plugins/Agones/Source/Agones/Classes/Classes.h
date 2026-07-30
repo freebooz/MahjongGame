@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// Agones SDK 公共数据类型入口：声明 GameServer、健康、分配和状态更新使用的可序列化结构。
+// 结构字段映射外部 Agones API 契约，修改名称或类型前必须验证 JSON 兼容性和蓝图暴露行为。
 #pragma once
 
 #include "CoreMinimal.h"

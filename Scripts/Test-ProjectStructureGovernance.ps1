@@ -98,6 +98,19 @@ $requiredNormalizedFiles = @(
     'Services/GuiyangMahjong.Admin/ClientApp/src/app/admin-console/admin-console-management.ts',
     'Services/GuiyangMahjong.Admin/ClientApp/src/app/admin-console/admin-console-realtime.ts',
     'Services/GuiyangMahjong.Admin/ClientApp/src/app/admin-console/admin-console.ts',
+    'Services/GuiyangMahjong.Admin/Api/PlayerEvidenceEndpoints.cs',
+    'Services/GuiyangMahjong.Admin/Api/PlayerEvidenceEndpoints.Common.cs',
+    'Services/GuiyangMahjong.Admin/Api/PlayerEvidenceEndpoints.Ingestion.cs',
+    'Services/GuiyangMahjong.Admin/Api/PlayerEvidenceEndpoints.Queries.cs',
+    'Services/GuiyangMahjong.Admin/Api/PlayerEvidenceEndpoints.Replays.cs',
+    'Services/GuiyangMahjong.Admin/Api/PlayerEvidenceEndpoints.Chat.cs',
+    'Services/GuiyangMahjong.Admin/Api/PlayerEvidenceEndpoints.GmOperations.cs',
+    'Services/GuiyangMahjong.Lobby/Api/LobbyEndpoints.cs',
+    'Services/GuiyangMahjong.Lobby/Api/LobbyEndpoints.Common.cs',
+    'Services/GuiyangMahjong.Lobby/Api/LobbyEndpoints.Health.cs',
+    'Services/GuiyangMahjong.Lobby/Api/LobbyEndpoints.Internal.cs',
+    'Services/GuiyangMahjong.Lobby/Api/LobbyEndpoints.Monitoring.cs',
+    'Services/GuiyangMahjong.Lobby/Api/LobbyEndpoints.Public.cs',
     'Services/GuiyangMahjong.Lobby/Services/IdempotentHttpResponse.cs',
     'Services/GuiyangMahjong.Lobby/Services/IIdempotencyStore.cs',
     'Services/GuiyangMahjong.Lobby/Services/InMemoryIdempotencyStore.cs',
@@ -116,6 +129,44 @@ $requiredNormalizedFiles = @(
 foreach ($relative in $requiredNormalizedFiles) {
     if (!(Test-Path -LiteralPath (Join-Path $projectRoot $relative) -PathType Leaf)) {
         Add-GovernanceFailure "缺少已归一化的结构入口：$relative"
+    }
+}
+
+# 玩家证据接口已按安全域拆分；限制每个 partial 文件规模，防止后续功能继续堆回单一入口。
+# 350 行覆盖当前公共校验分区并保留小幅演进空间，超过阈值必须创建职责明确的新分区。
+$playerEvidenceFiles = @(
+    Get-ChildItem -LiteralPath (
+        Join-Path $projectRoot 'Services/GuiyangMahjong.Admin/Api') `
+        -File `
+        -Filter 'PlayerEvidenceEndpoints*.cs'
+)
+foreach ($file in $playerEvidenceFiles) {
+    $lineCount = @(Get-Content -LiteralPath $file.FullName).Count
+    if ($lineCount -gt 350) {
+        $relative = [IO.Path]::GetRelativePath(
+            $projectRoot,
+            $file.FullName).Replace('\', '/')
+        Add-GovernanceFailure (
+            "玩家证据端点分区超过 350 行：$relative lines=$lineCount")
+    }
+}
+
+# Lobby API 按健康、内部写、只读监控和玩家公开域拆分；每个分区保留少量增长空间，
+# 超过 350 行时必须继续下沉到更窄的业务能力，禁止恢复单文件路由聚合。
+$lobbyEndpointFiles = @(
+    Get-ChildItem -LiteralPath (
+        Join-Path $projectRoot 'Services/GuiyangMahjong.Lobby/Api') `
+        -File `
+        -Filter 'LobbyEndpoints*.cs'
+)
+foreach ($file in $lobbyEndpointFiles) {
+    $lineCount = @(Get-Content -LiteralPath $file.FullName).Count
+    if ($lineCount -gt 350) {
+        $relative = [IO.Path]::GetRelativePath(
+            $projectRoot,
+            $file.FullName).Replace('\', '/')
+        Add-GovernanceFailure (
+            "Lobby 端点分区超过 350 行：$relative lines=$lineCount")
     }
 }
 
@@ -236,6 +287,100 @@ foreach ($relative in $testSourceFiles) {
     $path = Join-Path $projectRoot $relative
     if (Select-String -LiteralPath $path -Pattern '^\s*extern\s+alias\s+' -Quiet) {
         Add-GovernanceFailure "测试源码仍使用 extern alias：$relative"
+    }
+}
+
+# 人工维护代码必须至少包含一个中文维护说明，先阻止新文件完全脱离项目中文审查语境。
+# 该门禁是最低基线，不替代 AGENTS.md 对类型、成员、方法和关键分支的详细注释要求；
+# 后续专项门禁会继续检查公共 API XML 文档和高风险异步/事务边界。
+$maintainedCodeExtensions = @(
+    '.cs', '.cpp', '.h', '.hpp', '.ts', '.ps1', '.psm1', '.py', '.sh',
+    '.cshtml')
+$maintainedCodeExclusions = @(
+    '/Binaries/',
+    '/Intermediate/',
+    '/Saved/',
+    '/DerivedDataCache/',
+    '/node_modules/',
+    '/ThirdParty/',
+    '/wwwroot/')
+foreach ($relative in $trackedExistingFiles) {
+    $normalized = "/$($relative.Replace('\', '/'))"
+    $extension = [IO.Path]::GetExtension($relative).ToLowerInvariant()
+    $isExcluded = @(
+        $maintainedCodeExclusions |
+            Where-Object {
+                $normalized.IndexOf(
+                    $_,
+                    [StringComparison]::OrdinalIgnoreCase) -ge 0
+            }
+    ).Count -gt 0
+    if ($extension -notin $maintainedCodeExtensions -or $isExcluded) {
+        continue
+    }
+    $path = Join-Path $projectRoot $relative
+    if (!(Select-String `
+            -LiteralPath $path `
+            -Pattern '[\p{IsCJKUnifiedIdeographs}]' `
+            -Quiet)) {
+        Add-GovernanceFailure "人工维护代码缺少中文说明：$relative"
+    }
+}
+
+# 支持原生注释的人工配置必须直接包含中文职责或约束说明；严格 JSON 不在此注入非法注释，
+# 而由核心架构文档的数据字典覆盖并通过下方登记项检查。
+$commentableConfigExtensions = @(
+    '.ini', '.yaml', '.yml', '.props', '.targets', '.csproj', '.slnx')
+foreach ($relative in $trackedExistingFiles) {
+    $normalized = $relative.Replace('\', '/')
+    $extension = [IO.Path]::GetExtension($relative).ToLowerInvariant()
+    $isCommentableConfig =
+        $extension -in $commentableConfigExtensions `
+        -or $normalized.EndsWith(
+            '/Dockerfile',
+            [StringComparison]::OrdinalIgnoreCase) `
+        -or $normalized.EndsWith(
+            '.env.example',
+            [StringComparison]::OrdinalIgnoreCase)
+    if (!$isCommentableConfig) {
+        continue
+    }
+    $path = Join-Path $projectRoot $relative
+    if (!(Select-String `
+            -LiteralPath $path `
+            -Pattern '[\p{IsCJKUnifiedIdeographs}]' `
+            -Quiet)) {
+        Add-GovernanceFailure "可注释配置缺少中文说明：$relative"
+    }
+}
+
+$architectureDocumentPath =
+    Join-Path $projectRoot 'Docs/FULL_APPLICATION_ARCHITECTURE.md'
+# 文档统一以 UTF-8 保存；显式指定编码可避免 Windows PowerShell 5.1 按本地代码页读取，
+# 从而把中文治理标识误判为缺失。
+$architectureDocument = Get-Content -LiteralPath $architectureDocumentPath -Raw -Encoding UTF8
+$strictConfigurationDictionaryTokens = @(
+    '严格 JSON 与工具配置数据字典',
+    'GuiyangMahjong.uproject',
+    'Plugins/Agones/Agones.uplugin',
+    'appsettings*.json',
+    'Services/global.json',
+    'ClientApp/angular.json',
+    'ClientApp/package.json',
+    'ClientApp/package-lock.json',
+    'ClientApp/tsconfig.json',
+    'ClientApp/proxy.conf.json',
+    'player-access-token-v1.contract.json',
+    'runtime-telemetry-v1.schema.json',
+    'grafana/dashboards/*.json',
+    'MahjongTableMobileProduction/*Manifest.json',
+    'MahjongTableProduction/*Manifest.json',
+    'ui_asset_inventory.json')
+foreach ($token in $strictConfigurationDictionaryTokens) {
+    if ($architectureDocument.IndexOf(
+            $token,
+            [StringComparison]::Ordinal) -lt 0) {
+        Add-GovernanceFailure "严格配置数据字典缺少登记项：$token"
     }
 }
 

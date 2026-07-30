@@ -1,3 +1,5 @@
+# 在干净导入前删除旧麻将牌资产根目录及明确废弃依赖，防止覆盖导入继承旧设置。
+# 删除目标必须位于项目 Content 白名单；无法确认归属的引用保留并报告人工审查。
 """Delete only the old Mahjong tile asset roots before a clean import."""
 
 from __future__ import annotations

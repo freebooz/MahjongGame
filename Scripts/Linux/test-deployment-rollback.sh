@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# 在隔离环境验证部署升级、备份和回滚流程，不得指向生产数据卷或真实密钥。
+# 测试需确认版本指针、服务健康和数据保持语义，并在失败时保留诊断。
 set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"

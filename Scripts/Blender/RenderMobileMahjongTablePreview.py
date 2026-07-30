@@ -1,3 +1,5 @@
+# 渲染移动麻将桌全景和中心控制器审查图，不保存场景修改，输出用于人工视觉验证。
+# 渲染失败时保留日志但不得发布不完整截图；颜色管理和相机参数必须保持确定性。
 """Render full-table and center-controller review images without saving scene."""
 
 from __future__ import annotations

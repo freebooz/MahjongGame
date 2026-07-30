@@ -181,3 +181,6 @@ components:
     InstanceState:
       type: string
       enum: [Starting, Ready, Allocated, Draining, Stopped, Failed]
+# Allocator OpenAPI 契约：描述游戏服分配、注册、心跳、故障、回收和监控接口。
+# 内部接口必须携带服务身份与 TraceId；示例不得包含真实令牌、节点地址或生产实例标识。
+# 变更路径、状态码或字段前需验证 Lobby、Admin、游戏服及兼容性测试。

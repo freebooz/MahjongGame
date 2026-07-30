@@ -83,3 +83,6 @@ spec:
                 readOnlyRootFilesystem: false
                 capabilities:
                   drop: ["ALL"]
+# Agones Fleet：定义贵阳麻将 Linux Dedicated Server Pod 模板、端口、探针和滚动策略。
+# 镜像必须使用不可变版本并包含已校验的 LinuxServer 制品；资源请求/限制需覆盖真实峰值。
+# 密钥通过 Secret 注入，禁止写入镜像、参数、标签或可被普通玩家查询的注解。

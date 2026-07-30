@@ -1,3 +1,5 @@
+// 玩家证据内存存储：提供受限证据投影、聊天授权和调查查询的测试实现。
+// 数据仅在当前进程存活，仍必须执行与生产存储一致的幂等、授权窗口和去重约束。
 using System.Text.Json;
 using GuiyangMahjong.Admin.Domain;
 using Npgsql;
@@ -5,23 +7,41 @@ using NpgsqlTypes;
 
 namespace GuiyangMahjong.Admin.Storage;
 
+/// <summary>
+/// 玩家调查证据与聊天授权的持久化边界。
+/// 证据按事件和来源双重去重；聊天授权只返回同时匹配玩家、工单、操作者和有效期的记录。
+/// </summary>
 public interface IPlayerEvidenceStore
 {
+    /// <summary>初始化或验证证据表结构；失败时 Admin 服务不得进入就绪状态。</summary>
     Task InitializeAsync(CancellationToken cancellationToken);
+
+    /// <summary>检查证据与授权存储可用性，不延长任何授权窗口。</summary>
     Task<bool> CheckHealthAsync(CancellationToken cancellationToken);
+
+    /// <summary>按 EventId 幂等接收证据；同一来源被不同事件复用时必须拒绝。</summary>
     Task<PlayerEvidenceIngestResult> IngestAsync(
         IngestPlayerEvidenceRequest request,
         DateTimeOffset ingestedAtUtc,
         CancellationToken cancellationToken);
+
+    /// <summary>按玩家和证据类型读取有限批次，结果按实际发生时间倒序。</summary>
     Task<IReadOnlyList<PlayerEvidenceRecord>> ListAsync(
         string playerId,
         PlayerEvidenceType evidenceType,
         int limit,
         CancellationToken cancellationToken);
+
+    /// <summary>按 GrantId 幂等保存双人审批形成的聊天授权，不得通过重放延长有效期。</summary>
     Task<PlayerChatAccessGrantIngestResult> IngestChatGrantAsync(
         IngestPlayerChatAccessGrantRequest request,
         DateTimeOffset createdAtUtc,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// 查询指定操作者当前有效的聊天授权；必须同时匹配玩家和工单，
+    /// now 使用服务端 UTC 时间，过期记录返回空。
+    /// </summary>
     Task<PlayerChatAccessGrant?> GetActiveChatGrantAsync(
         string playerId,
         string ticketId,
@@ -30,20 +50,28 @@ public interface IPlayerEvidenceStore
         CancellationToken cancellationToken);
 }
 
+/// <summary>
+/// 单进程测试用证据存储。
+/// 两个字典只在 gate 内访问，以模拟生产唯一约束；数据随进程退出丢失。
+/// </summary>
 public sealed class InMemoryPlayerEvidenceStore : IPlayerEvidenceStore
 {
+    // 证据按事件标识索引，聊天授权按 GrantId 索引；存储值均为克隆后的不可变记录。
     private readonly Dictionary<string, PlayerEvidenceRecord> evidence =
         new(StringComparer.Ordinal);
     private readonly Dictionary<string, PlayerChatAccessGrant> chatGrants =
         new(StringComparer.Ordinal);
     private readonly object gate = new();
 
+    /// <inheritdoc/>
     public Task InitializeAsync(CancellationToken cancellationToken) =>
         Task.CompletedTask;
 
+    /// <inheritdoc/>
     public Task<bool> CheckHealthAsync(CancellationToken cancellationToken) =>
         Task.FromResult(true);
 
+    /// <inheritdoc/>
     public Task<PlayerEvidenceIngestResult> IngestAsync(
         IngestPlayerEvidenceRequest request,
         DateTimeOffset ingestedAtUtc,
@@ -72,6 +100,7 @@ public sealed class InMemoryPlayerEvidenceStore : IPlayerEvidenceStore
         }
     }
 
+    /// <inheritdoc/>
     public Task<IReadOnlyList<PlayerEvidenceRecord>> ListAsync(
         string playerId,
         PlayerEvidenceType evidenceType,
@@ -91,6 +120,7 @@ public sealed class InMemoryPlayerEvidenceStore : IPlayerEvidenceStore
         }
     }
 
+    /// <inheritdoc/>
     public Task<PlayerChatAccessGrantIngestResult> IngestChatGrantAsync(
         IngestPlayerChatAccessGrantRequest request,
         DateTimeOffset createdAtUtc,
@@ -112,6 +142,7 @@ public sealed class InMemoryPlayerEvidenceStore : IPlayerEvidenceStore
         }
     }
 
+    /// <inheritdoc/>
     public Task<PlayerChatAccessGrant?> GetActiveChatGrantAsync(
         string playerId,
         string ticketId,
@@ -131,6 +162,7 @@ public sealed class InMemoryPlayerEvidenceStore : IPlayerEvidenceStore
         }
     }
 
+    /// <summary>规范化 UTC 时间并克隆 JSON，生成不受请求对象生命周期影响的证据值。</summary>
     internal static PlayerEvidenceRecord CreateEvidence(
         IngestPlayerEvidenceRequest request,
         DateTimeOffset ingestedAtUtc) =>
@@ -144,6 +176,7 @@ public sealed class InMemoryPlayerEvidenceStore : IPlayerEvidenceStore
             request.Sensitivity,
             NormalizeTimestamp(ingestedAtUtc));
 
+    /// <summary>克隆授权范围并规范化 UTC 时间，避免调用方修改原数组或时区语义。</summary>
     internal static PlayerChatAccessGrant CreateGrant(
         IngestPlayerChatAccessGrantRequest request,
         DateTimeOffset createdAtUtc) =>
@@ -207,9 +240,15 @@ public sealed class InMemoryPlayerEvidenceStore : IPlayerEvidenceStore
     }
 }
 
+/// <summary>
+/// PostgreSQL 玩家证据生产存储。
+/// 事件与来源唯一约束保证证据幂等，聊天授权查询同时约束玩家、工单、操作者和 UTC 有效期；
+/// 该实例拥有数据源生命周期。
+/// </summary>
 public sealed class PostgresPlayerEvidenceStore(NpgsqlDataSource postgres)
     : IPlayerEvidenceStore, IAsyncDisposable
 {
+    /// <inheritdoc/>
     public async Task InitializeAsync(CancellationToken cancellationToken)
     {
         var path = AdminStoragePaths.SchemaPath;
@@ -218,6 +257,7 @@ public sealed class PostgresPlayerEvidenceStore(NpgsqlDataSource postgres)
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
+    /// <inheritdoc/>
     public async Task<bool> CheckHealthAsync(CancellationToken cancellationToken)
     {
         try
@@ -232,6 +272,7 @@ public sealed class PostgresPlayerEvidenceStore(NpgsqlDataSource postgres)
         }
     }
 
+    /// <inheritdoc/>
     public async Task<PlayerEvidenceIngestResult> IngestAsync(
         IngestPlayerEvidenceRequest request,
         DateTimeOffset ingestedAtUtc,
@@ -286,6 +327,7 @@ public sealed class PostgresPlayerEvidenceStore(NpgsqlDataSource postgres)
         return new PlayerEvidenceIngestResult(proposed, false);
     }
 
+    /// <inheritdoc/>
     public async Task<IReadOnlyList<PlayerEvidenceRecord>> ListAsync(
         string playerId,
         PlayerEvidenceType evidenceType,
@@ -310,6 +352,7 @@ public sealed class PostgresPlayerEvidenceStore(NpgsqlDataSource postgres)
         return result;
     }
 
+    /// <inheritdoc/>
     public async Task<PlayerChatAccessGrantIngestResult> IngestChatGrantAsync(
         IngestPlayerChatAccessGrantRequest request,
         DateTimeOffset createdAtUtc,
@@ -350,6 +393,7 @@ public sealed class PostgresPlayerEvidenceStore(NpgsqlDataSource postgres)
         return new PlayerChatAccessGrantIngestResult(proposed, false);
     }
 
+    /// <inheritdoc/>
     public async Task<PlayerChatAccessGrant?> GetActiveChatGrantAsync(
         string playerId,
         string ticketId,
@@ -532,5 +576,6 @@ public sealed class PostgresPlayerEvidenceStore(NpgsqlDataSource postgres)
         FROM admin_monitor.player_chat_access_grants
         """;
 
+    /// <summary>异步释放该存储独占的 PostgreSQL 数据源和连接池。</summary>
     public ValueTask DisposeAsync() => postgres.DisposeAsync();
 }

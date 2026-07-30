@@ -1,3 +1,5 @@
+# 打开房间预览地图和表现 Blueprint 供人工编辑，确保目标窗口可见并聚焦。
+# 不自动保存修改；预览地图与运行地图必须保持隔离，缺失资产时停止。
 """Open the room preview map and the presentation Blueprint for manual editing."""
 
 import unreal

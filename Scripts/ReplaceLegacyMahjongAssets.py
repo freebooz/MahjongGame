@@ -1,3 +1,5 @@
+# 验证 Mahjong50 运行资产完整后删除退役三维麻将资源，并修复所有目标引用。
+# 只有新资产校验全部通过才允许删除；范围限定到旧资产清单，无关资源一律保留。
 """Validate Mahjong50 runtime assets and remove the retired 3D Mahjong set."""
 
 import unreal

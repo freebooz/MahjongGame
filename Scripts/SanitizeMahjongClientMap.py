@@ -1,3 +1,5 @@
+# 清理客户端地图中的服务端专用、编辑器临时和失效对象引用，同时保留正式表现资产。
+# 删除前按类和路径白名单确认目标；保存后验证地图可加载，禁止处理 Dedicated Server 地图。
 import unreal
 
 MAP_PATH = "/Game/Maps/MahjongRoomMap"

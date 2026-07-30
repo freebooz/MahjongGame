@@ -1,3 +1,7 @@
+<#
+等待 LinuxServer 构建完成并在制品清单校验通过后触发 WSL 部署升级。
+等待有明确超时；构建失败、manifest 缺失或哈希不一致时禁止调用部署入口。
+#>
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)]

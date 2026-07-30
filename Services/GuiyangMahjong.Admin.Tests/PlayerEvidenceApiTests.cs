@@ -1,3 +1,4 @@
+// 验证玩家证据、回放和聊天合规 API 的 RBAC、独立审批、工单绑定、脱敏及读取审计。
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;

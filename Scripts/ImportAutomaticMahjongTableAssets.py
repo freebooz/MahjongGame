@@ -1,3 +1,5 @@
+# 将批准的自动麻将桌干净导入 Unreal，包含网格、纹理、PBR 材质、碰撞和引用替换。
+# 必须先精确删除目标旧资源再全量导入，不使用 Reimport 保留旧设置；无关资源保持不变。
 """Clean-import the approved automatic Mahjong table into Unreal Engine 5.8.
 
 The previous /Game/Art/Mahjong/Table asset set is deleted first. The script

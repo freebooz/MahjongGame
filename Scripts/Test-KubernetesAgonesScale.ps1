@@ -1,3 +1,7 @@
+<#
+验证 Agones Fleet 扩缩容、实例注册和容量回收，不用于直接调整生产副本数。
+测试必须设置容量上限和超时，结束后恢复测试命名空间原始规模。
+#>
 [CmdletBinding()]
 param(
     [ValidateRange(4, 2000)]

@@ -1,5 +1,6 @@
 using GuiyangMahjong.Admin.Domain;
 using GuiyangMahjong.Admin.Options;
+using GuiyangMahjong.Admin.Services;
 using GuiyangMahjong.Admin.Storage;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;

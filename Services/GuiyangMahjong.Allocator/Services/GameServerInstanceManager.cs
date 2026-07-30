@@ -1,3 +1,5 @@
+// 游戏服实例管理器：协调容量选择、端口租约、进程启动、注册超时、心跳和回收状态机。
+// 每次转换必须幂等且记录原因；进程启动不确定、心跳过期和停止超时需要进入明确异常状态。
 using System.Collections.Concurrent;
 using GuiyangMahjong.Allocator.Domain;
 using GuiyangMahjong.Allocator.Options;
@@ -6,8 +8,14 @@ using Microsoft.Extensions.Options;
 
 namespace GuiyangMahjong.Allocator.Services;
 
+/// <summary>
+/// Dedicated Server 实例聚合与生命周期协调器。
+/// gate 串行化端口、状态和持久化变更；外部进程/Agones 调用通过明确的补偿路径回收资源，
+/// 任何公开操作都要求初始化完成并返回不含凭据的快照。
+/// </summary>
 public sealed class GameServerInstanceManager
 {
+    // instances 支持无锁只读快照；所有复合写入仍必须进入 gate 保证跨字段原子性。
     private readonly ConcurrentDictionary<string, GameServerInstance> instances = new(StringComparer.Ordinal);
     private readonly SemaphoreSlim gate = new(1, 1);
     private readonly PortLeasePool ports;
@@ -22,8 +30,10 @@ public sealed class GameServerInstanceManager
     private volatile bool initialized;
     private DateTimeOffset lastPersistedAtUtc = DateTimeOffset.MinValue;
 
+    /// <summary>状态恢复完成标记；为 false 时分配和实例控制入口必须拒绝服务。</summary>
     public bool IsInitialized => initialized;
 
+    /// <summary>注入端口池、凭据、启动后端、通知器、状态存储和可测试时间源。</summary>
     public GameServerInstanceManager(
         PortLeasePool ports,
         InstanceCredentialService credentials,
@@ -46,6 +56,10 @@ public sealed class GameServerInstanceManager
         this.logger = logger;
     }
 
+    /// <summary>
+    /// 从持久化文档恢复实例、重新占用端口并验证/接管仍存活的本机或 Agones 实例。
+    /// 不兼容版本、端口冲突或不安全进程身份会使初始化失败；恢复出的故障会持久化并通知 Lobby。
+    /// </summary>
     public async Task InitializeAsync(CancellationToken cancellationToken)
     {
         var document = await stateStore.LoadAsync(cancellationToken);
@@ -149,6 +163,10 @@ public sealed class GameServerInstanceManager
         await DeliverFailuresAsync(failures, cancellationToken);
     }
 
+    /// <summary>
+    /// 按 requestId 幂等分配实例，原子租用端口并启动本机进程或 Agones 资源。
+    /// 启动失败会回收端口、记录失败原因并持久化，不会返回半初始化实例。
+    /// </summary>
     public async Task<AllocationResponse> AllocateAsync(
         string requestId,
         AllocationRequest request,
@@ -237,6 +255,10 @@ public sealed class GameServerInstanceManager
         }
     }
 
+    /// <summary>
+    /// 校验一次性注册凭据、房间/版本/端口绑定并迁移实例到 Ready。
+    /// 成功后生成独立心跳凭据；重复注册返回稳定回执而不重新签发状态。
+    /// </summary>
     public async Task<ConfirmRegistrationResponse> ConfirmRegistrationAsync(
         string requestId,
         string serverInstanceId,
@@ -286,6 +308,10 @@ public sealed class GameServerInstanceManager
         }
     }
 
+    /// <summary>
+    /// 验证实例心跳凭据和房间绑定，刷新最后心跳及生命周期观察值。
+    /// 陈旧、错误实例或终态实例心跳会被拒绝，凭据永不进入日志。
+    /// </summary>
     public async Task RecordHeartbeatAsync(
         string serverInstanceId,
         InstanceHeartbeatRequest request,
@@ -310,6 +336,7 @@ public sealed class GameServerInstanceManager
         }
     }
 
+    /// <summary>将实例迁移到 Draining 并持久化，重复请求返回当前快照。</summary>
     public async Task<GameServerInstanceSnapshot> DrainAsync(
         string serverInstanceId,
         CancellationToken cancellationToken)
@@ -328,6 +355,10 @@ public sealed class GameServerInstanceManager
         }
     }
 
+    /// <summary>
+    /// 仅在状态仍与管理员确认快照一致时终止异常实例。
+    /// 本机进程或 Agones 关闭完成后释放端口并进入 Stopped；终态重放返回 AlreadyStopped。
+    /// </summary>
     public async Task<(GameServerInstanceSnapshot Instance, bool AlreadyStopped)>
         TerminateAbnormalAsync(
             string serverInstanceId,
@@ -433,12 +464,18 @@ public sealed class GameServerInstanceManager
         return instance.Snapshot();
     }
 
+    /// <summary>按实例标识读取无凭据快照；不存在返回空。</summary>
     public GameServerInstanceSnapshot? Get(string serverInstanceId) =>
         instances.TryGetValue(serverInstanceId, out var instance) ? instance.Snapshot() : null;
 
+    /// <summary>返回按端口稳定排序的实例快照数组；调用方不能修改内部聚合。</summary>
     public IReadOnlyList<GameServerInstanceSnapshot> List() =>
         instances.Values.Select(instance => instance.Snapshot()).OrderBy(x => x.Port).ToArray();
 
+    /// <summary>
+    /// 周期检测注册超时、心跳超时和进程退出，迁移失败状态、回收资源并通知 Lobby。
+    /// 单次扫描形成一个持久化批次；通知失败保留重试标记而不回滚已确认故障。
+    /// </summary>
     public async Task MonitorAsync(CancellationToken cancellationToken)
     {
         var failures = new List<InstanceFailureNotification>();

@@ -1,3 +1,4 @@
+// 验证 Admin HTTP 命令执行器的目标路由、服务凭据、幂等键、TraceId、超时和错误分类。
 using System.Net;
 using System.Text;
 using System.Text.Json;

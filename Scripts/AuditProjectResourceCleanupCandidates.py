@@ -1,3 +1,5 @@
+# 只读扫描项目资源清理候选，输出引用、重复项和可重建产物证据，不执行删除或移动。
+# 报告必须区分源资产、发布资产和缓存；无法确认引用关系的资源一律标记为人工复核。
 """Generate a read-only audit of project resource cleanup candidates."""
 
 from __future__ import annotations

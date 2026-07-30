@@ -1,3 +1,5 @@
+# 记录麻将房间视觉预览地图中的相机、曝光、灯光和后处理设置，用于审查差异。
+# 脚本只读加载目标地图，不更改关卡；日志不得被当作正式运行配置来源。
 """Log camera and lighting settings stored in the Mahjong room visual preview map."""
 
 import unreal

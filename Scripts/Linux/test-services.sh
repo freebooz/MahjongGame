@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# 验证 Linux 服务镜像构建、容器启动、健康探针和最小跨服务调用契约。
+# 依赖缺失或健康超时必须失败，测试环境变量不得复用生产凭据。
 set -Eeuo pipefail
 
 PROJECT_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"

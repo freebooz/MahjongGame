@@ -1,3 +1,5 @@
+// Agones 分配客户端：调用 Kubernetes/Agones Allocation API 获取可用 Dedicated Server。
+// 网络调用必须有超时、取消和错误分类；返回地址与实例标识需验证后才能写入 Allocator 状态。
 using System.Net.Http.Headers;
 using System.Net.Security;
 using System.Security.Cryptography.X509Certificates;
@@ -8,6 +10,10 @@ using Microsoft.Extensions.Options;
 
 namespace GuiyangMahjong.Allocator.Services;
 
+/// <summary>
+/// 提交给 Agones 的游戏服分配规格。
+/// 标签将房间、匹配和实例关联到编排资源；内部 Lobby 地址和构建版本通过受控注解传入。
+/// </summary>
 public sealed record AgonesAllocationSpec(
     string RoomId,
     string MatchId,
@@ -16,22 +22,36 @@ public sealed record AgonesAllocationSpec(
     string LobbyInternalUrl,
     string BuildVersion);
 
+/// <summary>Agones 分配结果；名称用于后续状态/关闭，地址和端口是客户端可达入口。</summary>
 public sealed record AgonesAllocationResult(string GameServerName, string Address, int Port);
 
+/// <summary>隔离 Kubernetes Agones API 与 Allocator 领域逻辑的编排客户端边界。</summary>
 public interface IAgonesAllocationClient
 {
+    /// <summary>分配一个 Ready GameServer；无容量或响应不完整时失败且不伪造地址。</summary>
     Task<AgonesAllocationResult> AllocateAsync(AgonesAllocationSpec spec, CancellationToken cancellationToken);
+
+    /// <summary>读取指定资源的 Agones 状态；资源不存在返回空。</summary>
     Task<string?> GetGameServerStateAsync(string gameServerName, CancellationToken cancellationToken);
+
+    /// <summary>请求关闭指定资源；重复关闭已终止资源必须安全。</summary>
     Task ShutdownAsync(string gameServerName, CancellationToken cancellationToken);
+
+    /// <summary>验证 Agones API、命名空间和服务身份是否具备最小必要访问能力。</summary>
     Task<bool> CheckReadyAsync(CancellationToken cancellationToken);
 }
 
+/// <summary>
+/// 通过 Kubernetes ServiceAccount 调用 Agones REST API 的生产实现。
+/// 客户端限制在配置命名空间，响应必须校验名称、地址和端口后才能返回。
+/// </summary>
 public sealed class KubernetesAgonesAllocationClient : IAgonesAllocationClient, IDisposable
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private readonly AllocatorOptions options;
     private readonly HttpClient client;
 
+    /// <summary>建立使用集群内身份的 HTTP 客户端；配置错误会在首次操作或就绪检查中显式失败。</summary>
     public KubernetesAgonesAllocationClient(IOptions<AllocatorOptions> options)
     {
         this.options = options.Value;
@@ -60,6 +80,7 @@ public sealed class KubernetesAgonesAllocationClient : IAgonesAllocationClient, 
         };
     }
 
+    /// <inheritdoc/>
     public async Task<AgonesAllocationResult> AllocateAsync(
         AgonesAllocationSpec spec, CancellationToken cancellationToken)
     {
@@ -115,6 +136,7 @@ public sealed class KubernetesAgonesAllocationClient : IAgonesAllocationClient, 
         return new AgonesAllocationResult(name, address, port);
     }
 
+    /// <inheritdoc/>
     public async Task ShutdownAsync(string gameServerName, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(gameServerName)) return;
@@ -127,6 +149,7 @@ public sealed class KubernetesAgonesAllocationClient : IAgonesAllocationClient, 
             throw new HttpRequestException($"Agones shutdown failed with HTTP {(int)response.StatusCode}.");
     }
 
+    /// <inheritdoc/>
     public async Task<string?> GetGameServerStateAsync(
         string gameServerName, CancellationToken cancellationToken)
     {
@@ -144,6 +167,7 @@ public sealed class KubernetesAgonesAllocationClient : IAgonesAllocationClient, 
         return document.RootElement.GetProperty("status").GetProperty("state").GetString();
     }
 
+    /// <inheritdoc/>
     public async Task<bool> CheckReadyAsync(CancellationToken cancellationToken)
     {
         try
@@ -177,15 +201,24 @@ public sealed class KubernetesAgonesAllocationClient : IAgonesAllocationClient, 
         return request;
     }
 
+    /// <summary>释放内部 HTTP 连接资源；释放后不得再次调用该客户端。</summary>
     public void Dispose() => client.Dispose();
 }
 
+/// <summary>Agones 未启用时的显式关闭实现；分配失败、状态为空、关闭幂等且就绪为 false。</summary>
 public sealed class DisabledAgonesAllocationClient : IAgonesAllocationClient
 {
+    /// <inheritdoc/>
     public Task<AgonesAllocationResult> AllocateAsync(AgonesAllocationSpec spec, CancellationToken cancellationToken) =>
         throw new InvalidOperationException("Agones allocator backend is disabled.");
+
+    /// <inheritdoc/>
     public Task<string?> GetGameServerStateAsync(string gameServerName, CancellationToken cancellationToken) =>
         Task.FromResult<string?>(null);
+
+    /// <inheritdoc/>
     public Task ShutdownAsync(string gameServerName, CancellationToken cancellationToken) => Task.CompletedTask;
+
+    /// <inheritdoc/>
     public Task<bool> CheckReadyAsync(CancellationToken cancellationToken) => Task.FromResult(false);
 }

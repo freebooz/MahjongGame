@@ -1,3 +1,5 @@
+// 本机游戏服进程启动器：构造受控命令行、启动 Dedicated Server 并观察退出码。
+// 可执行文件和工作目录必须位于允许根目录；不得通过未验证输入拼接命令或把凭据写入日志。
 using System.Diagnostics;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
@@ -7,13 +9,17 @@ using Microsoft.Extensions.Options;
 
 namespace GuiyangMahjong.Allocator.Services;
 
-/// <summary>Launches a server without shell parsing and never logs credentials.</summary>
+/// <summary>
+/// 不经 Shell 解析直接启动本机 Dedicated Server，避免参数注入并防止凭据进入日志。
+/// 可执行文件和工作目录必须通过允许根目录与平台可执行性检查。
+/// </summary>
 public sealed class GameServerProcessLauncher(
     IOptions<AllocatorOptions> options,
     ILogger<GameServerProcessLauncher> logger) : IGameServerProcessLauncher
 {
     private readonly AllocatorOptions options = options.Value;
 
+    /// <inheritdoc/>
     public Task<IManagedGameServerProcess> LaunchAsync(
         GameServerLaunchSpec spec,
         CancellationToken cancellationToken)
@@ -76,6 +82,7 @@ public sealed class GameServerProcessLauncher(
         return Task.FromResult<IManagedGameServerProcess>(new ManagedGameServerProcess(process));
     }
 
+    /// <inheritdoc/>
     public Task<IManagedGameServerProcess?> TryAttachAsync(
         int processId,
         DateTimeOffset expectedStartedAtUtc,
@@ -133,10 +140,13 @@ public sealed class GameServerProcessLauncher(
         }
     }
 
+    /// <summary>返回经绝对化和允许根目录验证的服务端可执行文件路径。</summary>
     public string GetResolvedExecutablePath() => ResolveExecutablePath(options.GameServerExecutablePath);
 
+    /// <summary>返回经验证的进程工作目录；未配置时使用可执行文件所在目录。</summary>
     public string GetResolvedWorkingDirectory() => ResolveWorkingDirectory(GetResolvedExecutablePath());
 
+    /// <summary>按当前操作系统检查文件是否具有可执行资格；Windows 依据扩展名，Unix 依据权限位。</summary>
     public static bool IsExecutable(string path)
     {
         if (!File.Exists(path)) return false;
@@ -214,6 +224,7 @@ public sealed class GameServerProcessLauncher(
     {
         private readonly Process process;
 
+        /// <summary>接管已验证进程并冻结 PID 与 UTC 启动时间，供后续防复用检查。</summary>
         public ManagedGameServerProcess(Process process)
         {
             this.process = process;
@@ -221,9 +232,13 @@ public sealed class GameServerProcessLauncher(
             StartedAtUtc = process.StartTime.ToUniversalTime();
         }
 
+        /// <inheritdoc/>
         public int ProcessId { get; }
+
+        /// <inheritdoc/>
         public DateTimeOffset StartedAtUtc { get; }
 
+        /// <inheritdoc/>
         public bool HasExited
         {
             get
@@ -233,6 +248,7 @@ public sealed class GameServerProcessLauncher(
             }
         }
 
+        /// <inheritdoc/>
         public async ValueTask StopAsync(TimeSpan gracePeriod, CancellationToken cancellationToken)
         {
             if (HasExited)

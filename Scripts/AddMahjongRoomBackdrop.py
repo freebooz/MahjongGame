@@ -1,3 +1,5 @@
+# 为麻将房间表现资产添加低成本深色毛毡背景平面，改善移动端构图且不改变玩法碰撞。
+# 仅修改明确的表现 Blueprint；保存前验证材质引用，失败时不得触碰运行房间地图。
 """Add a single low-cost dark felt backdrop plane to the artist-editable room presentation."""
 
 import unreal

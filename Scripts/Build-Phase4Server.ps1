@@ -1,3 +1,7 @@
+<#
+执行阶段四服务端编译、Cook 和打包验证，面向托管 Dedicated Server 基线。
+调用 Unreal Build/UAT 失败时立即终止，并保留日志供人工审查，不自动部署不完整制品。
+#>
 param(
     [string]$EngineRoot = '',
     [ValidateSet('Debug', 'DebugGame', 'Development', 'Shipping', 'Test')]

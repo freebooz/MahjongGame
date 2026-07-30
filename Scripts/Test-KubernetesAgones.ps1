@@ -1,3 +1,7 @@
+<#
+验证 Kubernetes/Agones 清单、Fleet、Allocation 和 GameServer SDK 基本契约。
+默认只检查测试命名空间；任何可能影响集群状态的操作都必须限定资源名并保留诊断。
+#>
 [CmdletBinding()]
 param(
     [string]$Namespace = 'guiyang-mahjong',

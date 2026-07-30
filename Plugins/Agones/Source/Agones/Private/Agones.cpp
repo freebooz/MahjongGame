@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// Agones 模块实现入口：负责 Unreal 模块加载与卸载，不持有具体 GameInstance 的运行状态。
+// 长生命周期连接由 AgonesSubsystem 管理，模块卸载时不得遗留线程、Ticker 或网络回调。
 #include "Agones.h"
 
 #define LOCTEXT_NAMESPACE "FAgonesModule"

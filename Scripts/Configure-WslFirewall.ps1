@@ -1,3 +1,7 @@
+<#
+配置 Windows/WSL 开发网络所需的最小防火墙规则，支持 ShouldProcess 预览。
+只允许项目声明的端口范围；修改系统规则需要管理员权限，脚本不得关闭整个防火墙。
+#>
 [CmdletBinding(SupportsShouldProcess)]
 param(
     [string]$RemoteAddresses = 'LocalSubnet',

@@ -1,4 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
+  <!-- Auth 登录、令牌轮换、封禁和生产身份边界测试项目，不参与运行时发布。 -->
+  <!-- 真实数据库集成必须显式启用并使用隔离数据库；任何测试凭据都不得写入项目文件。 -->
   <PropertyGroup>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>

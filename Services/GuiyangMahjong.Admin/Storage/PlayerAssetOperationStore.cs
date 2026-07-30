@@ -1,3 +1,5 @@
+// 玩家资产操作存储：持久化补偿与奖励撤销请求、审批和执行回执。
+// 同一幂等键和来源证据不得产生不同资产结果，任何冲突必须显式失败并进入审计。
 using System.Text.Json;
 using GuiyangMahjong.Admin.Domain;
 using Npgsql;
@@ -5,10 +7,23 @@ using NpgsqlTypes;
 
 namespace GuiyangMahjong.Admin.Storage;
 
+/// <summary>
+/// 玩家资产操作证据存储。
+/// 创建必须按 sourceCommandId 幂等，终态迁移只能从待钱包执行进入完成或拒绝，
+/// 该接口不提供任意余额写入能力。
+/// </summary>
 public interface IPlayerAssetOperationStore
 {
+    /// <summary>初始化或验证资产操作表结构；失败时服务不得就绪。</summary>
     Task InitializeAsync(CancellationToken cancellationToken);
+
+    /// <summary>检查资产证据存储是否可读写，不改变玩家资产。</summary>
     Task<bool> CheckHealthAsync(CancellationToken cancellationToken);
+
+    /// <summary>
+    /// 从已审批动作和补偿案件创建待执行证据；来源命令冲突复用必须失败。
+    /// createdAtUtc 由服务端时间源提供。
+    /// </summary>
     Task<PlayerAssetOperationCreateResult> CreateAsync(
         string sourceCommandId,
         PlayerAssetOperationType operationType,
@@ -16,15 +31,23 @@ public interface IPlayerAssetOperationStore
         AdminCaseRecord compensationCase,
         DateTimeOffset createdAtUtc,
         CancellationToken cancellationToken);
+
+    /// <summary>按创建时间倒序列出有限批次，供审计与调查使用。</summary>
     Task<IReadOnlyList<PlayerAssetOperationRecord>> ListAsync(
         int limit,
         CancellationToken cancellationToken);
+
+    /// <summary>将指定来源命令迁移到允许的资产终态；重复写入同一终态保持幂等。</summary>
     Task<PlayerAssetOperationRecord> SetStatusAsync(
         string sourceCommandId,
         string status,
         CancellationToken cancellationToken);
 }
 
+/// <summary>
+/// 单进程测试用玩家资产证据存储。
+/// gate 保证幂等检查与创建/迁移不可交错；不持久化且绝不能用于生产经济系统。
+/// </summary>
 public sealed class InMemoryPlayerAssetOperationStore
     : IPlayerAssetOperationStore
 {
@@ -32,12 +55,15 @@ public sealed class InMemoryPlayerAssetOperationStore
         new(StringComparer.Ordinal);
     private readonly object gate = new();
 
+    /// <inheritdoc/>
     public Task InitializeAsync(CancellationToken cancellationToken) =>
         Task.CompletedTask;
 
+    /// <inheritdoc/>
     public Task<bool> CheckHealthAsync(CancellationToken cancellationToken) =>
         Task.FromResult(true);
 
+    /// <inheritdoc/>
     public Task<PlayerAssetOperationCreateResult> CreateAsync(
         string sourceCommandId,
         PlayerAssetOperationType operationType,
@@ -67,6 +93,7 @@ public sealed class InMemoryPlayerAssetOperationStore
         }
     }
 
+    /// <inheritdoc/>
     public Task<IReadOnlyList<PlayerAssetOperationRecord>> ListAsync(
         int limit,
         CancellationToken cancellationToken)
@@ -82,6 +109,7 @@ public sealed class InMemoryPlayerAssetOperationStore
         }
     }
 
+    /// <inheritdoc/>
     public Task<PlayerAssetOperationRecord> SetStatusAsync(
         string sourceCommandId,
         string status,
@@ -104,6 +132,7 @@ public sealed class InMemoryPlayerAssetOperationStore
         }
     }
 
+    /// <summary>限制钱包回执只能写入两个受控终态，阻止任意状态污染调查记录。</summary>
     internal static void ValidateFinalStatus(string status)
     {
         if (status is not ("WalletCompleted" or "WalletRejected"))
@@ -111,6 +140,10 @@ public sealed class InMemoryPlayerAssetOperationStore
                 "Asset operation terminal status is invalid.");
     }
 
+    /// <summary>
+    /// 从审批动作和案件生成不可变操作记录；缺少独立审批时失败，
+    /// BeforeState 被克隆后保存，避免调用方后续 JSON 生命周期影响记录。
+    /// </summary>
     internal static PlayerAssetOperationRecord CreateRecord(
         string sourceCommandId,
         PlayerAssetOperationType operationType,
@@ -212,12 +245,18 @@ public sealed class InMemoryPlayerAssetOperationStore
     }
 }
 
+/// <summary>
+/// PostgreSQL 玩家资产操作证据存储。
+/// sourceCommandId 唯一约束防止重复经济操作，终态更新受允许前置状态限制；
+/// 该实例拥有数据源生命周期但不直接持有玩家钱包余额。
+/// </summary>
 public sealed class PostgresPlayerAssetOperationStore(NpgsqlDataSource postgres)
     : IPlayerAssetOperationStore, IAsyncDisposable
 {
     private static readonly JsonSerializerOptions JsonOptions =
         new(JsonSerializerDefaults.Web);
 
+    /// <inheritdoc/>
     public async Task InitializeAsync(CancellationToken cancellationToken)
     {
         var path = AdminStoragePaths.SchemaPath;
@@ -226,6 +265,7 @@ public sealed class PostgresPlayerAssetOperationStore(NpgsqlDataSource postgres)
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
+    /// <inheritdoc/>
     public async Task<bool> CheckHealthAsync(CancellationToken cancellationToken)
     {
         try
@@ -240,6 +280,7 @@ public sealed class PostgresPlayerAssetOperationStore(NpgsqlDataSource postgres)
         }
     }
 
+    /// <inheritdoc/>
     public async Task<PlayerAssetOperationCreateResult> CreateAsync(
         string sourceCommandId,
         PlayerAssetOperationType operationType,
@@ -300,6 +341,7 @@ public sealed class PostgresPlayerAssetOperationStore(NpgsqlDataSource postgres)
         return new PlayerAssetOperationCreateResult(proposed, false);
     }
 
+    /// <inheritdoc/>
     public async Task<IReadOnlyList<PlayerAssetOperationRecord>> ListAsync(
         int limit,
         CancellationToken cancellationToken)
@@ -319,6 +361,7 @@ public sealed class PostgresPlayerAssetOperationStore(NpgsqlDataSource postgres)
         return result;
     }
 
+    /// <inheritdoc/>
     public async Task<PlayerAssetOperationRecord> SetStatusAsync(
         string sourceCommandId,
         string status,
@@ -442,5 +485,6 @@ public sealed class PostgresPlayerAssetOperationStore(NpgsqlDataSource postgres)
         FROM admin_monitor.player_asset_operations
         """;
 
+    /// <summary>异步释放该存储独占的 PostgreSQL 数据源和连接池。</summary>
     public ValueTask DisposeAsync() => postgres.DisposeAsync();
 }

@@ -1,3 +1,4 @@
+// 验证实例异常通知的签名身份、重试、去重和 Lobby 故障回报错误处理。
 using System.Net;
 using GuiyangMahjong.Allocator.Domain;
 using GuiyangMahjong.Allocator.Options;

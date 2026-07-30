@@ -1,3 +1,5 @@
+// PostgreSQL 外部集成测试：验证 Admin 操作、案件和证据在多实例并发下的事务与幂等性。
+// 仅在显式提供隔离测试数据库时运行，默认跳过以避免误操作开发或生产数据。
 using System.Text.Json;
 using GuiyangMahjong.Admin.Domain;
 using GuiyangMahjong.Admin.Storage;

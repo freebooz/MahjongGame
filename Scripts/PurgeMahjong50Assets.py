@@ -1,3 +1,5 @@
+# 在独立 Unreal 进程中仅删除生成的 Mahjong50 目标资产集，为干净导入提供前置条件。
+# 删除范围由固定根目录和白名单约束；执行前验证绝对路径，不触碰无关麻将或 UI 资源。
 """Delete only the generated Mahjong50 UE asset set in a dedicated process."""
 
 from __future__ import annotations

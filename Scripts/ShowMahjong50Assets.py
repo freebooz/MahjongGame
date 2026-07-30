@@ -1,3 +1,5 @@
+# 将 Unreal Content Browser 定位到生成的 Mahjong50 资产集合，支持人工逐项审查。
+# 仅控制编辑器选择和显示，不修改、保存、重命名或重新导入任何资源。
 """Open the Content Browser at the generated Mahjong50 tile collection."""
 
 import unreal

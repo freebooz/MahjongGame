@@ -1,3 +1,4 @@
+// 验证房间监控存储的运行快照、事件时间线、分页顺序和历史保留边界。
 using GuiyangMahjong.Lobby.Domain;
 using GuiyangMahjong.Lobby.Storage;
 

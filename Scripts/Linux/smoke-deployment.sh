@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# 对已部署 Linux 服务栈执行 Auth、Lobby、Allocator、GameServer 和路由冒烟验证。
+# 使用临时测试身份并在结束时清理；任一关键断言失败均返回非零退出码。
 set -Eeuo pipefail
 
 ENV_FILE="${1:?environment file is required}"

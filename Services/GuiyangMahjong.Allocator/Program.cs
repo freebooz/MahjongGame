@@ -1,3 +1,5 @@
+// Allocator 服务入口：装配配置、最小权限存储、实例管理、身份中间件和 HTTP 路由。
+// 启动阶段配置校验失败应立即终止；生产环境不得自动回退到内存状态或弱凭据。
 using System.Text;
 using System.Net;
 using GuiyangMahjong.Allocator.Api;
@@ -92,4 +94,8 @@ app.UseMiddleware<AllocatorServiceAuthenticationMiddleware>();
 app.MapAllocatorEndpoints();
 app.Run();
 
+/// <summary>
+/// WebApplicationFactory 集成测试可发现的 Allocator 程序入口标记。
+/// 运行时初始化仍由上方顶级语句完成，该 partial 类型不承载可变状态。
+/// </summary>
 public partial class Program;

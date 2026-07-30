@@ -118,3 +118,6 @@ data:
   Allocator__MatchResultOutboxDirectory: /var/lib/guiyang-mahjong/outbox
   Allocator__GameServerExecutablePath: /opt/guiyang-mahjong/server/GuiyangMahjongServer
   Allocator__GameServerWorkingDirectory: /opt/guiyang-mahjong/server
+# Kubernetes 命名空间与非敏感 ConfigMap 基线：统一服务发现、区域、集群和可观测性配置。
+# Secret、密码和令牌不得放入 ConfigMap；环境特有值由部署流水线覆盖并记录版本。
+# Namespace 删除会影响全部资源，生产操作必须二次确认、审批并具备可恢复备份。

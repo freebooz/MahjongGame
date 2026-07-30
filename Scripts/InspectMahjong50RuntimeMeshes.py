@@ -1,3 +1,5 @@
+# 只读诊断运行时正面/背面麻将牌网格、材质槽、碰撞和资产引用。
+# 不创建瞬态替换或保存修改；缺失关键网格时返回失败供集成门禁处理。
 """Read-only diagnostics for the runtime face-up and face-down tile meshes."""
 
 import unreal

@@ -1,3 +1,5 @@
+# 检查房间内麻将桌 Actor、已创作组件和瞬态牌网格绑定，定位运行时表现差异。
+# 脚本只读遍历当前地图；找不到目标时明确失败，不自动创建或替换 Actor。
 """Inspect authored Mahjong table actors and their transient tile mesh bindings."""
 
 from __future__ import annotations

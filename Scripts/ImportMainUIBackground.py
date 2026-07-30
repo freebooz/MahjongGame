@@ -1,3 +1,5 @@
+# 将批准的亭阁主背景导入大厅等非对局界面，并统一更新目标 Widget 引用。
+# 只处理主 UI 背景集合；旧目标先删除再全量导入，禁止覆盖无关页面或保留陈旧导入设置。
 """Import the approved pavilion image across the main non-game UI screens."""
 
 from __future__ import annotations

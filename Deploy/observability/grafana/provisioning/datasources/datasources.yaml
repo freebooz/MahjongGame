@@ -39,3 +39,6 @@ datasources:
         filterBySpanID: false
       serviceMap:
         datasourceUid: mahjong-prometheus
+# Grafana 数据源自动配置：连接 Prometheus、Loki 和 Tempo，并建立指标、日志、追踪关联。
+# 数据源仅使用集群内部只读地址；生产凭据从环境/Secret 注入，不得写入本文件。
+# UID 被仪表盘稳定引用，修改前需同步全部 dashboard 并验证跨信号跳转。

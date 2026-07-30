@@ -1,3 +1,5 @@
+# 为已导入 Mahjong50 图集设置运行时纹理质量、压缩和流送参数，不重新导入网格。
+# 只修改目标纹理资产；参数必须兼顾移动端显存与远距离可读性，保存失败时返回错误。
 """Apply the runtime quality preset to the already imported Mahjong50 face atlas."""
 
 import unreal

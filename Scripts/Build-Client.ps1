@@ -1,3 +1,7 @@
+<#
+构建 Windows 客户端：解析项目与 Unreal 根目录，编译指定配置并输出可追踪日志。
+输入路径必须显式或由项目环境模块解析；失败时保留原始退出码，不得把未完成产物标记为成功。
+#>
 [CmdletBinding()]
 param(
     [string]$EngineRoot = '',

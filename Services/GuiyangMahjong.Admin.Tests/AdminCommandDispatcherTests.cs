@@ -1,3 +1,4 @@
+// 验证 Admin 命令派发的审批前置、幂等状态转换、失败回退和审计记录完整性。
 using System.Text.Json;
 using GuiyangMahjong.Admin.Domain;
 using GuiyangMahjong.Admin.Options;

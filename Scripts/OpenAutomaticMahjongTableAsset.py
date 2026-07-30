@@ -1,3 +1,5 @@
+# 在 Unreal Static Mesh Editor 中打开已导入自动麻将桌，供人工检查 LOD、材质、碰撞和尺寸。
+# 只执行编辑器导航，不修改或保存资产；找不到目标时返回失败。
 """Open the imported automatic Mahjong table in Unreal's Static Mesh Editor."""
 
 from pathlib import Path

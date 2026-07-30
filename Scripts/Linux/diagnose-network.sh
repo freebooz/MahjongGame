@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# 诊断 Linux/WSL 部署网络、监听端口、容器路由和外部可达性，只执行只读检查。
+# 输出可能包含主机地址，提交为证据前必须脱敏；脚本不得修改防火墙或重启服务。
 set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"

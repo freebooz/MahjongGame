@@ -1,3 +1,5 @@
+# 干净导入移动端毛毡面板麻将桌的网格、纹理、PBR 材质和碰撞，并替换旧目标引用。
+# 导入前精确删除目标资源；任何源文件缺失或校验失败时整体终止，不混合新旧资产。
 """Clean-import the mobile felt-panel Mahjong table into Unreal Engine 5.8.
 
 The target directory must be physically absent before this script starts.

@@ -1,3 +1,5 @@
+# 为 BP_MahjongRoomPresentation 持久启用完整 Blueprint 编辑器模式，方便人工检查组件和逻辑。
+# 仅修改该目标 Blueprint 的编辑器元数据；不得更改运行时类、默认玩法值或其他蓝图。
 """Persistently enable the full editor for BP_MahjongRoomPresentation.
 
 Unreal's bForceFullEditor flag is transient, so it is not sufficient for an

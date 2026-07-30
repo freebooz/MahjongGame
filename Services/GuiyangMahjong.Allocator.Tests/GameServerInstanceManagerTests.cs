@@ -1,3 +1,4 @@
+// 验证游戏服实例管理状态机、端口租约、注册超时、心跳过期、并发分配和幂等回收。
 using System.Collections.Concurrent;
 using GuiyangMahjong.Allocator.Domain;
 using GuiyangMahjong.Allocator.Options;

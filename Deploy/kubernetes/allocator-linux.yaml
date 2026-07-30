@@ -123,3 +123,6 @@ metadata:
 spec:
   maxUnavailable: 0
   selector: {matchLabels: {app: mahjong-allocator}}
+# Linux Allocator 部署：管理 Agones/Linux Dedicated Server 分配、实例凭据和故障回报。
+# 生产身份采用最小权限，资源和副本数需满足容量/SLO；不得在节点本地持久化权威状态。
+# 与 Windows Allocator 并存时必须使用明确平台标签、端口池和实例命名空间隔离。

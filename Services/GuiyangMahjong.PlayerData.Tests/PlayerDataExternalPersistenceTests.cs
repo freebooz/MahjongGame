@@ -1,3 +1,5 @@
+// PostgreSQL 外部集成测试：验证资产流水、奖励、补偿和证据投影的原子性与幂等性。
+// 仅在显式隔离数据库中运行，测试结束不得遗留可被生产身份访问的数据。
 using System.Text.Json;
 using GuiyangMahjong.PlayerData.Domain;
 using GuiyangMahjong.PlayerData.Storage;

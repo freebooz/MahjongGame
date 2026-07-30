@@ -23,3 +23,6 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
   name: agones-sdk
+# Agones SDK RBAC：授予游戏服 Pod 与 Agones API 交互所需的最小权限。
+# ServiceAccount 仅绑定目标命名空间和资源动作；不得授予集群管理员、Secret 读取或任意 Pod 权限。
+# 权限变化需通过安全审查和实际 SDK Ready/Health/Shutdown 回归验证。

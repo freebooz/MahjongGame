@@ -1,3 +1,4 @@
+// 验证 Lobby 玩家公开 API 的认证、房间生命周期、幂等键、路由和 WebSocket 协议行为。
 using System.Net;
 using System.Net.Http.Json;
 using System.Net.Http.Headers;

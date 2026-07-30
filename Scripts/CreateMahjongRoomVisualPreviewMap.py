@@ -1,3 +1,5 @@
+# 创建仅供编辑器审查的房间预览地图，复用运行时客户端表现 Actor 保持视觉一致。
+# 地图不得进入服务器 Cook 列表；缺失依赖时停止生成，不创建指向临时资产的引用。
 """Create an editor-only room preview using the same client presentation actor as runtime."""
 
 import unreal

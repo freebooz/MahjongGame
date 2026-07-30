@@ -1,4 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
+  <!-- Dedicated Server Allocator Web 服务项目：负责实例分配、端口租约和编排器协调。 -->
+  <!-- 数据库 Schema 输出、包版本和通用编译规则由 Services 根目录集中管理，本文件只声明服务特有依赖。 -->
   <PropertyGroup>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);CS1591</NoWarn>

@@ -71,3 +71,6 @@ evidence:
     - measured-rto-rpo
     - duplicate-command-query-result
     - remediation-owner-and-deadline
+# 监控治理演练契约：定义故障注入、告警验证、负责人、恢复目标和证据要求。
+# 演练只能在声明环境和影响范围内执行；生产演练必须绑定审批与工单，不得以无告警作为成功。
+# 修改字段后需同步治理门禁、运行手册和 Admin 展示，保持机器读取兼容。

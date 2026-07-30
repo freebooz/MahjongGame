@@ -1,3 +1,7 @@
+<#
+一键启动本地 Auth、Lobby、Allocator、PlayerData、Admin 及所需依赖，并等待健康就绪。
+脚本只使用开发配置；已有进程需先识别归属，不得终止或覆盖用户的无关服务。
+#>
 [CmdletBinding()]
 param(
     [switch]$SkipBuild,

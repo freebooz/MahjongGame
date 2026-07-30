@@ -1,3 +1,5 @@
+# 在 Blender 材质视口显示两张 Mahjong50 方向校验牌，便于比较正反面和图集朝向。
+# 不修改网格、UV 或材质参数；需要修复时应由独立生成脚本全量重建目标资产。
 """Display two Mahjong50 orientation-check tiles in Blender's material viewport."""
 
 from __future__ import annotations

@@ -1,3 +1,4 @@
+// 验证 Allocator 监控只读凭据的长度要求、固定时间比较和未配置时关闭策略。
 using GuiyangMahjong.Allocator.Options;
 using GuiyangMahjong.Allocator.Security;
 using Microsoft.AspNetCore.Http;

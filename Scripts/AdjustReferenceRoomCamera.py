@@ -1,3 +1,5 @@
+# 按 300 cm 实体桌面尺寸调整参考房间相机位置、焦距和构图，用于可重复视觉审查。
+# 输入为现有预览场景；不得修改游戏相机逻辑，无法找到目标相机时立即失败。
 """Apply the reference composition to the physical 300 cm square tabletop."""
 
 import unreal

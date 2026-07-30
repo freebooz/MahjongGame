@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// Agones 子系统实现：管理 SDK HTTP/WebSocket 会话、健康上报、GameServer 监听和状态同步。
+// 异步回调必须检查对象生命周期；网络失败按配置重试，关闭时需取消计时器并释放连接。
 #include "AgonesSubsystem.h"
 
 #include "Engine/Engine.h"

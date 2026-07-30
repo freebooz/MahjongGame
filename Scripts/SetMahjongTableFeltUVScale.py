@@ -1,3 +1,5 @@
+# 将当前移动桌面毛毡材质设置为五倍 UV 平铺，改善纹理尺度并保持其他 PBR 参数不变。
+# 只修改指定材质实例参数；找不到参数或目标资产时失败，不创建同名替代材质。
 """Set the current mobile tabletop felt material to five-times UV tiling."""
 
 import unreal

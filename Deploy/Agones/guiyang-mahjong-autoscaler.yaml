@@ -15,3 +15,6 @@ spec:
     type: FixedInterval
     fixedInterval:
       seconds: 30
+# Agones FleetAutoscaler：根据缓冲策略维持可用游戏服容量，避免房间创建等待冷启动。
+# 最小/最大副本限制集群成本和故障影响；调整前需结合容量测试、SLO 与节点资源配额。
+# 自动扩缩容只管理 Fleet 副本数，不得绕过 Allocator 的实例生命周期和排空流程。

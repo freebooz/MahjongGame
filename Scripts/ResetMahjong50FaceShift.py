@@ -1,3 +1,5 @@
+# 将 Mahjong50 牌面恢复到创作时居中的 UV 位置，清理错误的材质偏移覆盖。
+# 只更新目标牌面材质实例；修改后验证全部牌型映射，不改变底层图集内容。
 """Restore the Mahjong50 face artwork to its authored, centred UV position."""
 
 from __future__ import annotations

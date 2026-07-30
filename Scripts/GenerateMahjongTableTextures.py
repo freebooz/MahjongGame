@@ -1,3 +1,5 @@
+# 生成移动端桌面麻将资产的 PBR 纹理集合，在视觉质量和显存预算之间保持约束。
+# 全量重建前精确删除目标旧纹理；通道命名、色彩空间和尺寸必须符合 Unreal 导入规范。
 """Generate the mobile PBR texture set for the tabletop-only Mahjong asset.
 
 The output uses the Unreal-friendly metallic/roughness workflow:

@@ -1,3 +1,5 @@
+// PlayerData API 输入校验：验证服务身份、幂等键、玩家标识、资产数量和来源证据。
+// 校验失败发生在事务前；任何客户端提供的余额、审批结论或最终结算结果均不得直接采信。
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -7,8 +9,14 @@ using GuiyangMahjong.PlayerData.Storage;
 
 namespace GuiyangMahjong.PlayerData.Api;
 
+/// <summary>
+/// PlayerData API 的无状态安全校验集合。
+/// 所有校验必须在开启数据库事务前完成；类型为 partial 仅用于源生成正则，
+/// 不保存请求级状态。
+/// </summary>
 public static partial class PlayerDataValidation
 {
+    /// <summary>禁止进入调查投影的凭据、直接身份和支付敏感字段规范化名称。</summary>
     private static readonly IReadOnlySet<string> ForbiddenDataKeys =
         new HashSet<string>(
             [
@@ -20,6 +28,7 @@ public static partial class PlayerDataValidation
             ],
             StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>以固定时间比较 Bearer 凭据；配置短于 32 字符时关闭对应内部入口。</summary>
     public static bool HasBearer(HttpContext context, string expectedToken)
     {
         if (expectedToken.Length < 32) return false;
@@ -38,6 +47,7 @@ public static partial class PlayerDataValidation
         return valid;
     }
 
+    /// <summary>读取 UUID 格式幂等键并返回规范字符串；缺失或损坏时不执行任何写操作。</summary>
     public static string RequireIdempotencyKey(HttpContext context)
     {
         var value =
@@ -48,6 +58,10 @@ public static partial class PlayerDataValidation
         return parsed.ToString();
     }
 
+    /// <summary>
+    /// 校验证据类型、敏感等级、五年保留窗口、16 KiB 大小和禁止字段。
+    /// expectedType 由具体路由固定，不能由请求自行选择越权等级。
+    /// </summary>
     public static void ValidateEvidence(
         RecordEvidenceRequest request,
         PlayerEvidenceType expectedType,
@@ -80,6 +94,7 @@ public static partial class PlayerDataValidation
         RejectForbiddenData(request.Data);
     }
 
+    /// <summary>校验奖励幂等标识、资产代码、正整数数量、TraceId 和 UTC 发生窗口。</summary>
     public static void ValidateReward(
         RewardClaimRequest request,
         DateTimeOffset now)
@@ -101,6 +116,10 @@ public static partial class PlayerDataValidation
                 "occurredAtUtc is outside the accepted window.");
     }
 
+    /// <summary>
+    /// 校验双人审批钱包命令及操作类型互斥字段。
+    /// 补偿只接受正增量；奖励撤销只接受原 RewardGrantId，禁止提交最终余额。
+    /// </summary>
     public static void ValidateWalletOperation(
         AdminWalletOperationRequest request,
         DateTimeOffset now)
@@ -151,6 +170,7 @@ public static partial class PlayerDataValidation
         }
     }
 
+    /// <summary>校验聊天授权请求标识与短时 UTC 窗口；请求不包含也不审查消息正文。</summary>
     public static void ValidateChatAuthorization(
         AuthorizeChatMessageRequest request,
         DateTimeOffset now)
@@ -166,6 +186,7 @@ public static partial class PlayerDataValidation
                 "requestedAtUtc is outside the accepted window.");
     }
 
+    /// <summary>校验业务标识的长度和安全字符集；失败抛出稳定的 400 领域错误。</summary>
     public static void ValidateIdentifier(
         string? value,
         string name,

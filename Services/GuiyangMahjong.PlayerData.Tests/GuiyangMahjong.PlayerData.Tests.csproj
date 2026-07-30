@@ -1,4 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
+  <!-- PlayerData 资产、奖励、支付证据和幂等事务测试项目，不生成生产制品。 -->
+  <!-- 外部持久化测试必须使用隔离数据并在结束时清理；测试不得绕过生产最小权限模型。 -->
   <PropertyGroup>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>

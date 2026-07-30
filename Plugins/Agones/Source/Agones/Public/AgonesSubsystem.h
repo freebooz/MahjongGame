@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// Agones GameInstance 子系统：向 C++/蓝图提供 Ready、Health、Reserve、Shutdown 和状态监听接口。
+// 子系统归 GameInstance 所有；调用前需确认 SDK 已连接，回调可能异步且不得访问已销毁世界对象。
 #pragma once
 
 #include "Classes.h"

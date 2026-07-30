@@ -62,3 +62,6 @@ metadata:
 spec:
   selector: {app: mahjong-allocator}
   ports: [{name: http, port: 8080, targetPort: http}]
+# Windows Allocator 兼容部署：仅供仍依赖 Windows Dedicated Server 的环境使用。
+# 新生产基线优先 Linux/Agones；Windows 节点选择器、端口池和进程权限必须独立隔离。
+# 升级前验证镜像/制品版本、节点可用性和回滚路径，不得与 Linux 实例共享本地状态。

@@ -1,3 +1,5 @@
+# 创建 Dedicated Server 使用的最小房间地图，只保留权威玩法和网络所需对象。
+# 生成目标必须与客户端表现地图隔离；更新前精确删除旧目标地图，不携带 UI 或高成本美术资源。
 import unreal
 
 MAP_PATH = "/Game/Maps/MahjongServerMap"

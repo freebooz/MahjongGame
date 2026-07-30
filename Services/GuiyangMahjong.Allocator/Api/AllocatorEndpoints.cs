@@ -1,3 +1,5 @@
+// Allocator HTTP API：提供实例分配、注册、心跳、回收、故障和监控查询入口。
+// 内部写接口必须验证服务身份并保持幂等；监控接口只暴露脱敏运行状态。
 using GuiyangMahjong.Allocator.Domain;
 using GuiyangMahjong.Allocator.Services;
 using GuiyangMahjong.Allocator.Options;
@@ -7,8 +9,18 @@ using System.Net.Sockets;
 
 namespace GuiyangMahjong.Allocator.Api;
 
+/// <summary>
+/// Allocator 最小 API 路由模块。
+/// 健康探针、服务端注册/心跳、Admin 终止和监控读取在同一处声明，
+/// 身份认证由前置中间件按路径和方法隔离。
+/// </summary>
 public static class AllocatorEndpoints
 {
+    /// <summary>
+    /// 注册 Allocator 全部 HTTP 路由。
+    /// 写端点把 RequestId 传入领域层保证幂等；就绪探针验证恢复状态、端口和启动后端，
+    /// 监控响应不包含注册/心跳凭据。
+    /// </summary>
     public static void MapAllocatorEndpoints(this WebApplication app)
     {
         app.MapGet("/health/live", () => Results.Ok(new { status = "live" }));

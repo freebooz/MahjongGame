@@ -1,3 +1,5 @@
+# 导入已批准登录背景并绑定到登录界面，保持其他 UI 纹理、材质和布局不变。
+# 目标旧资产必须先删除再全量导入；色彩空间、压缩和移动端尺寸需要验证。
 """Import the approved login-screen background without touching unrelated UI assets."""
 
 from pathlib import Path

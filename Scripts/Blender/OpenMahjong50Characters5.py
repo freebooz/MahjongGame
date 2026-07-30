@@ -1,3 +1,5 @@
+# 打开 Mahjong50 主模型并聚焦五万牌，用于检查雕刻方向、法线和材质绑定。
+# 该脚本只控制 Blender 显示选择，不保存模型或覆盖当前生产导出。
 """Open the Mahjong50 master model in Blender and display Characters_5."""
 
 from __future__ import annotations

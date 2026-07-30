@@ -1,4 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
+  <!-- Lobby 房间生命周期、路由、监控分页、在线状态与持久化一致性测试项目。 -->
+  <!-- Redis/PostgreSQL 多实例测试默认跳过，只有具备隔离外部环境时才允许显式启用。 -->
   <PropertyGroup>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>

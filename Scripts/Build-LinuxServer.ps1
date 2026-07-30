@@ -1,3 +1,7 @@
+<#
+构建 Linux Dedicated Server 的 Cook/Stage 制品和 SHA-256 清单，输出到 Artifacts/LinuxServer。
+脚本不得复用陈旧 Stage 目录；发布前必须校验目标版本、地图、可执行文件和 manifest 一致。
+#>
 [CmdletBinding()]
 param(
     [string]$EngineRoot = '',

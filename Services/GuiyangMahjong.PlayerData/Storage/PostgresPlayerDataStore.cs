@@ -1,3 +1,5 @@
+// PostgreSQL PlayerData 存储：以数据库事务保证资产余额、流水、奖励和证据投影原子一致。
+// SQL 使用参数化查询与最小权限身份；重复幂等键只能重放同一结果，冲突载荷必须拒绝。
 using System.Text.Json;
 using GuiyangMahjong.PlayerData.Domain;
 using Npgsql;
@@ -5,12 +7,18 @@ using NpgsqlTypes;
 
 namespace GuiyangMahjong.PlayerData.Storage;
 
+/// <summary>
+/// PostgreSQL PlayerData 生产存储。
+/// 奖励领取、余额版本、资产证据及投影 Outbox 在同一事务提交，
+/// 行锁和唯一键保证多副本幂等且余额不会被并发覆盖；该实例拥有数据源生命周期。
+/// </summary>
 public sealed class PostgresPlayerDataStore(NpgsqlDataSource postgres)
     : IPlayerDataStore, IAsyncDisposable
 {
     private static readonly JsonSerializerOptions JsonOptions =
         new(JsonSerializerDefaults.Web);
 
+    /// <inheritdoc/>
     public async Task InitializeAsync(CancellationToken cancellationToken)
     {
         var path = PlayerDataStoragePaths.SchemaPath;
@@ -19,6 +27,7 @@ public sealed class PostgresPlayerDataStore(NpgsqlDataSource postgres)
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
+    /// <inheritdoc/>
     public async Task<bool> CheckHealthAsync(CancellationToken cancellationToken)
     {
         try
@@ -33,6 +42,7 @@ public sealed class PostgresPlayerDataStore(NpgsqlDataSource postgres)
         }
     }
 
+    /// <inheritdoc/>
     public async Task<EvidenceRecordResult> RecordEvidenceAsync(
         RecordEvidenceRequest request,
         DateTimeOffset recordedAtUtc,
@@ -52,6 +62,7 @@ public sealed class PostgresPlayerDataStore(NpgsqlDataSource postgres)
         return result;
     }
 
+    /// <inheritdoc/>
     public async Task<EvidenceRecordResult> RecordRewardClaimAsync(
         RewardClaimRequest request,
         DateTimeOffset recordedAtUtc,
@@ -201,6 +212,7 @@ public sealed class PostgresPlayerDataStore(NpgsqlDataSource postgres)
         return new EvidenceRecordResult(request.EventId, false);
     }
 
+    /// <inheritdoc/>
     public async Task<WalletOperationResult> ApplyWalletOperationAsync(
         string commandId,
         AdminWalletOperationRequest request,
@@ -383,6 +395,7 @@ public sealed class PostgresPlayerDataStore(NpgsqlDataSource postgres)
         return result;
     }
 
+    /// <inheritdoc/>
     public async Task<IReadOnlyList<WalletBalance>> ListBalancesAsync(
         string playerId,
         CancellationToken cancellationToken)
@@ -403,6 +416,7 @@ public sealed class PostgresPlayerDataStore(NpgsqlDataSource postgres)
         return result;
     }
 
+    /// <inheritdoc/>
     public async Task<IReadOnlyList<ProjectionOutboxRecord>>
         ClaimProjectionsAsync(
             string workerId,
@@ -454,6 +468,7 @@ public sealed class PostgresPlayerDataStore(NpgsqlDataSource postgres)
         return result;
     }
 
+    /// <inheritdoc/>
     public async Task CompleteProjectionAsync(
         string eventId,
         string workerId,
@@ -471,6 +486,7 @@ public sealed class PostgresPlayerDataStore(NpgsqlDataSource postgres)
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
+    /// <inheritdoc/>
     public async Task FailProjectionAsync(
         string eventId,
         string workerId,
@@ -777,5 +793,6 @@ public sealed class PostgresPlayerDataStore(NpgsqlDataSource postgres)
             Value = value.GetRawText()
         });
 
+    /// <summary>异步释放该存储独占的 PostgreSQL 数据源和连接池。</summary>
     public ValueTask DisposeAsync() => postgres.DisposeAsync();
 }

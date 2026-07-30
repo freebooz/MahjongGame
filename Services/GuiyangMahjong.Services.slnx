@@ -1,4 +1,6 @@
 <Solution>
+  <!-- .NET 服务统一解决方案入口：同时包含生产服务、共享可观测性和全部测试项目。 -->
+  <!-- 新服务必须在此登记并遵守 Directory.Build.* 与 Directory.Packages.props；不得通过解决方案引用共享数据库内部实现。 -->
   <Project Path="GuiyangMahjong.Architecture.Tests/GuiyangMahjong.Architecture.Tests.csproj" />
   <Project Path="GuiyangMahjong.Admin.Tests/GuiyangMahjong.Admin.Tests.csproj" />
   <Project Path="GuiyangMahjong.Allocator.Tests/GuiyangMahjong.Allocator.Tests.csproj" />

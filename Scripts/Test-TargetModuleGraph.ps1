@@ -1,3 +1,7 @@
+<#
+解析 Unreal Target 与模块依赖图，阻止客户端引用服务端实现或编辑器模块进入发布目标。
+需要可解析的 Unreal Engine 根目录；缺少环境前置时明确失败，不伪造静态通过结果。
+#>
 [CmdletBinding()]
 param(
     [string]$EngineRoot = '',

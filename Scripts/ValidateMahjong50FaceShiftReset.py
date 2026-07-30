@@ -1,3 +1,5 @@
+# 验证所有 Mahjong50 牌面实例均使用居中材质且不存在遗留 UV 偏移参数。
+# 只读检查完整牌型集合；缺失实例或参数不一致时返回非零结果。
 """Validate that every Mahjong50 face instance uses the centred material."""
 
 from __future__ import annotations

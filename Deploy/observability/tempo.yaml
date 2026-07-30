@@ -27,3 +27,6 @@ storage:
 
 usage_report:
   reporting_enabled: false
+# Tempo 追踪存储配置：接收 OpenTelemetry Trace，支持 Admin、Lobby、Allocator 与游戏服链路定位。
+# Trace 属性必须脱敏并限制高基数；保留期和存储容量需满足争议调查而不过度保存玩家数据。
+# 生产扩展需配置持久对象存储和访问控制，本地块存储不视为长期审计证据。

@@ -1,3 +1,5 @@
+# 获取并整理麻将桌使用的 CC0 PBR 贴图，验证授权、分辨率和通道后写入受控源资产目录。
+# 脚本只处理目标桌面材质，不得覆盖无关纹理；下载或校验失败时禁止继续导入。
 """Acquire and prepare CC0 photogrammetry PBR maps for the Mahjong table.
 
 Sources:

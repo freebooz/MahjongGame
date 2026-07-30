@@ -1,3 +1,4 @@
+// 验证 Lobby 监控接口的只读凭据、分页游标绑定、批量上限和敏感数据隔离。
 using System.Net;
 using System.Net.Http.Headers;
 

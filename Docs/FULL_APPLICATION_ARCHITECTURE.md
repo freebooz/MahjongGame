@@ -883,6 +883,64 @@ Allocator 使用普通非 root Linux 容器、只读根文件系统、宿主网�
 | 重连集成 | `Scripts/RunReconnectIntegration.ps1` |
 | 三维麻将资产 | `Scripts/Blender/GenerateMahjongTileAssets.py`、`SourceArt/3D/MahjongTiles` |
 
-## 24. 最终说明
+## 24. 严格 JSON 与工具配置数据字典
+
+以下文件由严格 JSON、Unreal 或 Grafana 工具直接解析，不能安全插入 `//`、`#` 或 XML 注释。中文维护说明集中在本节；修改配置时必须同步更新本节和对应契约测试。
+
+### 24.1 Unreal 项目与插件
+
+| 文件 | 职责与关键字段 | 约束 |
+|---|---|---|
+| `GuiyangMahjong.uproject` | `EngineAssociation` 指定目标 Unreal 版本；`Modules` 声明 Core、Client、Server 和 EditorTools 的加载阶段；`Plugins` 声明项目启用插件。 | 模块类型决定发布隔离，Client 不得依赖 Server/Editor；修改引擎版本后需重新生成项目文件并编译全部 Target。 |
+| `Plugins/Agones/Agones.uplugin` | 声明 Agones 插件版本、模块类型、加载阶段和平台支持。 | 插件版本必须与 `Plugins/Agones/Source` API 一致；Dedicated Server 使用 Runtime 模块，禁止引入仅编辑器依赖。 |
+
+### 24.2 .NET 服务运行配置
+
+| 文件组 | 关键配置段 | 生命周期与安全约束 |
+|---|---|---|
+| `Services/GuiyangMahjong.Auth/appsettings*.json` | `Auth`、数据库连接、令牌签名、管理员命令身份、日志与 OpenTelemetry。 | Development 文件只能提供非敏感本地默认值；生产密钥和连接串由环境变量/Secret 覆盖，缺失时启动失败。 |
+| `Services/GuiyangMahjong.Lobby/appsettings*.json` | `Lobby`、Allocator 地址、PostgreSQL/Redis、玩家令牌、监控只读令牌、实时事件。 | 多副本生产必须使用外部持久化；监控令牌和服务凭据至少 32 字符，不能回退为匿名或内存状态。 |
+| `Services/GuiyangMahjong.Allocator/appsettings*.json` | 实例容量、端口池、进程/Agones 启动器、注册与心跳超时、状态存储和内部身份。 | 端口范围不得重叠系统/其他集群；本机可执行路径必须位于允许根目录；生产状态必须持久化。 |
+| `Services/GuiyangMahjong.Admin/appsettings.json` | 企业身份、RBAC 主体、审批、审计归档、各服务命令地址、证据/聊天/回放网关。 | 普通运营不得获得修改结果权限；高风险角色分离，令牌只由安全环境覆盖，示例主体不得用于生产。 |
+| `Services/GuiyangMahjong.PlayerData/appsettings.json` | 数据库、服务身份、资产/奖励事务、证据接入与可观测性。 | 只接受受信服务写入；不得配置直接设置最终余额的入口，数据库身份遵守最小权限。 |
+| `Services/global.json` | 固定 .NET SDK 版本和 roll-forward 行为。 | CI、开发机和容器使用同一主版本；升级前完成全解决方案构建、测试和镜像矩阵。 |
+
+ASP.NET Core 配置覆盖顺序为：基础 `appsettings.json` → 环境文件 → 环境变量 → 命令行。嵌套键使用双下划线，例如 `Lobby__MonitoringReadOnlyToken`；生产环境不得依赖 Development 文件。
+
+### 24.3 Angular 管理端
+
+| 文件 | 关键字段 | 约束 |
+|---|---|---|
+| `ClientApp/angular.json` | 项目根、浏览器构建器、入口、样式、资产、开发/生产预算与输出目录。 | 源码固定为 `ClientApp`，生产输出固定到 Admin `wwwroot`；不得手工修改输出替代源码构建。 |
+| `ClientApp/package.json` | Angular 22、TypeScript、构建/类型检查脚本及依赖版本范围。 | 不引入其他生产前端框架；依赖变化必须通过 `npm ci`、类型检查和生产构建。 |
+| `ClientApp/package-lock.json` | npm 解析后的完整依赖图和完整性哈希，由 npm 自动维护。 | 不手工编辑或添加注释；只随 `package.json` 变更由受信 npm 版本重新生成。 |
+| `ClientApp/tsconfig.json`、`tsconfig.app.json` | TypeScript 严格模式、目标、模块解析、Angular 编译与应用包含范围。 | 保持严格类型检查；不得用关闭 strict、跳过源码或引入生成 `wwwroot` 来规避错误。 |
+| `ClientApp/proxy.conf.json` | 本地开发 API 代理路径、目标地址和 WebSocket 行为。 | 仅用于本地开发；不得包含生产地址、令牌或绕过 TLS/身份的规则。 |
+
+### 24.4 契约与 Grafana 仪表盘
+
+| 文件组 | 关键字段 | 约束 |
+|---|---|---|
+| `Contracts/Authentication/player-access-token-v1.contract.json` | 令牌版本、算法、签发者、受众、必需声明、时间和标识格式。 | Auth 签发与 Lobby/游戏服验证必须共同兼容；算法或声明变化需新版本，禁止静默弱化。 |
+| `Contracts/Monitoring/runtime-telemetry-v1.schema.json` | 运行遥测 JSON Schema、必需字段、单位、枚举、范围和禁止扩展。 | Dedicated Server 与 Admin 聚合器共同遵守；CPU、内存、网络、Tick/RPC 单位不能由实现自行解释。 |
+| `Deploy/observability/grafana/dashboards/*.json` | Dashboard `uid`、变量、查询、阈值、面板、数据源 UID 和跳转链接。 | UID 被自动配置稳定引用；查询不得包含玩家敏感字段，高基数过滤需受容量验证。JSON 由 Grafana 导出时仍需人工复核差异。 |
+
+### 24.5 美术生成清单
+
+| 文件组 | 关键字段 | 约束 |
+|---|---|---|
+| `SourceArt/3D/MahjongTableMobileProduction/*Manifest.json` | 源 blend、导出网格、纹理通道、尺寸、材质槽、哈希和生成版本。 | 由确定性资产脚本生成，不手工编辑；更新遵循“精确删除旧目标后全量生成/导入”。 |
+| `SourceArt/3D/MahjongTableProduction/*Manifest.json` | 自动麻将桌生产源、纹理、PBR 参数、导出结果和校验信息。 | 清单必须与实际文件哈希一致；审查版与生产版路径分离，禁止混合旧依赖。 |
+| `SourceArt/UI/Data/ui_asset_inventory.json` | UI 资产逻辑名、源文件、Unreal 目标路径、尺寸、用途和生成状态。 | UI 导入脚本以该清单为事实来源；删除或重命名前必须检查 Widget/地图引用。 |
+
+严格 JSON 文件统一要求：
+
+1. 使用 UTF-8，禁止尾随逗号和非标准注释；
+2. 不保存密钥、真实账号、完整 IP、支付敏感数据或本机绝对路径；
+3. 人工配置修改后执行 JSON 解析及对应框架构建；
+4. 生成清单只由声明脚本更新，并校验产物哈希；
+5. 新增严格 JSON 配置时，必须在本节登记职责、关键字段、覆盖关系和安全约束。
+
+## 25. 最终说明
 
 当前代码已经形成完整且边界清晰的多人麻将应用：Auth、Lobby、Linux Allocator 和一桌一服数据面均有实际实现，持久化 Linux 全栈已能一键安装、验活、备份和自动回滚。UE 客户端具备登录、大厅、房间、三维牌桌、操作、重连和结算入口。剩余发布门禁是完成真实 UE LinuxServer 镜像切换、多副本/故障环境验收、四人手工完整对局和 Android/平板最终发布验证。

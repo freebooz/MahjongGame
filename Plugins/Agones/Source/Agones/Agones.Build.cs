@@ -12,10 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// Agones Unreal 模块构建规则：声明 SDK HTTP/WebSocket 接入所需的引擎模块和包含路径。
+// 依赖必须保持最小化并兼容项目目标 Unreal 版本；本文件不承载运行时地址或集群凭据。
 using UnrealBuildTool;
 
 public class Agones : ModuleRules
 {
+	/// <summary>
+	/// 为当前 Unreal Target 声明 Agones 插件编译依赖。
+	/// 构造过程只修改构建图，不读取集群配置，也不把运行时凭据编译进二进制。
+	/// </summary>
 	public Agones(ReadOnlyTargetRules target) : base(target)
 	{
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;

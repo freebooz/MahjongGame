@@ -1,3 +1,5 @@
+# 验证 Mahjong50 远距离可读性相关纹理尺寸、Mip、压缩、过滤和材质锐度策略。
+# 全程只读；任何一项不符合移动端基线即返回失败并输出目标资产路径。
 """Validate the imported Mahjong50 distance-readability texture policy."""
 
 from __future__ import annotations

@@ -1,3 +1,5 @@
+# 配置 Blender 移动麻将桌人工审查视口、材质预览和可见对象，不保存或改写 blend 场景。
+# 目标窗口需由人工确认；脚本失败只影响视口状态，不应导出任何生产资产。
 """Configure the live Blender review viewport without changing the blend."""
 
 import bpy

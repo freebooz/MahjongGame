@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# Linux 生产部署统一入口：负责首次安装、升级、状态检查、诊断、备份、回滚和恢复。
+# 脚本以不可变版本和 Artifacts/LinuxServer 为输入，生产密钥只从权限受控的 .env 读取。
+# 所有破坏性子命令必须显式确认并保留数据卷；失败时通过 ERR trap 输出可关联诊断信息。
 set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"

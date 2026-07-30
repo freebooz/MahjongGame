@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// Agones Unreal 模块公共接口：提供模块身份和生命周期声明，供引擎模块系统加载。
+// 业务代码应通过 UAgonesSubsystem 使用 SDK，不应依赖模块实现细节或保存全局连接状态。
 #pragma once
 
 #include "Modules/ModuleManager.h"

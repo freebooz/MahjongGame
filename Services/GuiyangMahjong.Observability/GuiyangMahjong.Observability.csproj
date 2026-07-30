@@ -1,4 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
+  <!-- 服务端共享可观测性库：提供结构化日志、指标、追踪和敏感字段脱敏能力。 -->
+  <!-- 本项目不得引用具体业务服务，避免形成跨服务反向依赖；包版本由中央清单锁定。 -->
   <PropertyGroup>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);CS1591</NoWarn>

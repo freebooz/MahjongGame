@@ -101,3 +101,6 @@ jobs:
           path: Artifacts/LinuxServer
           if-no-files-found: error
           retention-days: 14
+# Unreal 持续集成：验证目标模块图、C++ 编译、自动化测试及可发布资源约束。
+# Runner 必须预装项目声明的 Unreal 版本；机密只通过 GitHub Secrets 注入，日志不得打印令牌或签名 URL。
+# 修改矩阵、缓存键或打包步骤后，应同时验证客户端与 Dedicated Server，避免只覆盖单一 Target。

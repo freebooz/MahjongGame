@@ -1,3 +1,5 @@
+// PostgreSQL Auth 存储：事务化处理身份绑定、刷新令牌轮换、会话撤销和账号管理状态。
+// 刷新令牌只保存不可逆摘要，轮换必须单次消费；并发冲突不得产生两个有效后继令牌。
 using System.Security.Cryptography;
 using System.Text.Json;
 using GuiyangMahjong.Auth.Domain;
@@ -6,11 +8,17 @@ using NpgsqlTypes;
 
 namespace GuiyangMahjong.Auth.Storage;
 
+/// <summary>
+/// PostgreSQL Auth 生产存储。
+/// 身份、刷新令牌轮换、会话撤销和玩家控制使用事务及行锁保证多副本一致；
+/// 只持久化令牌哈希和脱敏登录观察值，该实例拥有数据源生命周期。
+/// </summary>
 public sealed class PostgresAuthStore(NpgsqlDataSource postgres) : IAuthStore, IAsyncDisposable
 {
     private static readonly JsonSerializerOptions JsonOptions =
         new(JsonSerializerDefaults.Web);
 
+    /// <inheritdoc/>
     public async Task InitializeAsync(CancellationToken cancellationToken)
     {
         var path = AuthStoragePaths.SchemaPath;
@@ -18,6 +26,7 @@ public sealed class PostgresAuthStore(NpgsqlDataSource postgres) : IAuthStore, I
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
+    /// <inheritdoc/>
     public async Task<bool> CheckHealthAsync(CancellationToken cancellationToken)
     {
         try
@@ -32,6 +41,7 @@ public sealed class PostgresAuthStore(NpgsqlDataSource postgres) : IAuthStore, I
         }
     }
 
+    /// <inheritdoc/>
     public async Task<AuthIdentity> GetOrCreateGuestAsync(
         string installationHash,
         AuthIdentity proposedIdentity,
@@ -58,6 +68,7 @@ public sealed class PostgresAuthStore(NpgsqlDataSource postgres) : IAuthStore, I
         return ReadIdentity(reader);
     }
 
+    /// <inheritdoc/>
     public async Task<SessionCreationStatus> CreateRefreshSessionAsync(
         RefreshSession session,
         DateTimeOffset now,
@@ -111,6 +122,7 @@ public sealed class PostgresAuthStore(NpgsqlDataSource postgres) : IAuthStore, I
         return SessionCreationStatus.Created;
     }
 
+    /// <inheritdoc/>
     public async Task<RefreshRotationResult> RotateRefreshSessionAsync(
         string currentSessionId,
         byte[] currentTokenHash,
@@ -190,6 +202,7 @@ public sealed class PostgresAuthStore(NpgsqlDataSource postgres) : IAuthStore, I
         return new RefreshRotationResult(RefreshRotationStatus.Rotated, identity);
     }
 
+    /// <inheritdoc/>
     public async Task<bool> RevokeRefreshSessionAsync(
         string sessionId,
         byte[] tokenHash,
@@ -227,6 +240,7 @@ public sealed class PostgresAuthStore(NpgsqlDataSource postgres) : IAuthStore, I
         return true;
     }
 
+    /// <inheritdoc/>
     public async Task<AdminRevokePlayerSessionsResult> RevokePlayerSessionsAsync(
         string commandId,
         string playerId,
@@ -328,6 +342,7 @@ public sealed class PostgresAuthStore(NpgsqlDataSource postgres) : IAuthStore, I
             false);
     }
 
+    /// <inheritdoc/>
     public async Task<AdminPlayerControlStoreResult> ApplyPlayerControlAsync(
         string commandId,
         string playerId,
@@ -526,6 +541,7 @@ public sealed class PostgresAuthStore(NpgsqlDataSource postgres) : IAuthStore, I
             null);
     }
 
+    /// <inheritdoc/>
     public async Task RecordLoginAsync(
         AuthLoginEvent loginEvent, CancellationToken cancellationToken)
     {
@@ -546,6 +562,7 @@ public sealed class PostgresAuthStore(NpgsqlDataSource postgres) : IAuthStore, I
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
+    /// <inheritdoc/>
     public async Task<IReadOnlyList<PlayerDirectoryItem>> ListPlayersAsync(
         string? search,
         int limit,
@@ -614,6 +631,7 @@ public sealed class PostgresAuthStore(NpgsqlDataSource postgres) : IAuthStore, I
         return result;
     }
 
+    /// <inheritdoc/>
     public async Task<PlayerDirectoryDetail?> GetPlayerDetailAsync(
         string playerId,
         DateTimeOffset now,
@@ -944,5 +962,6 @@ public sealed class PostgresAuthStore(NpgsqlDataSource postgres) : IAuthStore, I
     private static bool FixedTimeEquals(byte[] left, byte[] right) =>
         left.Length == right.Length && CryptographicOperations.FixedTimeEquals(left, right);
 
+    /// <summary>异步释放该存储独占的 PostgreSQL 数据源和连接池。</summary>
     public ValueTask DisposeAsync() => postgres.DisposeAsync();
 }

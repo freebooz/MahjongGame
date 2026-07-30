@@ -1,3 +1,5 @@
+// Admin 操作内存存储：为开发和测试保存操作、审批和审计状态，并模拟生产事务约束。
+// 状态转换必须单调、幂等且保留前后快照；该实现不适用于多副本生产部署。
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -5,46 +7,87 @@ using GuiyangMahjong.Admin.Domain;
 
 namespace GuiyangMahjong.Admin.Storage;
 
+/// <summary>
+/// 管理动作、审计链和命令 Outbox 的一致性存储边界。
+/// 生产实现必须把动作状态、对应审计和 Outbox 变化提交在同一数据库事务中，
+/// 并通过版本、租约所有者和幂等主键支持多副本安全执行。
+/// </summary>
 public interface IAdminActionStore
 {
+    /// <summary>创建表结构或验证存储版本；失败时服务不得进入就绪状态。</summary>
     Task InitializeAsync(CancellationToken cancellationToken);
+
+    /// <summary>检查关键表和审计链写入依赖是否可用，不产生业务数据。</summary>
     Task<bool> CheckHealthAsync(CancellationToken cancellationToken);
+
+    /// <summary>
+    /// 原子创建动作及首条审计记录；相同 ActionRequestId 仅允许参数完全相同的幂等重放。
+    /// </summary>
     Task CreateAsync(
         AdminActionRecord action,
         AdminAuditDraft audit,
         CancellationToken cancellationToken);
+
+    /// <summary>按动作标识读取当前快照；不存在时返回空，不附带修改跟踪。</summary>
     Task<AdminActionRecord?> GetAsync(
         string actionRequestId,
         CancellationToken cancellationToken);
+
+    /// <summary>按申请时间倒序返回有界动作列表；调用方负责权限过滤。</summary>
     Task<IReadOnlyList<AdminActionRecord>> ListAsync(
         int limit,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// 以 expectedVersion 乐观并发迁移动作并追加审计；
+    /// 进入待执行状态时必须在同一事务写入唯一 Outbox，版本不匹配返回 false。
+    /// </summary>
     Task<bool> TryTransitionAsync(
         int expectedVersion,
         AdminActionRecord action,
         AdminAuditDraft audit,
         CancellationToken cancellationToken);
+
+    /// <summary>按全局序号倒序读取有界审计记录；返回值保持哈希链字段完整。</summary>
     Task<IReadOnlyList<AdminAuditRecord>> ListAuditAsync(
         int limit,
         CancellationToken cancellationToken);
+
+    /// <summary>追加独立只读操作审计，并由存储层分配序号、前置哈希和记录哈希。</summary>
     Task AppendAuditAsync(
         AdminAuditDraft audit,
         CancellationToken cancellationToken);
+
+    /// <summary>按创建时间读取 Outbox 观察视图，不领取或改变命令状态。</summary>
     Task<IReadOnlyList<AdminCommandOutboxRecord>> ListOutboxAsync(
         int limit,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// 领取到期命令并建立 UTC 租约；多工作线程不能同时获得同一命令，
+    /// 已过期 Processing 命令允许重新领取。
+    /// </summary>
     Task<IReadOnlyList<AdminCommandOutboxRecord>> ClaimOutboxAsync(
         string workerId,
         int limit,
         DateTimeOffset now,
         DateTimeOffset leaseExpiresAtUtc,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// 仅由当前租约所有者原子完成命令、动作终态和审计；租约或版本失配返回 false。
+    /// </summary>
     Task<bool> CompleteOutboxAsync(
         AdminCommandOutboxRecord command,
         AdminActionRecord completedAction,
         AdminAuditDraft audit,
         DateTimeOffset completedAtUtc,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// 记录执行失败并释放租约；瞬态失败按 nextAvailableAtUtc 回队，
+    /// terminal=true 时同时写入动作失败终态及审计。
+    /// </summary>
     Task<bool> FailOutboxAsync(
         AdminCommandOutboxRecord command,
         AdminActionRecord? failedAction,
@@ -55,17 +98,27 @@ public interface IAdminActionStore
         CancellationToken cancellationToken);
 }
 
+/// <summary>
+/// 单进程开发/测试用管理存储。
+/// gate 保护三个集合的原子变化并模拟生产乐观锁和 Outbox 租约语义；
+/// 数据不持久化，因此生产配置不得注册此实现。
+/// </summary>
 public sealed class InMemoryAdminActionStore : IAdminActionStore
 {
+    // 三个集合分别拥有动作聚合、追加式审计链和命令外箱；元素只在 gate 内读写。
     private readonly Dictionary<string, AdminActionRecord> actions =
         new(StringComparer.Ordinal);
     private readonly List<AdminAuditRecord> audit = [];
     private readonly List<AdminCommandOutboxRecord> outbox = [];
     private readonly object gate = new();
 
+    /// <inheritdoc/>
     public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+    /// <inheritdoc/>
     public Task<bool> CheckHealthAsync(CancellationToken cancellationToken) => Task.FromResult(true);
 
+    /// <inheritdoc/>
     public Task CreateAsync(
         AdminActionRecord action,
         AdminAuditDraft auditDraft,
@@ -85,6 +138,7 @@ public sealed class InMemoryAdminActionStore : IAdminActionStore
         return Task.CompletedTask;
     }
 
+    /// <summary>验证幂等重放的业务字段完全一致；冲突复用标识会显式失败。</summary>
     private static void EnsureSameCreate(
         AdminActionRecord existing,
         AdminActionRecord proposed)
@@ -107,6 +161,7 @@ public sealed class InMemoryAdminActionStore : IAdminActionStore
         }
     }
 
+    /// <inheritdoc/>
     public Task<AdminActionRecord?> GetAsync(
         string actionRequestId,
         CancellationToken cancellationToken)
@@ -119,6 +174,7 @@ public sealed class InMemoryAdminActionStore : IAdminActionStore
         }
     }
 
+    /// <inheritdoc/>
     public Task<IReadOnlyList<AdminActionRecord>> ListAsync(
         int limit,
         CancellationToken cancellationToken)
@@ -134,6 +190,7 @@ public sealed class InMemoryAdminActionStore : IAdminActionStore
         }
     }
 
+    /// <inheritdoc/>
     public Task<bool> TryTransitionAsync(
         int expectedVersion,
         AdminActionRecord action,
@@ -156,6 +213,7 @@ public sealed class InMemoryAdminActionStore : IAdminActionStore
         }
     }
 
+    /// <inheritdoc/>
     public Task<IReadOnlyList<AdminAuditRecord>> ListAuditAsync(
         int limit,
         CancellationToken cancellationToken)
@@ -171,6 +229,7 @@ public sealed class InMemoryAdminActionStore : IAdminActionStore
         }
     }
 
+    /// <inheritdoc/>
     public Task AppendAuditAsync(
         AdminAuditDraft auditDraft,
         CancellationToken cancellationToken)
@@ -183,6 +242,7 @@ public sealed class InMemoryAdminActionStore : IAdminActionStore
         return Task.CompletedTask;
     }
 
+    /// <inheritdoc/>
     public Task<IReadOnlyList<AdminCommandOutboxRecord>> ListOutboxAsync(
         int limit,
         CancellationToken cancellationToken)
@@ -198,6 +258,7 @@ public sealed class InMemoryAdminActionStore : IAdminActionStore
         }
     }
 
+    /// <inheritdoc/>
     public Task<IReadOnlyList<AdminCommandOutboxRecord>> ClaimOutboxAsync(
         string workerId,
         int limit,
@@ -234,6 +295,7 @@ public sealed class InMemoryAdminActionStore : IAdminActionStore
         }
     }
 
+    /// <inheritdoc/>
     public Task<bool> CompleteOutboxAsync(
         AdminCommandOutboxRecord command,
         AdminActionRecord completedAction,
@@ -266,6 +328,7 @@ public sealed class InMemoryAdminActionStore : IAdminActionStore
         }
     }
 
+    /// <inheritdoc/>
     public Task<bool> FailOutboxAsync(
         AdminCommandOutboxRecord command,
         AdminActionRecord? failedAction,
@@ -350,11 +413,16 @@ public sealed class InMemoryAdminActionStore : IAdminActionStore
     }
 }
 
+/// <summary>
+/// 管理审计链的确定性哈希工具。
+/// 输入字段按稳定顺序和统一 JSON 序列化连接，前一记录哈希把单条审计连接为可验证链。
+/// </summary>
 public static class AdminAuditHash
 {
     private static readonly JsonSerializerOptions JsonOptions =
         new(JsonSerializerDefaults.Web);
 
+    /// <summary>计算审计记录的 SHA-256 十六进制哈希；调用方必须传入持久化前的最终字段值。</summary>
     public static string Compute(
         long sequence,
         AdminAuditDraft draft,

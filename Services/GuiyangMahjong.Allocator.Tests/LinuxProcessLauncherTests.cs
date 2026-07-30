@@ -1,3 +1,4 @@
+// 验证 Linux Dedicated Server 启动命令、允许路径、参数转义、进程观察和安全终止语义。
 using GuiyangMahjong.Allocator.Domain;
 using GuiyangMahjong.Allocator.Options;
 using GuiyangMahjong.Allocator.Services;

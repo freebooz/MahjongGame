@@ -1,3 +1,7 @@
+<#
+确定性生成 UI 审查用音效源文件，供后续 Unreal 资产导入流程使用。
+输出仅限项目声明目录；重新生成前应确认目标范围，避免覆盖人工制作的无关音频。
+#>
 [CmdletBinding()]
 param(
     [string]$ProjectRoot = (Split-Path -Parent $PSScriptRoot)

@@ -1,3 +1,5 @@
+// PlayerData 服务入口：装配最小权限数据库、服务身份认证、资产事务和证据投影接口。
+// 生产配置缺失必须启动失败，不得自动创建高权限账号或回退到无审计的存储实现。
 using System.Text;
 using System.Text.Json.Serialization;
 using GuiyangMahjong.PlayerData.Api;
@@ -127,4 +129,8 @@ app.Use(async (context, next) =>
 app.MapPlayerDataEndpoints();
 app.Run();
 
+/// <summary>
+/// WebApplicationFactory 集成测试可发现的 PlayerData 程序入口标记。
+/// 运行时依赖注册和中间件顺序由上方顶级语句定义，该 partial 类型不保存请求状态。
+/// </summary>
 public partial class Program;

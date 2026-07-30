@@ -1,3 +1,5 @@
+# 用 Blender 高保真圆角 PBR 桌面替换旧麻将桌资源，导入网格、纹理、材质和碰撞。
+# 严格先删除目标旧资源再全量导入并修复引用；不得依赖覆盖导入保留旧设置。
 """Replace the legacy table with the Blender 5.1 premium rounded PBR tabletop.
 
 Run with UnrealEditor-Cmd and ``-ExecutePythonScript``.  The legacy static-mesh

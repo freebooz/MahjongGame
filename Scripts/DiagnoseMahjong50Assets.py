@@ -1,3 +1,5 @@
+# 只读诊断 Mahjong50 材质绑定、图集参数、纹理质量和房间光照，输出可定位审查信息。
+# 不保存资产或修改编辑器状态；日志包含路径时提交前需确认不存在本机敏感信息。
 """Print Mahjong50 material bindings, atlas parameters, texture quality, and room lighting."""
 
 from __future__ import annotations

@@ -75,3 +75,6 @@ metadata:
 spec:
   selector: {app: mahjong-lobby}
   ports: [{name: http, port: 8080, targetPort: http}]
+# Auth 与 Lobby 部署：提供玩家身份、令牌、房间生命周期、路由和实时事件服务。
+# 两个服务使用独立数据库身份和服务凭据；探针失败时停止接流量，不允许回退到内存生产状态。
+# 副本扩展依赖 PostgreSQL/Redis 共享状态，发布时需保持契约版本和滚动兼容。

@@ -1,3 +1,5 @@
+# 创建客户端房间表现 Blueprint，并把视觉预览地图迁移到统一表现 Actor。
+# 仅处理表现层资产，不复制服务端规则；生成前精确清理目标旧资产并修复重定向器。
 """Create the client presentation Blueprint and migrate the visual preview map to it."""
 
 import unreal

@@ -1,3 +1,5 @@
+# 修复当前麻将桌框架朝外法线并重新生成目标导出，避免 Unreal 中出现背面剔除和错误高光。
+# 处理范围限定到桌框网格；导出前校验非流形面和负缩放，不修改无关对象。
 """Repair outward normals on the current Mahjong table and regenerate exports."""
 
 from pathlib import Path

@@ -1,3 +1,5 @@
+# 在 Unreal Editor 打开当前 PBR 桌台、牌体/牌背和正面牌资产，支持人工联合审查。
+# 脚本仅恢复并显示目标编辑器窗口，不执行 Reimport、保存或资源替换。
 """Open the current PBR table, tile body/back, and a face-up tile in Unreal Editor."""
 
 from __future__ import annotations

@@ -1,3 +1,5 @@
+# 应用 schema-v6 夜间桌面相机、曝光和灯光默认值，使预览与批准视觉基线一致。
+# 只修改目标预览/表现资产；保存前验证参数范围和移动端成本，不覆盖玩法相机。
 """Apply the schema-v6 nighttime tabletop camera, exposure and lighting defaults."""
 
 import unreal

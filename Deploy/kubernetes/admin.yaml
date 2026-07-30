@@ -43,3 +43,6 @@ metadata:
 spec:
   selector: {app: mahjong-admin}
   ports: [{name: http, port: 8080, targetPort: http}]
+# Admin 监控管理服务部署：包含工作负载、服务、探针、资源限制和生产配置注入。
+# 管理入口必须置于受控网络与企业身份之后；高风险操作继续执行 RBAC、双人审批和审计。
+# 数据库与服务令牌只从 Secret 引用，禁止在清单、镜像或日志中出现明文。

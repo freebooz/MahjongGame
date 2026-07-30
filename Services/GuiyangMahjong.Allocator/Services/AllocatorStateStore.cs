@@ -1,3 +1,5 @@
+// Allocator 状态存储：持久化实例、租约、心跳和故障状态，并提供并发安全的状态转换。
+// 更新必须带预期版本或等效并发保护，禁止把陈旧心跳覆盖到已终止实例。
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.ComponentModel;
@@ -8,6 +10,11 @@ using Microsoft.Extensions.Options;
 
 namespace GuiyangMahjong.Allocator.Services;
 
+/// <summary>
+/// 可跨 Allocator 重启恢复的实例状态。
+/// 凭据只保存哈希；进程号必须与启动时间共同验证以防 PID 复用，
+/// PortReleased 和通知字段使清理动作可幂等恢复。
+/// </summary>
 public sealed record PersistedGameServerInstance(
     string ServerInstanceId,
     string RoomId,
@@ -30,17 +37,26 @@ public sealed record PersistedGameServerInstance(
     bool PortReleased,
     string? OrchestratorResourceName = null);
 
+/// <summary>Allocator 状态文件根文档；SchemaVersion 控制兼容读取，更新时间统一为 UTC。</summary>
 public sealed record AllocatorStateDocument(
     int SchemaVersion,
     DateTimeOffset UpdatedAtUtc,
     PersistedGameServerInstance[] Instances);
 
+/// <summary>Allocator 恢复状态的持久化接口；保存必须原子替换，不能暴露半写文件。</summary>
 public interface IAllocatorStateStore
 {
+    /// <summary>读取并验证状态；不存在时返回空文档，损坏或版本不兼容时显式失败。</summary>
     Task<AllocatorStateDocument> LoadAsync(CancellationToken cancellationToken);
+
+    /// <summary>原子保存完整快照；完成返回前数据必须可由下一进程读取。</summary>
     Task SaveAsync(AllocatorStateDocument state, CancellationToken cancellationToken);
 }
 
+/// <summary>
+/// 使用 UTF-8 JSON 文件保存 Allocator 状态的单节点实现。
+/// 写入由信号量串行化并通过临时文件原子替换；目标路径限制在配置允许位置。
+/// </summary>
 public sealed class JsonAllocatorStateStore(
     IOptions<AllocatorOptions> options,
     TimeProvider timeProvider,
@@ -57,6 +73,7 @@ public sealed class JsonAllocatorStateStore(
             : Path.Combine(AppContext.BaseDirectory, options.Value.StateFilePath));
     private readonly SemaphoreSlim gate = new(1, 1);
 
+    /// <inheritdoc/>
     public async Task<AllocatorStateDocument> LoadAsync(CancellationToken cancellationToken)
     {
         await gate.WaitAsync(cancellationToken);
@@ -81,6 +98,7 @@ public sealed class JsonAllocatorStateStore(
         }
     }
 
+    /// <inheritdoc/>
     public async Task SaveAsync(AllocatorStateDocument state, CancellationToken cancellationToken)
     {
         await gate.WaitAsync(cancellationToken);

@@ -1,3 +1,5 @@
+// PostgreSQL Admin 操作存储：以事务方式保存请求、双人审批、派发结果和不可变审计记录。
+// SQL 必须使用参数化查询和最小权限身份；事务边界内失败时不得留下部分审批或执行状态。
 using System.Text.Json;
 using GuiyangMahjong.Admin.Domain;
 using Npgsql;
@@ -5,12 +7,18 @@ using NpgsqlTypes;
 
 namespace GuiyangMahjong.Admin.Storage;
 
+/// <summary>
+/// PostgreSQL 管理动作生产存储。
+/// 依赖数据库唯一键、乐观版本和行级锁保证多副本一致性，
+/// 动作迁移、审计链及命令 Outbox 在同一事务提交；该实例拥有数据源生命周期。
+/// </summary>
 public sealed class PostgresAdminActionStore(
     NpgsqlDataSource postgres) : IAdminActionStore, IAsyncDisposable
 {
     private static readonly JsonSerializerOptions JsonOptions =
         new(JsonSerializerDefaults.Web);
 
+    /// <inheritdoc/>
     public async Task InitializeAsync(CancellationToken cancellationToken)
     {
         var path = AdminStoragePaths.SchemaPath;
@@ -19,6 +27,7 @@ public sealed class PostgresAdminActionStore(
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
+    /// <inheritdoc/>
     public async Task<bool> CheckHealthAsync(CancellationToken cancellationToken)
     {
         try
@@ -33,6 +42,7 @@ public sealed class PostgresAdminActionStore(
         }
     }
 
+    /// <inheritdoc/>
     public async Task CreateAsync(
         AdminActionRecord action,
         AdminAuditDraft audit,
@@ -104,6 +114,7 @@ public sealed class PostgresAdminActionStore(
         }
     }
 
+    /// <inheritdoc/>
     public async Task<AdminActionRecord?> GetAsync(
         string actionRequestId,
         CancellationToken cancellationToken)
@@ -116,6 +127,7 @@ public sealed class PostgresAdminActionStore(
         return await reader.ReadAsync(cancellationToken) ? ReadAction(reader) : null;
     }
 
+    /// <inheritdoc/>
     public async Task<IReadOnlyList<AdminActionRecord>> ListAsync(
         int limit,
         CancellationToken cancellationToken)
@@ -129,6 +141,7 @@ public sealed class PostgresAdminActionStore(
         return result;
     }
 
+    /// <inheritdoc/>
     public async Task<bool> TryTransitionAsync(
         int expectedVersion,
         AdminActionRecord action,
@@ -165,6 +178,7 @@ public sealed class PostgresAdminActionStore(
         return true;
     }
 
+    /// <inheritdoc/>
     public async Task<IReadOnlyList<AdminAuditRecord>> ListAuditAsync(
         int limit,
         CancellationToken cancellationToken)
@@ -203,6 +217,7 @@ public sealed class PostgresAdminActionStore(
         return result;
     }
 
+    /// <inheritdoc/>
     public async Task AppendAuditAsync(
         AdminAuditDraft audit,
         CancellationToken cancellationToken)
@@ -219,6 +234,7 @@ public sealed class PostgresAdminActionStore(
         await transaction.CommitAsync(cancellationToken);
     }
 
+    /// <inheritdoc/>
     public async Task<IReadOnlyList<AdminCommandOutboxRecord>> ListOutboxAsync(
         int limit,
         CancellationToken cancellationToken)
@@ -259,6 +275,7 @@ public sealed class PostgresAdminActionStore(
         return result;
     }
 
+    /// <inheritdoc/>
     public async Task<IReadOnlyList<AdminCommandOutboxRecord>> ClaimOutboxAsync(
         string workerId,
         int limit,
@@ -303,6 +320,7 @@ public sealed class PostgresAdminActionStore(
         return result;
     }
 
+    /// <inheritdoc/>
     public async Task<bool> CompleteOutboxAsync(
         AdminCommandOutboxRecord command,
         AdminActionRecord completedAction,
@@ -326,6 +344,7 @@ public sealed class PostgresAdminActionStore(
         return true;
     }
 
+    /// <inheritdoc/>
     public async Task<bool> FailOutboxAsync(
         AdminCommandOutboxRecord command,
         AdminActionRecord? failedAction,
@@ -662,5 +681,6 @@ public sealed class PostgresAdminActionStore(
             Value = value.HasValue ? value.Value.GetRawText() : DBNull.Value
         });
 
+    /// <summary>异步释放该存储独占的 PostgreSQL 数据源和连接池。</summary>
     public ValueTask DisposeAsync() => postgres.DisposeAsync();
 }

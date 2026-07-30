@@ -1,3 +1,5 @@
+# 将已批准的自动麻将桌审查 blend 整理为生产源文件，清理临时对象并生成确定性导出。
+# 更新前只删除目标桌台及明确废弃依赖；不得覆盖无关 Blender 集合或保留旧导入设置。
 """Promote the approved automatic Mahjong table review blend to production.
 
 Run with Blender 5.2 against the approved review blend. The script adds UVs

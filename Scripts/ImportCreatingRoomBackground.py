@@ -1,3 +1,5 @@
+# 导入“创建房间”背景并更新对应 UI 引用，只处理明确目标，不触碰其他界面资源。
+# 更新前删除旧目标资产并全量创建新纹理/材质；保存失败时不得留下断裂引用。
 """Import the generated creating-room background without touching unrelated UI assets."""
 
 from pathlib import Path

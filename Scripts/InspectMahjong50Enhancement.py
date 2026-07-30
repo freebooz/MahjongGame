@@ -1,3 +1,5 @@
+# 只读检查 Mahjong50 雕刻牌面材质、参数实例和纹理绑定，确认增强方案完整。
+# 不修改或保存资产；异常以明确路径输出，提交诊断前需移除本机目录信息。
 """Read-only verification for Mahjong50 engraved-face assets."""
 
 import unreal

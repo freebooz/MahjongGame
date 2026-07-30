@@ -1,3 +1,5 @@
+# 扩展目标麻将桌现有毛毡至木框下方，消除周边露缝并保持桌面有效尺寸不变。
+# 仅修改指定毛毡网格；修复后必须重新导出目标资产并复核 UV、碰撞和边界。
 """Extend the existing felt under the wood frame to remove the visible perimeter gap."""
 
 from pathlib import Path

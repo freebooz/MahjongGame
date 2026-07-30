@@ -1,3 +1,4 @@
+// 验证审计 Outbox 归档调度器的成功确认、重试退避、永久失败和敏感响应处理。
 using System.Net;
 using System.Text.Json;
 using GuiyangMahjong.Admin.Options;

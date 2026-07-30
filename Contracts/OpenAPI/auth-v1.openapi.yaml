@@ -73,3 +73,6 @@ components:
         accessTokenExpiresAtUtc: {type: string, format: date-time}
         refreshToken: {type: string, writeOnly: true}
         refreshTokenExpiresAtUtc: {type: string, format: date-time}
+# Auth OpenAPI 契约：描述登录、刷新轮换、会话、账号控制和管理命令接口。
+# 密码与刷新令牌只允许出现在受 TLS 保护的请求中，响应和示例不得回显密钥或令牌摘要。
+# 破坏性字段变更必须版本化，并同步 Unreal 客户端、Admin 和跨服务契约测试。

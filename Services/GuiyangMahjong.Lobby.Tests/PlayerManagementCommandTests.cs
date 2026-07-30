@@ -1,3 +1,4 @@
+// 验证 Admin 玩家管理命令在 Lobby 的会话重置、强制断线、禁止加入和幂等执行。
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;

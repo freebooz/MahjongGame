@@ -1,3 +1,5 @@
+# 导出单张 Mahjong50 诊断网格，用于检查几何、材质槽和 UV 方向，不作为生产资产。
+# 输出写入临时诊断目录并可安全重建；不得覆盖主模型或正式导出文件。
 """Export one Mahjong50 tile mesh for geometry/material-orientation inspection."""
 
 from pathlib import Path

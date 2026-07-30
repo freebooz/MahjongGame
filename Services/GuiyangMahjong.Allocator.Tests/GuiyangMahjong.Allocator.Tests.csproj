@@ -1,4 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
+  <!-- Dedicated Server 分配、注册、回收和实例状态机测试项目，不生成可部署制品。 -->
+  <!-- 测试应使用可控时钟和替身隔离外部编排器，生产依赖版本统一由 Directory.Packages.props 管理。 -->
   <PropertyGroup>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>

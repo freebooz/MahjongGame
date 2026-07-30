@@ -1,3 +1,5 @@
+# 修复表现 Blueprint 必需的预览资源引用，不替换关卡中已创作的实例或玩法组件。
+# 仅写入缺失/失效目标字段；修复后编译并验证蓝图，失败时不得保存部分状态。
 """Repair required Blueprint preview references without replacing level instances."""
 
 import unreal

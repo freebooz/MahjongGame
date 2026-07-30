@@ -31,3 +31,6 @@ slos:
     sli: time() - last_heartbeat
     errorBudget: 0
     releasePolicy: block_game_server_rollout_when_alerting
+# 服务等级目标契约：集中声明可用性、延迟、错误预算、燃烧率窗口和发布阻断阈值。
+# 指标缺失按失败处理，不能解释为健康；所有时间窗口和比例单位必须与 Prometheus 规则一致。
+# 调整目标需要业务、运维和安全共同审批，并保留生效版本与回滚依据。

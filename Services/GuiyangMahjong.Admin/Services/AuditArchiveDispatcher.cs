@@ -1,3 +1,5 @@
+// 审计归档调度器：可靠投递已提交审计记录到外部归档，并通过 Outbox 保证故障后可重试。
+// 调度器不得删除未确认记录；重试、退避、永久失败和敏感日志处理必须保持可审计。
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -8,6 +10,11 @@ using Microsoft.Extensions.Options;
 
 namespace GuiyangMahjong.Admin.Services;
 
+/// <summary>
+/// 不可变审计归档的单批次调度器。
+/// 通过 Outbox 租约领取记录，以 AuditId 作为下游幂等键；
+/// HTTP 冲突视为既已归档，瞬态错误指数退避，永久错误保留供人工处理。
+/// </summary>
 public sealed class AuditArchiveDispatcher(
     IAuditArchiveOutboxStore store,
     IHttpClientFactory httpClientFactory,
@@ -19,6 +26,10 @@ public sealed class AuditArchiveDispatcher(
     private readonly string workerId =
         $"audit-archive:{Environment.MachineName}:{Guid.NewGuid():N}";
 
+    /// <summary>
+    /// 领取并投递最多 100 条归档记录。
+    /// 未启用时无副作用；取消会传播，单条网络失败被记录并调度重试而不阻断同批其他记录。
+    /// </summary>
     public async Task DispatchOnceAsync(CancellationToken cancellationToken)
     {
         if (!archive.Enabled) return;
@@ -133,6 +144,11 @@ public sealed class AuditArchiveDispatcher(
     }
 }
 
+/// <summary>
+/// 驱动审计归档调度器的后台循环。
+/// 仅在显式启用时运行，宿主取消后立即退出；循环异常记录后按配置间隔继续，
+/// 不允许后台任务故障静默终止归档。
+/// </summary>
 public sealed class AuditArchiveDispatcherService(
     AuditArchiveDispatcher dispatcher,
     IOptions<AdminOptions> options,

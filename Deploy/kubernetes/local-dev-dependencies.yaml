@@ -99,3 +99,6 @@ metadata:
 spec:
   selector: {app: mahjong-redis}
   ports: [{name: redis, port: 6379, targetPort: redis}]
+# 本地 Kubernetes 开发依赖：提供非生产 PostgreSQL/Redis，便于服务联调和契约测试。
+# 仅允许开发命名空间和测试凭据；无高可用、备份或生产安全保证，禁止应用到生产集群。
+# 数据可随环境删除，任何需要长期保留的证据应导出到受控存储。

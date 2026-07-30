@@ -1,3 +1,5 @@
+# 只读验证移动麻将桌资产的网格、PBR 通道、材质槽、碰撞、LOD 和运行时引用。
+# 不执行修复或 Reimport；任何缺失项都应输出明确对象路径并返回失败。
 """Read-only validation for the imported mobile Mahjong table assets."""
 
 from __future__ import annotations
