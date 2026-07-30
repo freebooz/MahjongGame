@@ -38,6 +38,28 @@
   </Target>
 
   <!--
+    将服务名、相对路径和源文件摘要写入程序集元数据。
+    GetAssemblyAttributes 会把 AssemblyMetadata 项转换成强类型程序集特性，
+    且其输入缓存包含摘要，因此仅修改 schema.sql 也会触发程序集信息重新生成。
+  -->
+  <Target Name="AddMahjongSchemaAssemblyMetadata"
+          BeforeTargets="GetAssemblyAttributes"
+          DependsOnTargets="ValidateMahjongSchemaConfiguration"
+          Condition="'$(MahjongSchemaServiceName)' != ''">
+    <GetFileHash Files="$(MahjongSchemaSourcePath)" Algorithm="SHA256">
+      <Output TaskParameter="Items" ItemName="_MahjongSchemaCompilationHash" />
+    </GetFileHash>
+    <ItemGroup>
+      <AssemblyMetadata Include="MahjongSchemaServiceName"
+                        Value="$(MahjongSchemaServiceName)" />
+      <AssemblyMetadata Include="MahjongSchemaRelativePath"
+                        Value="$(MahjongSchemaRelativeOutputPath)" />
+      <AssemblyMetadata Include="MahjongSchemaSha256"
+                        Value="@(_MahjongSchemaCompilationHash->'%(FileHash)')" />
+    </ItemGroup>
+  </Target>
+
+  <!--
     Build 完成后比较源文件与输出文件摘要，防止增量构建留下陈旧 Schema 或复制到错误目录。
   -->
   <Target Name="ValidateMahjongSchemaBuildOutput"

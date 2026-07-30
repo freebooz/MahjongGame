@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Reflection;
 using System.Xml.Linq;
 using Xunit;
@@ -176,6 +177,31 @@ public sealed class ProjectArchitectureTests
                 AppContext.BaseDirectory,
                 $"GuiyangMahjong.{serviceName}.dll");
             var assembly = Assembly.LoadFrom(assemblyPath);
+            var sourcePath = Path.Combine(
+                FindProjectRoot(),
+                "Services",
+                $"GuiyangMahjong.{serviceName}",
+                "Storage",
+                "schema.sql");
+            var metadata = assembly
+                .GetCustomAttributes<AssemblyMetadataAttribute>()
+                .Where(attribute => attribute.Key.StartsWith(
+                    "MahjongSchema",
+                    StringComparison.Ordinal))
+                .ToDictionary(
+                    attribute => attribute.Key,
+                    attribute => attribute.Value,
+                    StringComparer.Ordinal);
+            Assert.Equal(serviceName, metadata["MahjongSchemaServiceName"]);
+            Assert.Equal(
+                $"Schemas/{serviceName}/schema.sql",
+                metadata["MahjongSchemaRelativePath"]?.Replace('\\', '/'));
+            Assert.Equal(
+                Convert.ToHexString(SHA256.HashData(
+                    File.ReadAllBytes(sourcePath))),
+                metadata["MahjongSchemaSha256"],
+                ignoreCase: true);
+
             var storagePathsType = assembly.GetType(
                 $"GuiyangMahjong.{serviceName}.Storage.{serviceName}StoragePaths",
                 throwOnError: true)
@@ -214,6 +240,37 @@ public sealed class ProjectArchitectureTests
             var invocation = Assert.Throws<TargetInvocationException>(() =>
                 testableResolve.Invoke(null, [assembly, missingRoot]));
             Assert.IsType<FileNotFoundException>(invocation.InnerException);
+
+            var tamperedRoot = Path.Combine(
+                Path.GetTempPath(),
+                $"tampered-mahjong-schema-{Guid.NewGuid():N}");
+            var tamperedSchemaPath = Path.Combine(
+                tamperedRoot,
+                "Schemas",
+                serviceName,
+                "schema.sql");
+            Directory.CreateDirectory(
+                Path.GetDirectoryName(tamperedSchemaPath)
+                    ?? throw new InvalidOperationException(
+                        "篡改测试 Schema 目录无效。"));
+            try
+            {
+                File.Copy(sourcePath, tamperedSchemaPath);
+                File.AppendAllText(
+                    tamperedSchemaPath,
+                    $"{Environment.NewLine}-- integrity-test-tamper");
+                var tamperedInvocation =
+                    Assert.Throws<TargetInvocationException>(() =>
+                        testableResolve.Invoke(
+                            null,
+                            [assembly, tamperedRoot]));
+                Assert.IsType<InvalidDataException>(
+                    tamperedInvocation.InnerException);
+            }
+            finally
+            {
+                Directory.Delete(tamperedRoot, recursive: true);
+            }
         }
     }
 
