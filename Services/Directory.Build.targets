@@ -17,7 +17,7 @@
              Link="$(MahjongSchemaRelativeOutputPath)"
              TargetPath="$(MahjongSchemaRelativeOutputPath)"
              CopyToOutputDirectory="IfDifferent"
-             CopyToPublishDirectory="IfDifferent" />
+             CopyToPublishDirectory="Always" />
   </ItemGroup>
 
   <!--
