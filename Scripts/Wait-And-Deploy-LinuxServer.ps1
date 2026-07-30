@@ -9,7 +9,7 @@ param(
     [string]$EngineRoot = '',
     [ValidateSet('Development', 'Shipping')]
     [string]$Configuration = 'Development',
-    [string]$Distribution = 'Ubuntu',
+    [string]$Distribution = 'Ubuntu-22.04',
     [string]$WslUser = 'root',
     [string]$LinuxRepositoryPath = '',
     [string]$Version = '',

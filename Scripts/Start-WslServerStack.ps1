@@ -1,6 +1,6 @@
 ﻿[CmdletBinding()]
 param(
-    [string]$Distribution = 'Ubuntu',
+    [string]$Distribution = 'Ubuntu-22.04',
     [string]$WslUser = 'root',
     [string]$RepositoryPath = '',
     [int]$DockerTimeoutSeconds = 240
