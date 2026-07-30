@@ -11,6 +11,12 @@ import {
 } from "./admin-console-management";
 import {connectRealtime} from "./admin-console-realtime";
 
+/**
+ * 完成首轮数据加载后选择实时推送或兼容轮询通道。
+ *
+ * SSE 优先用于降低请求放大；仅当服务端明确允许旧轮询时才创建定时器，并在切换通道前
+ * 清理已有句柄，避免同一页面并发刷新和事件重复消费。
+ */
 async function bootstrapMonitoring(){
   await refresh();
   if(state.me?.realtime?.sseEnabled){
@@ -20,6 +26,12 @@ async function bootstrapMonitoring(){
     state.timer=setInterval(refresh,5000);
   }
 }
+/**
+ * 绑定管理控制台的 DOM 事件并启动监控。
+ *
+ * 本函数必须在 Angular 完成视图挂载后调用；重复调用前应先执行 disposeAdminConsole，
+ * 否则浏览器事件与实时连接可能重复注册。
+ */
 export function initializeAdminConsole(){
   configureRefreshHandler(refresh);
   byId("credentialButton").onclick=()=>{byId("credential").value=state.token;byId("credentialDialog").showModal();};

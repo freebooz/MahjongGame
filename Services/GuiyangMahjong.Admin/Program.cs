@@ -585,4 +585,8 @@ static string ClassifyAdminRequest(HttpRequest request)
     return "read";
 }
 
+/// <summary>
+/// WebApplicationFactory 集成测试可发现的 Admin 程序入口标记。
+/// 运行时注册和安全中间件顺序由上方顶级语句定义，该 partial 类型不保存管理状态。
+/// </summary>
 public partial class Program;

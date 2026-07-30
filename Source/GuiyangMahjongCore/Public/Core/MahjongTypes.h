@@ -3,8 +3,8 @@
 #include "CoreMinimal.h"
 #include "MahjongTypes.generated.h"
 
-UENUM(BlueprintType)
 /** 麻将花色；Winds/Dragons 仅在 136 张牌配置中使用。 */
+UENUM(BlueprintType)
 enum class EMahjongSuit : uint8
 {
     Characters UMETA(DisplayName="万"),
@@ -14,8 +14,8 @@ enum class EMahjongSuit : uint8
     Dragons UMETA(DisplayName="箭牌")
 };
 
-UENUM(BlueprintType)
 /** 牌的语义类型；序数牌的具体点数存放在 Rank。 */
+UENUM(BlueprintType)
 enum class EMahjongTileType : uint8
 {
     Number,
@@ -24,15 +24,15 @@ enum class EMahjongTileType : uint8
     Invalid
 };
 
-UENUM(BlueprintType)
 /** 客户端可请求、规则引擎可解析的统一牌桌动作。 */
+UENUM(BlueprintType)
 enum class EMahjongActionType : uint8
 {
     Draw, Play, Peng, MingGang, AnGang, BuGang, Hu, Pass
 };
 
-UENUM(BlueprintType)
 /** 权威牌桌状态机阶段。 */
+UENUM(BlueprintType)
 enum class EMahjongTablePhase : uint8
 {
     WaitingForPlayers,
@@ -46,12 +46,14 @@ enum class EMahjongTablePhase : uint8
     Restarting
 };
 
+/** 已公开副露的规则类型；Chi 为规则扩展预留，当前贵阳主流规则主要使用碰和三类杠。 */
 UENUM(BlueprintType)
 enum class EMahjongMeldType : uint8
 {
     Chi, Peng, MingGang, AnGang, BuGang
 };
 
+/** 统计普通鸡时纳入的牌区范围；房间创建后随规则快照冻结。 */
 UENUM(BlueprintType)
 enum class EMahjongJiCountingScope : uint8
 {
@@ -61,6 +63,7 @@ enum class EMahjongJiCountingScope : uint8
     HandMeldAndDiscard
 };
 
+/** 需要独立留痕和结算归责的贵阳鸡事件类型。 */
 UENUM(BlueprintType)
 enum class EMahjongJiEventType : uint8
 {
@@ -96,8 +99,8 @@ struct GUIYANGMAHJONGCORE_API FMahjongTile
     bool operator==(const FMahjongTile& Other) const { return UniqueId == Other.UniqueId; }
 };
 
-USTRUCT(BlueprintType)
 /** 已公开的吃、碰或杠副露。 */
+USTRUCT(BlueprintType)
 struct GUIYANGMAHJONGCORE_API FMahjongMeld
 {
     GENERATED_BODY()
@@ -108,8 +111,8 @@ struct GUIYANGMAHJONGCORE_API FMahjongMeld
     UPROPERTY(EditAnywhere, BlueprintReadWrite) int32 FromSeat = INDEX_NONE;
 };
 
-USTRUCT(BlueprintType)
 /** 单个玩家的私有手牌与已公开副露集合。 */
+USTRUCT(BlueprintType)
 struct GUIYANGMAHJONGCORE_API FMahjongHand
 {
     GENERATED_BODY()
@@ -120,8 +123,8 @@ struct GUIYANGMAHJONGCORE_API FMahjongHand
     void Sort();
 };
 
-USTRUCT(BlueprintType)
 /** 一次弃牌及其公共序号和是否已被其他动作认领。 */
+USTRUCT(BlueprintType)
 struct GUIYANGMAHJONGCORE_API FMahjongDiscardRecord
 {
     GENERATED_BODY()
@@ -131,8 +134,8 @@ struct GUIYANGMAHJONGCORE_API FMahjongDiscardRecord
     UPROPERTY(EditAnywhere, BlueprintReadWrite) bool bClaimed = false;
 };
 
-USTRUCT(BlueprintType)
 /** 服务端验证后形成的规范化动作。 */
+USTRUCT(BlueprintType)
 struct GUIYANGMAHJONGCORE_API FMahjongAction
 {
     GENERATED_BODY()
@@ -145,8 +148,8 @@ struct GUIYANGMAHJONGCORE_API FMahjongAction
     FString ToDebugString() const;
 };
 
-USTRUCT(BlueprintType)
 /** 客户端发往权威牌桌的动作请求；包含状态版本和幂等序号。 */
+USTRUCT(BlueprintType)
 struct GUIYANGMAHJONGCORE_API FMahjongActionRequest
 {
     GENERATED_BODY()
@@ -160,8 +163,8 @@ struct GUIYANGMAHJONGCORE_API FMahjongActionRequest
     UPROPERTY(EditAnywhere, BlueprintReadWrite) int32 ClientSequence = 0;
 };
 
-USTRUCT(BlueprintType)
 /** 一次动作的成功标志、错误信息及规范化结果。 */
+USTRUCT(BlueprintType)
 struct GUIYANGMAHJONGCORE_API FMahjongActionResult
 {
     GENERATED_BODY()
@@ -170,8 +173,8 @@ struct GUIYANGMAHJONGCORE_API FMahjongActionResult
     UPROPERTY(EditAnywhere, BlueprintReadWrite) FMahjongAction Action;
 };
 
-USTRUCT(BlueprintType)
 /** 单个座位的本局分项增减及累计总分。 */
+USTRUCT(BlueprintType)
 struct GUIYANGMAHJONGCORE_API FMahjongPlayerScoreResult
 {
     GENERATED_BODY()
@@ -184,8 +187,8 @@ struct GUIYANGMAHJONGCORE_API FMahjongPlayerScoreResult
     UPROPERTY(EditAnywhere, BlueprintReadWrite) int32 TotalScore = 0;
 };
 
-USTRUCT(BlueprintType)
 /** 冲锋鸡或责任鸡事件，保留触发牌、座位和弃牌序号用于复核。 */
+USTRUCT(BlueprintType)
 struct GUIYANGMAHJONGCORE_API FMahjongJiEvent
 {
     GENERATED_BODY()
@@ -197,8 +200,8 @@ struct GUIYANGMAHJONGCORE_API FMahjongJiEvent
     UPROPERTY(EditAnywhere, BlueprintReadWrite) int32 DiscardSequence = INDEX_NONE;
 };
 
-USTRUCT(BlueprintType)
 /** 单局结算快照；同时包含胜负、鸡事件和各座位分项。 */
+USTRUCT(BlueprintType)
 struct GUIYANGMAHJONGCORE_API FMahjongSettlementResult
 {
     GENERATED_BODY()
@@ -218,8 +221,8 @@ struct GUIYANGMAHJONGCORE_API FMahjongSettlementResult
     FString ToDebugString() const;
 };
 
-USTRUCT(BlueprintType)
 /** 创建房间时冻结的完整规则配置。 */
+USTRUCT(BlueprintType)
 struct GUIYANGMAHJONGCORE_API FMahjongRuleConfig
 {
     GENERATED_BODY()

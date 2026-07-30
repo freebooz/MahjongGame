@@ -15,9 +15,14 @@ public static class RoomStateMachine
             [RoomLifecycle.Failed] = [RoomLifecycle.Closed]
         };
 
+    /// <summary>判断转换是否幂等或位于白名单；不修改房间。</summary>
     public static bool CanTransition(RoomLifecycle from, RoomLifecycle to) =>
         from == to || Allowed[from].Contains(to);
 
+    /// <summary>
+    /// 创建迁移后的房间快照，成功时序号递增并更新服务端 UTC 时间；
+    /// 非法转换抛出异常且不改变输入记录。
+    /// </summary>
     public static LobbyRoom Transition(LobbyRoom room, RoomLifecycle next, TimeProvider timeProvider)
     {
         if (!CanTransition(room.Lifecycle, next))
@@ -33,4 +38,3 @@ public static class RoomStateMachine
         };
     }
 }
-

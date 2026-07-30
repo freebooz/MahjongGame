@@ -11,6 +11,10 @@ namespace GuiyangMahjong.Admin.Services;
 /// </summary>
 public interface IChatArchiveQueryClient
 {
+    /// <summary>
+    /// 在已审批 UTC 窗口和字段 scopes 内查询玩家聊天归档。
+    /// 返回数量受配置限制；调用前必须完成案件归属、双人审批和 RBAC/ABAC 校验。
+    /// </summary>
     Task<JsonElement[]> QueryAsync(
         string playerId,
         DateTimeOffset fromUtc,
@@ -26,6 +30,7 @@ public sealed class HttpChatArchiveQueryClient(
     IHttpClientFactory httpClientFactory,
     IOptions<AdminOptions> options) : IChatArchiveQueryClient
 {
+    /// <inheritdoc/>
     public async Task<JsonElement[]> QueryAsync(
         string playerId,
         DateTimeOffset fromUtc,

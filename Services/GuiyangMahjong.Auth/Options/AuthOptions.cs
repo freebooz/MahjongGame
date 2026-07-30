@@ -2,6 +2,11 @@ using System.ComponentModel.DataAnnotations;
 
 namespace GuiyangMahjong.Auth.Options;
 
+/// <summary>
+/// Auth 根配置。
+/// 签名密钥和游客身份 Pepper 至少 32 字符且只驻留服务端；
+/// 生产运行身份不执行 DDL，监控只读与管理命令凭据必须分离。
+/// </summary>
 public sealed class AuthOptions
 {
     public const string SectionName = "Auth";

@@ -7,8 +7,18 @@ using Microsoft.Extensions.Options;
 
 namespace GuiyangMahjong.PlayerData.Api;
 
+/// <summary>
+/// PlayerData 最小 API 路由模块。
+/// 将来源证据、奖励、Admin 钱包命令、聊天授权和监控读取隔离为不同内部路径，
+/// 凭据、幂等键和输入校验在进入存储事务前完成。
+/// </summary>
 public static class PlayerDataEndpoints
 {
+    /// <summary>
+    /// 注册 PlayerData 全部健康与内部端点。
+    /// 资产写入只接受受信服务命令，不存在设置最终余额接口；
+    /// 错误由领域异常映射并携带 TraceId。
+    /// </summary>
     public static void MapPlayerDataEndpoints(this WebApplication app)
     {
         app.MapGet("/health/live", () =>

@@ -50,6 +50,10 @@ public sealed class TopologyRegistrationOptions
     [Range(5, 120)] public int RefreshSeconds { get; init; } = 20;
 }
 
+/// <summary>
+/// Lobby 调用 Allocator 的服务配置。
+/// ServiceToken 只授权分配/注册/心跳流程，超时覆盖完整 HTTP 响应读取。
+/// </summary>
 public sealed class AllocatorClientOptions
 {
     public bool Enabled { get; init; }
@@ -59,6 +63,10 @@ public sealed class AllocatorClientOptions
     [Required] public string GameServerBuildVersion { get; init; } = "unreal-linux";
 }
 
+/// <summary>
+/// Lobby 权威持久化配置。
+/// Redis 仅保存热状态，PostgreSQL 保存权威房间/历史；生产连接使用独立最小权限身份。
+/// </summary>
 public sealed class LobbyPersistenceOptions
 {
     [Required] public string Mode { get; init; } = "InMemory";

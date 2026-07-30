@@ -5,8 +5,8 @@
 #include "Rules/GuiyangRuleSnapshot.h"
 #include "MahjongNetworkTypes.generated.h"
 
-UENUM(BlueprintType)
 /** 从创建到关闭的房间级生命周期。 */
+UENUM(BlueprintType)
 enum class EMahjongRoomLifecycle : uint8
 {
     Creating,
@@ -20,8 +20,8 @@ enum class EMahjongRoomLifecycle : uint8
     Closed
 };
 
-UENUM(BlueprintType)
 /** 可安全返回客户端的房间操作错误分类。 */
+UENUM(BlueprintType)
 enum class EMahjongRoomError : uint8
 {
     None,
@@ -40,8 +40,8 @@ enum class EMahjongRoomError : uint8
     VersionMismatch
 };
 
-USTRUCT(BlueprintType)
 /** 创建房间请求；密码仅在传输链路短暂存在。 */
+USTRUCT(BlueprintType)
 struct GUIYANGMAHJONGCORE_API FMahjongCreateRoomRequest
 {
     GENERATED_BODY()
@@ -56,8 +56,8 @@ struct GUIYANGMAHJONGCORE_API FMahjongCreateRoomRequest
     UPROPERTY(EditAnywhere, BlueprintReadWrite) int32 ClientSequence = 0;
 };
 
-USTRUCT(BlueprintType)
 /** 按六位房间码加入的请求。 */
+USTRUCT(BlueprintType)
 struct GUIYANGMAHJONGCORE_API FMahjongJoinRoomRequest
 {
     GENERATED_BODY()
@@ -69,8 +69,8 @@ struct GUIYANGMAHJONGCORE_API FMahjongJoinRoomRequest
     UPROPERTY(EditAnywhere, BlueprintReadWrite) int32 ClientProtocolVersion = 1;
 };
 
-USTRUCT(BlueprintType)
 /** 可公开复制的一个座位摘要，不包含手牌内容。 */
+USTRUCT(BlueprintType)
 struct GUIYANGMAHJONGCORE_API FMahjongSeatInfo
 {
     GENERATED_BODY()
@@ -88,8 +88,8 @@ struct GUIYANGMAHJONGCORE_API FMahjongSeatInfo
     UPROPERTY(EditAnywhere, BlueprintReadWrite) int32 PingMilliseconds = 0;
 };
 
-USTRUCT(BlueprintType)
 /** 房间不随单次出牌频繁变化的公共元数据。 */
+USTRUCT(BlueprintType)
 struct GUIYANGMAHJONGCORE_API FMahjongRoomInfo
 {
     GENERATED_BODY()
@@ -109,8 +109,8 @@ struct GUIYANGMAHJONGCORE_API FMahjongRoomInfo
     UPROPERTY(EditAnywhere, BlueprintReadWrite) bool bPasswordProtected = false;
 };
 
-USTRUCT(BlueprintType)
 /** 客户端大厅和房间 UI 使用的公共房间快照。 */
+USTRUCT(BlueprintType)
 struct GUIYANGMAHJONGCORE_API FMahjongRoomState
 {
     GENERATED_BODY()
@@ -123,8 +123,8 @@ struct GUIYANGMAHJONGCORE_API FMahjongRoomState
     UPROPERTY(EditAnywhere, BlueprintReadWrite) int32 StateSequence = 0;
 };
 
-USTRUCT(BlueprintType)
 /** 最终大结算中的单个玩家排名。 */
+USTRUCT(BlueprintType)
 struct GUIYANGMAHJONGCORE_API FMahjongFinalPlayerResult
 {
     GENERATED_BODY()
@@ -135,8 +135,8 @@ struct GUIYANGMAHJONGCORE_API FMahjongFinalPlayerResult
     UPROPERTY(EditAnywhere, BlueprintReadWrite) int32 TotalScore = 0;
 };
 
-USTRUCT(BlueprintType)
 /** 完整比赛结束后可持久化和上报控制面的最终结算。 */
+USTRUCT(BlueprintType)
 struct GUIYANGMAHJONGCORE_API FMahjongFinalSettlementResult
 {
     GENERATED_BODY()
@@ -191,8 +191,8 @@ struct GUIYANGMAHJONGCORE_API FMahjongPrivatePlayerState
     UPROPERTY(EditAnywhere, BlueprintReadWrite) int32 StateSequence = 0;
 };
 
-USTRUCT(BlueprintType)
 /** 重连成功后一次性恢复的公共、私有和房间组合快照。 */
+USTRUCT(BlueprintType)
 struct GUIYANGMAHJONGCORE_API FMahjongReconnectSnapshot
 {
     GENERATED_BODY()

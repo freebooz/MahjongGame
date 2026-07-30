@@ -28,5 +28,6 @@ public sealed class AdminActionStoreInitializer(
         logger.LogInformation("Admin management store initialized.");
     }
 
+    /// <summary>停止阶段无额外迁移操作；连接和数据源由依赖注入生命周期释放。</summary>
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 }

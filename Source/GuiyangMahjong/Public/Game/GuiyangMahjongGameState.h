@@ -38,8 +38,10 @@ public:
     virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 protected:
+    /** 公共牌桌复制完成后广播不可变快照，驱动 HUD 刷新而不在客户端重算规则。 */
     UFUNCTION()
     void OnRep_PublicTableState();
+    /** 房间复制完成后广播座位和生命周期变化，保持房间页与服务端权威状态一致。 */
     UFUNCTION()
     void OnRep_RoomState();
 };

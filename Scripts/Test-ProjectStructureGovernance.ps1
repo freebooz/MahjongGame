@@ -327,6 +327,124 @@ foreach ($relative in $trackedExistingFiles) {
     }
 }
 
+# 生产 C# 的公共契约需要在声明附近说明职责和约束，防止仅依赖文件头注释造成维护误判。
+# 这是有意保守的近似检查：覆盖公共/内部类型及公共方法，向上查看四行以兼容 XML 文档和特性；
+# 测试项目允许使用测试名称表达场景，因此不纳入该生产 API 门禁。
+$csharpDeclarationPattern =
+    '^\s*(?:public|internal)\s+(?:(?:static|sealed|abstract|partial|readonly)\s+)*(?:class|record|struct|interface|enum)\b' `
+    + '|^\s*public\s+(?:(?:static|virtual|override|async|sealed|abstract|partial|new|required)\s+)*(?:[A-Za-z_][\w<>,?\[\]. ]*\s+)?[A-Za-z_]\w*\s*\('
+foreach ($relative in $trackedExistingFiles) {
+    $normalized = $relative.Replace('\', '/')
+    if (!$normalized.EndsWith(
+            '.cs',
+            [StringComparison]::OrdinalIgnoreCase) `
+        -or $normalized.IndexOf(
+            '.Tests/',
+            [StringComparison]::OrdinalIgnoreCase) -ge 0) {
+        continue
+    }
+    $path = Join-Path $projectRoot $relative
+    $lines = @(Get-Content -LiteralPath $path -Encoding UTF8)
+    for ($index = 0; $index -lt $lines.Count; $index++) {
+        if ($lines[$index] -notmatch $csharpDeclarationPattern) {
+            continue
+        }
+        $lookBehindStart = [Math]::Max(0, $index - 4)
+        $lookBehind = if ($index -eq 0) {
+            ''
+        }
+        else {
+            $lines[$lookBehindStart..($index - 1)] -join "`n"
+        }
+        if ($lookBehind -notmatch '///' `
+            -and $lookBehind -notmatch '[\p{IsCJKUnifiedIdeographs}]') {
+            Add-GovernanceFailure (
+                "生产 C# 声明缺少就近职责说明：{0}:{1}" -f
+                $relative,
+                ($index + 1))
+        }
+    }
+}
+
+# Unreal 反射类型会进入 UHT、蓝图和序列化契约，必须在宏声明前说明职责、可见范围与关键约束。
+# 仅扫描生产 Source 头文件并排除测试；八行窗口允许多行 Doxygen，但不接受仅在类型之后补说明。
+$unrealReflectionDeclarationPattern =
+    '^\s*U(?:CLASS|STRUCT|ENUM)\s*\('
+foreach ($relative in $trackedExistingFiles) {
+    $normalized = $relative.Replace('\', '/')
+    $extension = [IO.Path]::GetExtension($relative).ToLowerInvariant()
+    if (!$normalized.StartsWith(
+            'Source/',
+            [StringComparison]::OrdinalIgnoreCase) `
+        -or $extension -notin @('.h', '.hpp') `
+        -or $normalized.IndexOf(
+            '/Tests/',
+            [StringComparison]::OrdinalIgnoreCase) -ge 0) {
+        continue
+    }
+    $path = Join-Path $projectRoot $relative
+    $lines = @(Get-Content -LiteralPath $path -Encoding UTF8)
+    for ($index = 0; $index -lt $lines.Count; $index++) {
+        if ($lines[$index] -notmatch $unrealReflectionDeclarationPattern) {
+            continue
+        }
+        $lookBehindStart = [Math]::Max(0, $index - 8)
+        $lookBehind = if ($index -eq 0) {
+            ''
+        }
+        else {
+            $lines[$lookBehindStart..($index - 1)] -join "`n"
+        }
+        if ($lookBehind -notmatch '[\p{IsCJKUnifiedIdeographs}]') {
+            Add-GovernanceFailure (
+                "Unreal 反射类型缺少宏前职责说明：{0}:{1}" -f
+                $relative,
+                ($index + 1))
+        }
+    }
+}
+
+# Angular 生产源码的导出类型、函数及显式公共成员必须在声明附近说明职责、生命周期或失败边界。
+# 向上查看十行是为了跨过 @Component 元数据，同时排除 spec 测试，让测试名称继续承担场景说明职责。
+$typeScriptDeclarationPattern =
+    '^\s*(?:export\s+)?(?:abstract\s+)?(?:class|interface|type|enum)\s+[A-Za-z_]\w*' `
+    + '|^\s*(?:export\s+)?(?:async\s+)?function\s+[A-Za-z_]\w*' `
+    + '|^\s*(?:public|protected)\s+(?:async\s+)?[A-Za-z_]\w*\s*\('
+foreach ($relative in $trackedExistingFiles) {
+    $normalized = $relative.Replace('\', '/')
+    if (!$normalized.StartsWith(
+            'Services/GuiyangMahjong.Admin/ClientApp/src/',
+            [StringComparison]::OrdinalIgnoreCase) `
+        -or !$normalized.EndsWith(
+            '.ts',
+            [StringComparison]::OrdinalIgnoreCase) `
+        -or $normalized.EndsWith(
+            '.spec.ts',
+            [StringComparison]::OrdinalIgnoreCase)) {
+        continue
+    }
+    $path = Join-Path $projectRoot $relative
+    $lines = @(Get-Content -LiteralPath $path -Encoding UTF8)
+    for ($index = 0; $index -lt $lines.Count; $index++) {
+        if ($lines[$index] -notmatch $typeScriptDeclarationPattern) {
+            continue
+        }
+        $lookBehindStart = [Math]::Max(0, $index - 10)
+        $lookBehind = if ($index -eq 0) {
+            ''
+        }
+        else {
+            $lines[$lookBehindStart..($index - 1)] -join "`n"
+        }
+        if ($lookBehind -notmatch '[\p{IsCJKUnifiedIdeographs}]') {
+            Add-GovernanceFailure (
+                "Angular TypeScript 声明缺少就近职责说明：{0}:{1}" -f
+                $relative,
+                ($index + 1))
+        }
+    }
+}
+
 # 支持原生注释的人工配置必须直接包含中文职责或约束说明；严格 JSON 不在此注入非法注释，
 # 而由核心架构文档的数据字典覆盖并通过下方登记项检查。
 $commentableConfigExtensions = @(

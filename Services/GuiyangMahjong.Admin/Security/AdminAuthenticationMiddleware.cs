@@ -30,6 +30,10 @@ public sealed class AdminAuthenticationMiddleware(
     private readonly EnterpriseIdentityOptions enterprise =
         options.Value.EnterpriseIdentity;
 
+    /// <summary>
+    /// 保护 /admin/v1：生产验证企业身份、MFA、令牌年龄、角色和 ABAC Claims，
+    /// 非生产可固定时间比较静态令牌。失败立即返回且不设置 AdminPrincipal。
+    /// </summary>
     public async Task InvokeAsync(HttpContext context)
     {
         if (!context.Request.Path.StartsWithSegments("/admin/v1"))

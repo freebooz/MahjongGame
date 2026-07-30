@@ -93,6 +93,7 @@ export function appendPager(bodyId:string,columns:number,pageKey:string,page:any
     state.pages[pageKey].cursor=page.nextCursor;void requestRefresh();
   };
 }
+// 筛选条件变化后丢弃旧游标链，防止把上一查询条件的不透明游标发送给服务端。
 export function resetPage(pageKey:string){
   state.pages[pageKey]={cursor:null,next:null,history:[]};
 }

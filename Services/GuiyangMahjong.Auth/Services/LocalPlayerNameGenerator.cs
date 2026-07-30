@@ -2,7 +2,10 @@ using System.Security.Cryptography;
 
 namespace GuiyangMahjong.Auth.Services;
 
-/// <summary>Randomly selects one of 1,000 Guiyang-themed names for a new guest identity.</summary>
+/// <summary>
+/// 为新游客身份使用加密随机数从 1,000 个贵阳主题五字昵称中选择一个。
+/// 生成器不保证全局唯一，身份存储以 PlayerId/安装哈希而非展示名判定唯一性。
+/// </summary>
 public sealed class LocalPlayerNameGenerator
 {
     private static readonly string[] LocalFeatures =
@@ -37,6 +40,7 @@ public sealed class LocalPlayerNameGenerator
         }
     }
 
+    /// <summary>均匀生成一个五字候选昵称；不访问存储，也不保留随机状态。</summary>
     public string Generate()
     {
         var index = RandomNumberGenerator.GetInt32(CandidateCount);

@@ -77,35 +77,51 @@ public:
     UFUNCTION(BlueprintCallable, Category="Mahjong|Table")
     void RequestTableAction(EMahjongActionType Type, int32 TargetTileId);
 
-    /** 由客户端调用、在权威服务器执行的大厅与牌桌 RPC。 */
+    /** 使用默认规则创建房间；服务端仍会校验会话、幂等序号和玩家当前房间。 */
     UFUNCTION(Server, Reliable) void Server_RequestCreateRoom();
+    /** 请求快速加入可用公共房间；匹配和路由选择完全由服务端决定。 */
     UFUNCTION(Server, Reliable) void Server_RequestQuickStart();
+    /** 在允许房间操作前绑定短期会话；服务端必须验证令牌而不是信任 PlayerId 参数。 */
     UFUNCTION(Server, Reliable) void Server_AuthenticateSession(const FString& PlayerId, const FString& DisplayName,
         EGuiyangLoginProvider Provider, const FString& SessionToken);
+    /** 使用客户端配置请求创建房间；规则会在服务端规范化并冻结为快照。 */
     UFUNCTION(Server, Reliable) void Server_RequestCreateRoomWithConfig(const FMahjongCreateRoomRequest& Request);
+    /** 兼容本地开发的玩家名加入入口，不得作为生产身份认证依据。 */
     UFUNCTION(Server, Reliable) void Server_RequestJoinRoom(const FString& PlayerName);
+    /** 按房间码加入；密码只参与本次校验，禁止复制或写入日志。 */
     UFUNCTION(Server, Reliable) void Server_RequestJoinRoomByCode(const FMahjongJoinRoomRequest& Request);
+    /** 切换当前座位准备状态；开局后或非房间成员请求由服务端拒绝。 */
     UFUNCTION(Server, Reliable) void Server_RequestReady();
+    /** 请求离开当前房间，由服务端完成座位释放和房主迁移。 */
     UFUNCTION(Server, Reliable) void Server_RequestLeaveRoom();
+    /** 结算阶段确认进入下一局；重复确认必须保持幂等。 */
     UFUNCTION(Server, Reliable) void Server_RequestNextRound();
+    /** 旧客户端出牌兼容入口，服务端会转换为统一动作并执行版本校验。 */
     UFUNCTION(Server, Reliable) void Server_RequestPlayTile(FMahjongTile Tile);
+    /** 提交统一牌桌动作；局号、回合号和客户端序号共同阻止过期或重放请求。 */
     UFUNCTION(Server, Reliable) void Server_RequestAction(FMahjongActionRequest Request);
+    /** 仅供自动化集成场景模拟断线，生产 UI 不应直接调用。 */
     UFUNCTION(Server, Reliable) void Server_RequestIntegrationDisconnect();
 
-    /** 由服务器定向发送给所属客户端的私有状态与结果 RPC。 */
+    /** 定向同步所属玩家私有手牌；严禁改为 GameState 广播或公共复制。 */
     UFUNCTION(Client, Reliable) void Client_UpdatePrivateHand(const FMahjongPrivatePlayerState& PrivateState);
+    /** 下发服务端计算的可选动作，客户端只能展示和选择，不得自行补充。 */
     UFUNCTION(Client, Reliable) void Client_ShowAvailableActions(const TArray<FMahjongAction>& Actions);
+    /** 展示单局权威结算结果；客户端不得据此重新计算或修改分数。 */
     UFUNCTION(Client, Reliable) void Client_ShowSettlement(const FMahjongSettlementResult& Result);
+    /** 展示经过服务端净化的用户可见错误，不传递内部异常和敏感字段。 */
     UFUNCTION(Client, Reliable) void Client_ShowErrorMessage(const FString& Message);
+    /** 原子恢复重连所需组合快照和动作列表，避免 UI 观察到跨版本的中间状态。 */
     UFUNCTION(Client, Reliable) void Client_RestoreReconnectSnapshot(
         const FMahjongReconnectSnapshot& Snapshot, const TArray<FMahjongAction>& AvailableActions);
+    /** 展示比赛结束后的最终排名；该结果只读且来源于权威服务器。 */
     UFUNCTION(Client, Reliable) void Client_ShowFinalSettlement(const FMahjongFinalSettlementResult& Result);
 
     /** 返回下一次连接时附带的玩家显示名。 */
     UFUNCTION(BlueprintPure, Category="Mahjong|Network")
     const FString& GetPendingPlayerName() const { return PendingPlayerName; }
     void SetPendingPlayerName(const FString& PlayerName) { PendingPlayerName = PlayerName; }
-    /** Latest authoritative reaction offer, retained across HUD reconstruction. */
+    /** 最近一次权威响应动作列表；跨 HUD 重建保留，但在新状态版本到达时必须替换。 */
     const TArray<FMahjongAction>& GetLastAvailableActions() const { return LastAvailableActions; }
     /** Dedicated Server 进程自启动以来已进入的服务端 RPC 处理器次数。 */
     static uint64 GetServerRpcReceivedCount() { return ServerRpcReceivedCount.Load(); }

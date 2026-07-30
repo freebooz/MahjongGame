@@ -417,6 +417,10 @@ static string WriteMonitoringCursor(
     Convert.ToBase64String(JsonSerializer.SerializeToUtf8Bytes(
         new AuthMonitoringCursor(createdAtUtc, id, filter)));
 
+/// <summary>
+/// WebApplicationFactory 集成测试可发现的 Auth 程序入口标记。
+/// 运行时身份、令牌和存储初始化由上方顶级语句完成，该 partial 类型不持有秘密。
+/// </summary>
 public partial class Program;
 
 /// <summary>Auth 玩家键集分页游标；创建时间与 PlayerId 共同形成确定性排序边界。</summary>

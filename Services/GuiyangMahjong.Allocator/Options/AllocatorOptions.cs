@@ -2,12 +2,17 @@ using System.ComponentModel.DataAnnotations;
 
 namespace GuiyangMahjong.Allocator.Options;
 
+/// <summary>Allocator 实例启动后端；LocalProcess 管理本机进程，Agones 管理 Kubernetes 资源。</summary>
 public enum AllocatorBackendMode
 {
     LocalProcess,
     Agones
 }
 
+/// <summary>
+/// Agones 分配 API 配置。
+/// ServiceAccount 令牌/CA 路径来自 Pod 挂载，只由 Allocator 读取，不写入日志或响应。
+/// </summary>
 public sealed class AgonesAllocatorOptions
 {
     [Required] public string Namespace { get; init; } = "guiyang-mahjong";
@@ -20,6 +25,10 @@ public sealed class AgonesAllocatorOptions
     [Range(1, 60)] public int RequestTimeoutSeconds { get; init; } = 10;
 }
 
+/// <summary>
+/// Allocator 根配置，定义端口容量、生命周期超时、进程/Agones 后端、状态恢复及服务身份。
+/// 注册、监控、管理和 Lobby 回调凭据用途隔离，生产通过安全配置注入。
+/// </summary>
 public sealed class AllocatorOptions
 {
     public const string SectionName = "Allocator";

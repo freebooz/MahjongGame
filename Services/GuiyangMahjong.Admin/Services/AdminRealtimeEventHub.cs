@@ -46,6 +46,7 @@ public sealed class AdminRealtimeEventHub : IDisposable
     private long sequence;
     private readonly string instanceId = Guid.NewGuid().ToString("N");
 
+    /// <summary>读取并冻结环形积压与单订阅者队列容量；两个上限防止慢客户端耗尽内存。</summary>
     public AdminRealtimeEventHub(IOptions<AdminOptions> options)
     {
         backlogLimit = options.Value.RealtimeCapacity.EventBacklogLimit;
@@ -154,6 +155,7 @@ public sealed class AdminRealtimeEventHub : IDisposable
         }
     }
 
+    /// <summary>完成全部订阅通道并清空连接；释放后现有 SSE 客户端必须重新连接和同步。</summary>
     public void Dispose()
     {
         lock (gate)

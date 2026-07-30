@@ -11,8 +11,8 @@ class AMahjongRoomPresentationActor;
 struct FStreamableHandle;
 class UMobileRootHUDWidget;
 
-UCLASS(Transient)
 /** 共享 PlayerController 在客户端目标中的 UI、旅行和三维表现实现。 */
+UCLASS(Transient)
 class UGuiyangClientControllerBridgeImpl final : public UObject, public IGuiyangClientControllerBridge
 {
     GENERATED_BODY()

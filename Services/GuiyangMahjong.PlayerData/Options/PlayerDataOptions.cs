@@ -2,6 +2,11 @@ using System.ComponentModel.DataAnnotations;
 
 namespace GuiyangMahjong.PlayerData.Options;
 
+/// <summary>
+/// PlayerData 根配置。
+/// 来源接入、Admin 钱包命令、聊天网关、监控和证据投影使用独立凭据；
+/// 生产 PostgreSQL 身份遵循最小权限且不执行 DDL。
+/// </summary>
 public sealed class PlayerDataOptions
 {
     public const string SectionName = "PlayerData";

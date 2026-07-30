@@ -9,6 +9,7 @@ namespace GuiyangMahjong.Lobby.Storage;
 /// </summary>
 public interface IPlayerHistoryStore
 {
+    /// <summary>按 joinedAtUtc/RoomId 键集分页读取玩家房间历史，返回下一页水位。</summary>
     Task<PlayerHistoryPage<PlayerRoomHistoryRecord>> ListRoomsAsync(
         string playerId,
         int pageSize,
@@ -16,6 +17,7 @@ public interface IPlayerHistoryStore
         string? beforeRoomId,
         CancellationToken cancellationToken);
 
+    /// <summary>按发生时间/EventId 键集分页读取掉线、重连和托管连接事件。</summary>
     Task<PlayerHistoryPage<PlayerConnectionHistoryRecord>> ListConnectionsAsync(
         string playerId,
         int pageSize,
@@ -29,6 +31,7 @@ public interface IPlayerHistoryStore
 /// </summary>
 public sealed class InMemoryPlayerHistoryStore : IPlayerHistoryStore
 {
+    /// <inheritdoc/>
     public Task<PlayerHistoryPage<PlayerRoomHistoryRecord>> ListRoomsAsync(
         string playerId,
         int pageSize,
@@ -41,6 +44,7 @@ public sealed class InMemoryPlayerHistoryStore : IPlayerHistoryStore
             [], null, null));
     }
 
+    /// <inheritdoc/>
     public Task<PlayerHistoryPage<PlayerConnectionHistoryRecord>> ListConnectionsAsync(
         string playerId,
         int pageSize,
@@ -62,6 +66,7 @@ public sealed class PostgresPlayerHistoryStore(
 {
     private readonly NpgsqlDataSource postgres = connections.Postgres;
 
+    /// <inheritdoc/>
     public async Task<PlayerHistoryPage<PlayerRoomHistoryRecord>> ListRoomsAsync(
         string playerId,
         int pageSize,

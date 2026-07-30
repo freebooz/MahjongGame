@@ -3,10 +3,20 @@ using GuiyangMahjong.Lobby.Services;
 
 namespace GuiyangMahjong.Lobby.Security;
 
+/// <summary>
+/// Lobby 玩家 API 的认证边界。
+/// 只保护 /v1 路由，验证 Auth HMAC 令牌和管理员撤销水位，
+/// 成功后写入最小 PlayerIdentity 并刷新在线状态。
+/// </summary>
 public sealed class PlayerAuthenticationMiddleware(RequestDelegate next)
 {
+    /// <summary>HttpContext.Items 中保存已验证玩家身份的稳定键。</summary>
     public const string PlayerItemKey = "GuiyangLobby.Player";
 
+    /// <summary>
+    /// 验证 Bearer 令牌、签发时间与撤销状态；任一步失败返回统一 401 且不调用后续管道。
+    /// 原始令牌不写日志或请求上下文。
+    /// </summary>
     public async Task InvokeAsync(
         HttpContext context,
         IPlayerTokenValidator tokenValidator,
@@ -46,6 +56,7 @@ public sealed class PlayerAuthenticationMiddleware(RequestDelegate next)
         await next(context);
     }
 
+    /// <summary>取得当前请求已验证玩家；中间件未执行时抛出异常而不是创建匿名身份。</summary>
     public static PlayerIdentity GetPlayer(HttpContext context) =>
         context.Items[PlayerItemKey] as PlayerIdentity
         ?? throw new InvalidOperationException("玩家身份中间件尚未执行");

@@ -6,11 +6,17 @@ using Microsoft.Extensions.Options;
 
 namespace GuiyangMahjong.Allocator.Services;
 
+/// <summary>把 Dedicated Server 终态故障通知 Lobby 的内部回调边界。</summary>
 public interface IInstanceFailureNotifier
 {
+    /// <summary>发送脱敏故障通知；失败抛出以便实例管理器保留重试状态。</summary>
     Task NotifyAsync(InstanceFailureNotification notification, CancellationToken cancellationToken);
 }
 
+/// <summary>
+/// 使用独立 LobbyCallbackToken 调用 Lobby 故障入口的 HTTP 实现。
+/// RequestId 每次发送唯一，失败不伪装成功；凭据不记录。
+/// </summary>
 public sealed class LobbyInstanceFailureNotifier(
     IHttpClientFactory httpClientFactory,
     IOptions<AllocatorOptions> options,
@@ -18,6 +24,7 @@ public sealed class LobbyInstanceFailureNotifier(
 {
     private readonly AllocatorOptions options = options.Value;
 
+    /// <inheritdoc/>
     public async Task NotifyAsync(InstanceFailureNotification notification, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(options.LobbyInternalUrl)) return;

@@ -87,6 +87,10 @@ public sealed class MonitoringAggregationService(
             pageSize,
             cancellationToken);
 
+    /// <summary>
+    /// 按地域、集群、Lobby、节点及业务条件分页查询房间。
+    /// 筛选身份绑定游标防止跨条件复用；来源故障由可靠性层独立降级并在元数据中披露。
+    /// </summary>
     public async Task<CursorPage<RoomListItem>> ListRoomsAsync(
         string? regionId,
         string? clusterId,

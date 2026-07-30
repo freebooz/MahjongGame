@@ -137,4 +137,8 @@ app.MapLobbyEndpoints();
 
 app.Run();
 
+/// <summary>
+/// WebApplicationFactory 集成测试可发现的 Lobby 程序入口标记。
+/// 运行时中间件、WebSocket 和端点顺序由上方顶级语句定义，该 partial 类型不保存房间状态。
+/// </summary>
 public partial class Program;
