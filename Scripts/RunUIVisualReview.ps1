@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
-    [string]$EngineRoot = 'F:\UnrealEngine-5.8.0-release',
-    [string]$ProjectPath = 'H:\MahjongGame\GuiyangMahjong.uproject',
+    [string]$EngineRoot = '',
+    [string]$ProjectPath = '',
     [string]$MapPath = '/Game/Maps/UIReviewMap',
     [string[]]$Resolutions = @('1920x1080', '1280x720', '2400x1080', '2340x1080'),
     [string]$ScreenName = 'Login',
@@ -11,6 +11,10 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+Import-Module (Join-Path $PSScriptRoot 'lib\ProjectEnvironment.psm1') -Force
+$projectRoot = Resolve-MahjongProjectRoot
+$EngineRoot = Resolve-UnrealEngineRoot -ExplicitRoot $EngineRoot
+$ProjectPath = Resolve-MahjongProjectFile -ExplicitPath $ProjectPath -ProjectRoot $projectRoot
 Add-Type -AssemblyName System.Drawing
 
 function Get-ImageMetrics {
@@ -79,7 +83,6 @@ if ($OutputPhase -notmatch '^[A-Za-z0-9_\\/-]+$' -or $OutputPhase.Contains('..')
     throw 'OutputPhase contains unsupported characters.'
 }
 
-$projectRoot = Split-Path -Parent $ProjectPath
 $outputRoot = Join-Path $projectRoot "Saved\UIReview\$OutputPhase"
 $logRoot = Join-Path $outputRoot 'Logs'
 New-Item -ItemType Directory -Path $logRoot -Force | Out-Null

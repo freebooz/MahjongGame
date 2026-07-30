@@ -4,14 +4,20 @@ from pathlib import Path
 import unreal
 
 
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEST_ROOT = "/Game/Art/Mahjong/Table"
 MESH_PATH = f"{DEST_ROOT}/Meshes/SM_StandardMahjongTable"
-REPORT_PATH = Path(
-    r"H:\MahjongGame\Saved\Reports\AutomaticMahjongTableImportReport.json"
+# 验证必须跟随当前仓库副本，避免审查另一个盘符上的旧报告或旧纹理清单。
+REPORT_PATH = (
+    PROJECT_ROOT / "Saved" / "Reports" / "AutomaticMahjongTableImportReport.json"
 )
-TEXTURE_MANIFEST_PATH = Path(
-    r"H:\MahjongGame\SourceArt\3D\MahjongTableProduction\Textures"
-    r"\AutomaticMahjongTableTextureManifest.json"
+TEXTURE_MANIFEST_PATH = (
+    PROJECT_ROOT
+    / "SourceArt"
+    / "3D"
+    / "MahjongTableProduction"
+    / "Textures"
+    / "AutomaticMahjongTableTextureManifest.json"
 )
 EXPECTED_DIMENSIONS_CM = (150.0, 150.0, 8.7025)
 EXPECTED_TEXTURE_COUNT = 15

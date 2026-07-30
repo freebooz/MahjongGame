@@ -4,6 +4,7 @@
 > 冻结日期：2026-07-29  
 > 契约版本：`telemetrySchemaVersion = 1`  
 > 数据链路：UE Dedicated Server → Lobby → Admin  
+> 机器契约：`Contracts/Monitoring/runtime-telemetry-v1.schema.json`
 > 相关 OpenAPI：`Contracts/OpenAPI/lobby-v1.openapi.yaml`
 
 ## 1. 版本与兼容规则

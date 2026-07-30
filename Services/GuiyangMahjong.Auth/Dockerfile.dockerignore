@@ -1,6 +1,8 @@
 **
 !Contracts/
 !Contracts/**
+!Services/Directory.Build.props
+!Services/Directory.Packages.props
 !Services/GuiyangMahjong.Auth/
 !Services/GuiyangMahjong.Auth/**
 Services/GuiyangMahjong.Auth/bin/

@@ -1,5 +1,7 @@
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
+# 集中编译策略与包版本必须先进入还原层，否则容器构建会绕过仓库基线。
+COPY Services/Directory.Build.props Services/Directory.Packages.props Services/
 COPY Services/GuiyangMahjong.Allocator/GuiyangMahjong.Allocator.csproj Services/GuiyangMahjong.Allocator/
 COPY Services/GuiyangMahjong.Observability/GuiyangMahjong.Observability.csproj Services/GuiyangMahjong.Observability/
 RUN dotnet restore Services/GuiyangMahjong.Allocator/GuiyangMahjong.Allocator.csproj

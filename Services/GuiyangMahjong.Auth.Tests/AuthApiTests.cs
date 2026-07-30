@@ -1,19 +1,21 @@
-extern alias lobby;
-
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
 using GuiyangMahjong.Auth.Domain;
 using GuiyangMahjong.Auth.Services;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
-using LobbyDomain = lobby::GuiyangMahjong.Lobby.Domain;
-using LobbyOptions = lobby::GuiyangMahjong.Lobby.Options;
-using LobbySecurity = lobby::GuiyangMahjong.Lobby.Security;
 
 namespace GuiyangMahjong.Auth.Tests;
 
+/// <summary>
+/// 验证 Auth HTTP API 的登录、会话轮换、监控脱敏和授权管理行为。
+/// 测试工厂只使用内存持久化，令牌兼容性通过独立契约验证而非引用 Lobby。
+/// </summary>
 public sealed class AuthApiTests(AuthWebApplicationFactory factory)
     : IClassFixture<AuthWebApplicationFactory>
 {
@@ -24,8 +26,11 @@ public sealed class AuthApiTests(AuthWebApplicationFactory factory)
         Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/health/ready")).StatusCode);
     }
 
+    /// <summary>
+    /// 登录后使用独立密码学实现验证访问令牌，确保 API 层没有绕过 v1 线契约。
+    /// </summary>
     [Fact]
-    public async Task GuestLogin_IssuesTokenAcceptedByLobbyValidator()
+    public async Task GuestLogin_IssuesTokenMatchingPlayerAccessContract()
     {
         using var client = factory.CreateClient();
         var response = await client.PostAsJsonAsync(
@@ -35,14 +40,21 @@ public sealed class AuthApiTests(AuthWebApplicationFactory factory)
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.NotNull(session);
-        var validator = new LobbySecurity.HmacPlayerTokenValidator(
-            Microsoft.Extensions.Options.Options.Create(
-                new LobbyOptions.LobbyOptions { TokenSigningKey = AuthWebApplicationFactory.SigningKey }),
-            TimeProvider.System);
-        var validation = validator.Validate(session.AccessToken);
-        Assert.True(validation.IsValid);
-        Assert.Equal(session.PlayerId, validation.Player?.PlayerId);
-        Assert.Equal("Guest", validation.Player?.Provider);
+        using var payload = ValidatePlayerAccessToken(
+            session.AccessToken,
+            AuthWebApplicationFactory.SigningKey);
+        Assert.Equal(
+            session.PlayerId,
+            payload.RootElement.GetProperty("Sub").GetString());
+        Assert.Equal(
+            session.DisplayName,
+            payload.RootElement.GetProperty("Name").GetString());
+        Assert.Equal(
+            "Guest",
+            payload.RootElement.GetProperty("Provider").GetString());
+        Assert.Equal(
+            session.AccessTokenExpiresAtUtc.ToUnixTimeSeconds(),
+            payload.RootElement.GetProperty("Exp").GetInt64());
     }
 
     [Fact]
@@ -354,6 +366,39 @@ public sealed class AuthApiTests(AuthWebApplicationFactory factory)
         return await response.Content.ReadFromJsonAsync<AuthSessionResponse>()
                ?? throw new InvalidDataException("Auth response was empty.");
     }
+
+    /// <summary>
+    /// 独立验证 API 返回令牌的 v1 线格式和 HMAC，不调用 Auth 签发器或 Lobby 验证器，
+    /// 避免测试与任一生产实现共享同一个潜在缺陷。失败时抛出测试异常。
+    /// </summary>
+    private static JsonDocument ValidatePlayerAccessToken(
+        string token,
+        string signingKey)
+    {
+        var parts = token.Split('.');
+        Assert.Equal(2, parts.Length);
+        var payloadBytes = DecodeBase64Url(parts[0]);
+        var signature = DecodeBase64Url(parts[1]);
+        var expected = HMACSHA256.HashData(
+            Encoding.UTF8.GetBytes(signingKey),
+            Encoding.ASCII.GetBytes(parts[0]));
+        Assert.True(
+            CryptographicOperations.FixedTimeEquals(signature, expected),
+            "Auth API access token signature does not match the v1 contract.");
+        return JsonDocument.Parse(payloadBytes);
+    }
+
+    /// <summary>
+    /// 解码无填充 Base64Url；非法输入交给 Convert 抛出 FormatException，使测试快速失败。
+    /// </summary>
+    private static byte[] DecodeBase64Url(string value)
+    {
+        var padded = value.Replace('-', '+').Replace('_', '/');
+        padded = padded.PadRight(
+            padded.Length + ((4 - padded.Length % 4) % 4),
+            '=');
+        return Convert.FromBase64String(padded);
+    }
 }
 
 /// <summary>Auth 内部监控玩家游标页测试投影，仅用于验证分页外壳和脱敏内容。</summary>
@@ -363,6 +408,10 @@ public sealed record MonitoringPlayerPage(
     bool HasMore,
     int PageSize);
 
+/// <summary>
+/// 为 Auth API 测试提供隔离的开发环境、固定测试凭证和内存持久化。
+/// 所有常量仅限测试进程，禁止复制到部署配置。
+/// </summary>
 public sealed class AuthWebApplicationFactory : WebApplicationFactory<Program>
 {
     public const string SigningKey = "test-only-auth-token-signing-key-which-is-long-enough";

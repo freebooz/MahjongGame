@@ -1,0 +1,23 @@
+{
+  "contractVersion": 1,
+  "description": "Auth 生产、Lobby 消费的短期玩家访问令牌确定性契约；测试密钥和令牌只用于自动化，不得进入生产配置。",
+  "format": "base64url(utf8-json-payload).base64url(hmac-sha256-signature)",
+  "algorithm": "HMAC-SHA256",
+  "payloadPropertyCasing": "PascalCase",
+  "issuedAtUnit": "unix-milliseconds",
+  "expiresAtUnit": "unix-seconds",
+  "testVector": {
+    "signingKey": "contract-test-signing-key-32-bytes-minimum-2026",
+    "issuedAtUtc": "2026-07-30T00:00:00Z",
+    "expiresAtUtc": "2026-07-30T00:15:00Z",
+    "validationTimeUtc": "2026-07-30T00:05:00Z",
+    "payload": {
+      "Sub": "contract-player-001",
+      "Name": "ContractPlayer",
+      "Provider": "Guest",
+      "Iat": 1785369600000,
+      "Exp": 1785370500
+    },
+    "token": "eyJTdWIiOiJjb250cmFjdC1wbGF5ZXItMDAxIiwiTmFtZSI6IkNvbnRyYWN0UGxheWVyIiwiUHJvdmlkZXIiOiJHdWVzdCIsIklhdCI6MTc4NTM2OTYwMDAwMCwiRXhwIjoxNzg1MzcwNTAwfQ.YIKPRggqobP40VvuO9vjp7NCX_7YS07RtYdRfyJsfUk"
+  }
+}

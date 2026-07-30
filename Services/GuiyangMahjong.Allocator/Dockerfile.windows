@@ -1,9 +1,13 @@
 # escape=`
 FROM mcr.microsoft.com/dotnet/sdk:10.0-nanoserver-ltsc2022 AS build
 WORKDIR C:\src
+# 历史 Windows 变体仍需使用集中编译基线，避免其还原结果与 Linux 生产镜像漂移。
+COPY Services\Directory.Build.props Services\Directory.Packages.props Services\
 COPY Services\GuiyangMahjong.Allocator\GuiyangMahjong.Allocator.csproj Services\GuiyangMahjong.Allocator\
+COPY Services\GuiyangMahjong.Observability\GuiyangMahjong.Observability.csproj Services\GuiyangMahjong.Observability\
 RUN dotnet restore Services\GuiyangMahjong.Allocator\GuiyangMahjong.Allocator.csproj
 COPY Contracts\ Contracts\
+COPY Services\GuiyangMahjong.Observability\ Services\GuiyangMahjong.Observability\
 COPY Services\GuiyangMahjong.Allocator\ Services\GuiyangMahjong.Allocator\
 RUN dotnet publish Services\GuiyangMahjong.Allocator\GuiyangMahjong.Allocator.csproj -c Release -o C:\app --no-restore
 

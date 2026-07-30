@@ -1,9 +1,10 @@
-$ErrorActionPreference = "Stop"
+﻿$ErrorActionPreference = "Stop"
 
-$targetDirectory = "H:\MahjongGame\Content\Art\Mahjong\Mahjong50"
-$expectedDirectory = [System.IO.Path]::GetFullPath(
-    "H:\MahjongGame\Content\Art\Mahjong\Mahjong50"
-)
+Import-Module (Join-Path $PSScriptRoot 'lib\ProjectEnvironment.psm1') -Force
+$projectRoot = Resolve-MahjongProjectRoot
+# 清理范围只允许指向本仓库中这个已知的生成资产族，避免从其他副本误删同名目录。
+$targetDirectory = Join-Path $projectRoot 'Content\Art\Mahjong\Mahjong50'
+$expectedDirectory = [System.IO.Path]::GetFullPath($targetDirectory)
 
 if (-not (Test-Path -LiteralPath $targetDirectory -PathType Container)) {
     Write-Host "[Mahjong50Orphans] target directory is already absent"

@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$EngineRoot = 'D:\UnrealEngine-5.8.0-release',
+    [string]$EngineRoot = '',
     [ValidateSet('Win64', 'Android')]
     [string]$Platform = 'Win64',
     [ValidateSet('Development', 'Shipping')]
@@ -9,7 +9,9 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$root = Split-Path -Parent $PSScriptRoot
+Import-Module (Join-Path $PSScriptRoot 'lib\ProjectEnvironment.psm1') -Force
+$root = Resolve-MahjongProjectRoot
+$EngineRoot = Resolve-UnrealEngineRoot -ExplicitRoot $EngineRoot
 $project = Join-Path $root 'GuiyangMahjong.uproject'
 $uat = Join-Path $EngineRoot 'Engine\Build\BatchFiles\RunUAT.bat'
 if ([string]::IsNullOrWhiteSpace($StagingDirectory)) {

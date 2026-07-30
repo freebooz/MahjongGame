@@ -1,3 +1,4 @@
+import tempfile
 from pathlib import Path
 
 import cv2
@@ -6,7 +7,8 @@ from PIL import Image
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-TEMP_ROOT = Path(r"C:\Users\ADMINI~1\AppData\Local\Temp")
+# 输入图片来自宿主剪贴板附件，使用操作系统临时目录以兼容不同用户与构建节点。
+TEMP_ROOT = Path(tempfile.gettempdir())
 
 ASSETS = {
     "T_Action_Pass_Reference.png": (

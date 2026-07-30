@@ -30,6 +30,15 @@ TestResults/
 **/node_modules/
 **/.angular/
 **/dist/
+**/__pycache__/
+*.py[cod]
+
+# Admin Web 的发布目录只能由 Angular 源码生成；保留占位文件满足 ASP.NET 静态资产启动约束。
+/Services/GuiyangMahjong.Admin/wwwroot/*
+!/Services/GuiyangMahjong.Admin/wwwroot/.gitkeep
+
+# Workflow C 的 publish 内容是可重复生成的验证产物；长期证据另存 Evidence 或明确的监控证据目录。
+/Artifacts/WorkflowC/
 Deploy/.env
 Deploy/linux/.env
 Deploy/observability/.env

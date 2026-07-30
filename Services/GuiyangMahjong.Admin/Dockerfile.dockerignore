@@ -1,4 +1,6 @@
 **
+!Services/Directory.Build.props
+!Services/Directory.Packages.props
 !Services/GuiyangMahjong.Admin/
 !Services/GuiyangMahjong.Admin/**
 Services/GuiyangMahjong.Admin/bin/

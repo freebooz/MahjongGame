@@ -1,19 +1,20 @@
 """Import the two supplied transparent player-avatar placeholders as UI textures."""
 
+import tempfile
 from pathlib import Path
 
 import unreal
 
 
 DESTINATION = "/Game/UI/Textures/Avatars"
+# 剪贴板附件由宿主写入当前系统临时目录，不能绑定某个 Windows 用户的短路径。
+TEMP_ROOT = Path(tempfile.gettempdir())
 SOURCES = {
-    "T_PlayerAvatar_Placeholder_A": Path(
-        r"C:\Users\ADMINI~1\AppData\Local\Temp"
-        r"\codex-clipboard-6e87b485-565f-424f-81d2-643973f6d5df.png"
+    "T_PlayerAvatar_Placeholder_A": (
+        TEMP_ROOT / "codex-clipboard-6e87b485-565f-424f-81d2-643973f6d5df.png"
     ),
-    "T_PlayerAvatar_Placeholder_B": Path(
-        r"C:\Users\ADMINI~1\AppData\Local\Temp"
-        r"\codex-clipboard-fa3a67a7-d3b0-4043-a185-28dd5d6f6732.png"
+    "T_PlayerAvatar_Placeholder_B": (
+        TEMP_ROOT / "codex-clipboard-fa3a67a7-d3b0-4043-a185-28dd5d6f6732.png"
     ),
 }
 

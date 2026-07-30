@@ -1,14 +1,21 @@
-"""Import the F:/TT Mahjong50 PBR set and build all 34 playable tile assets."""
+"""从显式配置的源目录导入 Mahjong50 PBR 资产并生成 34 张可玩牌。"""
 
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import unreal
 
 
-SOURCE_ROOT = Path("F:/TT")
+# 外部授权资产不属于仓库，必须由环境显式指定；缺失时快速失败，避免误用个人盘符旧副本。
+source_root_value = os.environ.get("MAHJONG50_SOURCE_ROOT", "").strip()
+if not source_root_value:
+    raise RuntimeError(
+        "MAHJONG50_SOURCE_ROOT is required and must point to the licensed Mahjong50 source."
+    )
+SOURCE_ROOT = Path(source_root_value).expanduser().resolve()
 MODEL_FILE = SOURCE_ROOT / "Model" / "SM_Mahjong50.fbx"
 TEXTURE_SOURCE = SOURCE_ROOT / "Textures"
 INDEX_FILE = TEXTURE_SOURCE / "Mahjong50_FaceAtlas_Index.json"

@@ -1,8 +1,5 @@
-<<<<<<< HEAD
 using System.Security.Cryptography;
-=======
 using System.Text;
->>>>>>> 50429c000bb99dda5845ee9162aabb9e75a2c8fa
 using System.Text.Json;
 using GuiyangMahjong.Lobby.Domain;
 using GuiyangMahjong.Lobby.Options;
@@ -14,6 +11,10 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace GuiyangMahjong.Lobby.Tests;
 
+/// <summary>
+/// 验证 Lobby 与 Allocator 的领域集成边界，包括路由票据、权威规则快照、
+/// Dedicated Server 生命周期以及结算哈希；测试使用内存适配器，不访问生产基础设施。
+/// </summary>
 public sealed class AllocatorIntegrationDomainTests
 {
     [Fact]

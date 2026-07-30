@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$EngineRoot = 'D:\UnrealEngine-5.8.0-release',
+    [string]$EngineRoot = '',
     [string]$ProjectPath = '',
     [ValidateSet('Development', 'Shipping')]
     [string]$Configuration = 'Development',
@@ -11,7 +11,9 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$root = Split-Path -Parent $PSScriptRoot
+Import-Module (Join-Path $PSScriptRoot 'lib\ProjectEnvironment.psm1') -Force
+$root = Resolve-MahjongProjectRoot
+$EngineRoot = Resolve-UnrealEngineRoot -ExplicitRoot $EngineRoot
 if ([string]::IsNullOrWhiteSpace($ProjectPath)) {
     $ProjectPath = Join-Path $root 'GuiyangMahjong.uproject'
 }

@@ -1,272 +1,134 @@
-extern alias LobbyContract;
-
 using System.Text.Json;
-using AdminPlayerTelemetry = GuiyangMahjong.Admin.Domain.PlayerRuntimeTelemetry;
-using AdminRuntimeTelemetry = GuiyangMahjong.Admin.Domain.RoomRuntimeTelemetry;
-using LobbyPlayerTelemetry =
-    LobbyContract::GuiyangMahjong.Lobby.Domain.PlayerRuntimeTelemetry;
-using LobbyRuntimeTelemetry =
-    LobbyContract::GuiyangMahjong.Lobby.Domain.RoomRuntimeTelemetry;
-using LobbyRpcTelemetry =
-    LobbyContract::GuiyangMahjong.Lobby.Domain.RpcMethodTelemetry;
-using LobbySettlementTelemetry =
-    LobbyContract::GuiyangMahjong.Lobby.Domain.SettlementRuntimeTelemetry;
+using GuiyangMahjong.Admin.Domain;
 
 namespace GuiyangMahjong.Admin.Tests;
 
 /// <summary>
-/// 验证 Lobby 的运行快照可以通过实际 JSON 线格式被 Admin 无损读取。
-/// 该测试阻止两个服务在独立演进时发生字段改名、类型漂移或默认值分歧。
+/// 验证 Admin 消费模型遵守独立的运行遥测 v1 JSON Schema。
+/// 测试不引用 Lobby 生产程序集，使服务可以独立编译，同时由同一机器契约阻止字段漂移。
 /// </summary>
 public sealed class RuntimeTelemetryWireContractTests
 {
     /// <summary>
-    /// 模拟 ASP.NET Core 默认 Web JSON 格式，确保属性使用 camelCase 且大小写处理与生产一致。
+    /// 使用 ASP.NET Core 默认 Web JSON 规则验证真实线格式，包括 camelCase 与可选字段默认值。
     /// </summary>
     private static readonly JsonSerializerOptions WireJsonOptions =
         new(JsonSerializerDefaults.Web);
 
     /// <summary>
-    /// 验证 Lobby 完整 v1 快照序列化后，Admin 能够无损还原所有房间和玩家字段。
+    /// 校验房间及嵌套模型的公开属性与 Schema 完全一致。
+    /// 多余或缺失字段都会失败，避免 Admin 静默丢弃 Lobby 新增指标。
     /// </summary>
     [Fact]
-    public void LobbyV1Snapshot_DeserializesInAdminWithoutLoss()
+    public async Task AdminRuntimeModels_MatchCanonicalSchemaPropertySets()
     {
-        var observedAtUtc = DateTimeOffset.Parse("2026-07-29T01:00:00Z");
-        var gameStartedAtUtc = observedAtUtc.AddMinutes(-2);
-        var disconnectedAtUtc = observedAtUtc.AddSeconds(-20);
-        var lobbySnapshot = new LobbyRuntimeTelemetry(
-            "room-contract",
-            "instance-contract",
-            observedAtUtc,
-            gameStartedAtUtc,
-            "Playing",
-            2,
-            1,
-            16.67,
-            59.98,
-            1_234,
-            256L * 1024 * 1024,
-            37.5,
-            9_876,
-            5_432,
-            "contract-build-1",
-            [
-                new LobbyPlayerTelemetry(
-                    "player-contract",
-                    0,
-                    "Reconnecting",
-                    42.5,
-                    disconnectedAtUtc,
-                    true,
-                    observedAtUtc.AddSeconds(-10),
-                    disconnectedAtUtc,
-                    null,
-                    "NetworkInterrupted",
-                    3,
-                    Guid.NewGuid().ToString())
-            ],
-            1,
-            250,
-            300,
-            400,
-            [new LobbyRpcTelemetry("Server.RequestAction", 100, 2, 1, 0, 3.5, 8.2)],
-            new LobbySettlementTelemetry(
-                "Submitted",
-                Guid.NewGuid().ToString(),
-                9,
-                new string('a', 64),
-                observedAtUtc,
-                null,
-                null));
+        using var schema = await LoadSchemaAsync();
 
-        var json = JsonSerializer.Serialize(lobbySnapshot, WireJsonOptions);
-        var adminSnapshot = JsonSerializer.Deserialize<AdminRuntimeTelemetry>(
-            json,
-            WireJsonOptions);
-
-        Assert.NotNull(adminSnapshot);
-        Assert.Equal(lobbySnapshot.RoomId, adminSnapshot.RoomId);
-        Assert.Equal(lobbySnapshot.ServerInstanceId, adminSnapshot.ServerInstanceId);
-        Assert.Equal(lobbySnapshot.ObservedAtUtc, adminSnapshot.ObservedAtUtc);
-        Assert.Equal(lobbySnapshot.GameStartedAtUtc, adminSnapshot.GameStartedAtUtc);
-        Assert.Equal(lobbySnapshot.Lifecycle, adminSnapshot.Lifecycle);
-        Assert.Equal(lobbySnapshot.CurrentRound, adminSnapshot.CurrentRound);
-        Assert.Equal(lobbySnapshot.ConnectedPlayers, adminSnapshot.ConnectedPlayers);
-        Assert.Equal(lobbySnapshot.ServerTickMilliseconds, adminSnapshot.ServerTickMilliseconds);
-        Assert.Equal(lobbySnapshot.ServerFramesPerSecond, adminSnapshot.ServerFramesPerSecond);
-        Assert.Equal(lobbySnapshot.RpcReceivedCount, adminSnapshot.RpcReceivedCount);
-        Assert.Equal(lobbySnapshot.ProcessMemoryBytes, adminSnapshot.ProcessMemoryBytes);
-        Assert.Equal(lobbySnapshot.ProcessCpuPercent, adminSnapshot.ProcessCpuPercent);
-        Assert.Equal(lobbySnapshot.NetworkIngressBytes, adminSnapshot.NetworkIngressBytes);
-        Assert.Equal(lobbySnapshot.NetworkEgressBytes, adminSnapshot.NetworkEgressBytes);
-        Assert.Equal(lobbySnapshot.BuildVersion, adminSnapshot.BuildVersion);
-        Assert.Equal(lobbySnapshot.TelemetrySchemaVersion, adminSnapshot.TelemetrySchemaVersion);
         Assert.Equal(
-            lobbySnapshot.ProcessCpuSampleWindowMilliseconds,
-            adminSnapshot.ProcessCpuSampleWindowMilliseconds);
-        Assert.Equal(lobbySnapshot.NetworkIngressBytesPerSecond, adminSnapshot.NetworkIngressBytesPerSecond);
-        Assert.Equal(lobbySnapshot.NetworkEgressBytesPerSecond, adminSnapshot.NetworkEgressBytesPerSecond);
-        Assert.Equal(lobbySnapshot.RpcMethods![0].MethodName, adminSnapshot.RpcMethods![0].MethodName);
-        Assert.Equal(lobbySnapshot.Settlement!.Status, adminSnapshot.Settlement!.Status);
-
-        var adminPlayer = Assert.Single(adminSnapshot.Players);
-        var lobbyPlayer = Assert.Single(lobbySnapshot.Players);
-        Assert.Equal(lobbyPlayer.PlayerId, adminPlayer.PlayerId);
-        Assert.Equal(lobbyPlayer.SeatIndex, adminPlayer.SeatIndex);
-        Assert.Equal(lobbyPlayer.ConnectionState, adminPlayer.ConnectionState);
-        Assert.Equal(lobbyPlayer.LatencyMilliseconds, adminPlayer.LatencyMilliseconds);
-        Assert.Equal(lobbyPlayer.DisconnectedAtUtc, adminPlayer.DisconnectedAtUtc);
-        Assert.Equal(lobbyPlayer.Trustee, adminPlayer.Trustee);
-        Assert.Equal(lobbyPlayer.TrusteeChangedAtUtc, adminPlayer.TrusteeChangedAtUtc);
-        Assert.Equal(lobbyPlayer.ConnectionChangedAtUtc, adminPlayer.ConnectionChangedAtUtc);
-        Assert.Equal(lobbyPlayer.DisconnectReason, adminPlayer.DisconnectReason);
-        Assert.Equal(lobbyPlayer.ConnectionStateSequence, adminPlayer.ConnectionStateSequence);
-        Assert.Equal(lobbyPlayer.ConnectionEventId, adminPlayer.ConnectionEventId);
+            GetSchemaPropertyNames(schema.RootElement),
+            GetWirePropertyNames<RoomRuntimeTelemetry>());
+        Assert.Equal(
+            GetDefinitionPropertyNames(schema.RootElement, "playerRuntimeTelemetry"),
+            GetWirePropertyNames<PlayerRuntimeTelemetry>());
+        Assert.Equal(
+            GetDefinitionPropertyNames(schema.RootElement, "rpcMethodTelemetry"),
+            GetWirePropertyNames<RpcMethodTelemetry>());
+        Assert.Equal(
+            GetDefinitionPropertyNames(schema.RootElement, "settlementRuntimeTelemetry"),
+            GetWirePropertyNames<SettlementRuntimeTelemetry>());
     }
 
     /// <summary>
-    /// 验证旧 v1 快照缺少版本和可选指标时，Lobby 与 Admin 都保留相同默认值和 null 语义。
+    /// 验证兼容的 v1 样例可被 Admin 读取，且缺少新增可选字段时保留约定默认值。
     /// </summary>
     [Fact]
-    public void LegacyV1Snapshot_MissingOptionalFieldsHasSameDefaultsInLobbyAndAdmin()
+    public void CanonicalV1Snapshot_DeserializesWithCompatibleDefaults()
     {
         const string json = """
         {
-          "roomId": "room-legacy",
-          "serverInstanceId": "instance-legacy",
+          "roomId": "room-contract",
+          "serverInstanceId": "instance-contract",
           "observedAtUtc": "2026-07-29T01:00:00Z",
           "gameStartedAtUtc": null,
           "lifecycle": "Waiting",
           "currentRound": 0,
-          "connectedPlayers": 0,
-          "serverTickMilliseconds": null,
-          "serverFramesPerSecond": null,
-          "rpcReceivedCount": null,
-          "processMemoryBytes": null,
-          "processCpuPercent": null,
-          "networkIngressBytes": null,
-          "networkEgressBytes": null,
-          "buildVersion": "legacy-build",
-          "players": []
+          "connectedPlayers": 1,
+          "serverTickMilliseconds": 16.67,
+          "serverFramesPerSecond": 59.98,
+          "rpcReceivedCount": 1234,
+          "processMemoryBytes": 268435456,
+          "processCpuPercent": 37.5,
+          "networkIngressBytes": 9876,
+          "networkEgressBytes": 5432,
+          "buildVersion": "contract-build-1",
+          "players": [
+            {
+              "playerId": "player-contract",
+              "seatIndex": 0,
+              "connectionState": "Connected",
+              "latencyMilliseconds": 42.5,
+              "disconnectedAtUtc": null,
+              "trustee": false
+            }
+          ]
         }
         """;
 
-        var lobbySnapshot = JsonSerializer.Deserialize<LobbyRuntimeTelemetry>(
-            json,
-            WireJsonOptions);
-        var adminSnapshot = JsonSerializer.Deserialize<AdminRuntimeTelemetry>(
+        var snapshot = JsonSerializer.Deserialize<RoomRuntimeTelemetry>(
             json,
             WireJsonOptions);
 
-        Assert.NotNull(lobbySnapshot);
-        Assert.NotNull(adminSnapshot);
-        Assert.Equal(1, lobbySnapshot.TelemetrySchemaVersion);
-        Assert.Equal(1, adminSnapshot.TelemetrySchemaVersion);
-        Assert.Null(lobbySnapshot.ProcessCpuPercent);
-        Assert.Null(adminSnapshot.ProcessCpuPercent);
-        Assert.Null(lobbySnapshot.NetworkIngressBytes);
-        Assert.Null(adminSnapshot.NetworkIngressBytes);
-        Assert.Empty(lobbySnapshot.Players);
-        Assert.Empty(adminSnapshot.Players);
+        Assert.NotNull(snapshot);
+        Assert.Equal("room-contract", snapshot.RoomId);
+        Assert.Equal(1, snapshot.TelemetrySchemaVersion);
+        Assert.Null(snapshot.ProcessCpuSampleWindowMilliseconds);
+        Assert.Null(snapshot.NetworkIngressBytesPerSecond);
+        Assert.Null(snapshot.NetworkEgressBytesPerSecond);
+        Assert.Null(snapshot.RpcMethods);
+        Assert.Null(snapshot.Settlement);
+        Assert.Equal("player-contract", Assert.Single(snapshot.Players).PlayerId);
     }
 
     /// <summary>
-    /// 验证 Lobby 与 Admin 运行快照公开属性集合一致，
-    /// 防止新增字段只更新一个服务而导致静默丢失。
+    /// 从测试输出目录读取随项目复制的权威 Schema；缺失文件视为构建配置错误。
     /// </summary>
-    [Fact]
-    public void LobbyAndAdminRuntimeModels_ExposeTheSameWirePropertyNames()
+    private static async Task<JsonDocument> LoadSchemaAsync()
     {
-        var lobbyProperties = typeof(LobbyRuntimeTelemetry)
-            .GetProperties()
-            .Select(property => property.Name)
-            .Order(StringComparer.Ordinal)
-            .ToArray();
-        var adminProperties = typeof(AdminRuntimeTelemetry)
-            .GetProperties()
-            .Select(property => property.Name)
-            .Order(StringComparer.Ordinal)
-            .ToArray();
-        var lobbyPlayerProperties = typeof(LobbyPlayerTelemetry)
-            .GetProperties()
-            .Select(property => property.Name)
-            .Order(StringComparer.Ordinal)
-            .ToArray();
-        var adminPlayerProperties = typeof(AdminPlayerTelemetry)
-            .GetProperties()
-            .Select(property => property.Name)
-            .Order(StringComparer.Ordinal)
-            .ToArray();
-
-        Assert.Equal(lobbyProperties, adminProperties);
-        Assert.Equal(lobbyPlayerProperties, adminPlayerProperties);
-    }
-
-    /// <summary>
-    /// 验证 OpenAPI 同步列出 v1 心跳字段，使实现、线协议和人工数据字典保持三方一致。
-    /// </summary>
-    [Fact]
-    public async Task LobbyOpenApi_DocumentsEveryV1HeartbeatField()
-    {
-        var contractPath = Path.Combine(
+        var path = Path.Combine(
             AppContext.BaseDirectory,
             "Contracts",
-            "lobby-v1.openapi.yaml");
-        var openApi = await File.ReadAllTextAsync(contractPath);
-        string[] expectedFields =
-        [
-            "telemetrySchemaVersion",
-            "roomId",
-            "heartbeatCredential",
-            "connectedPlayers",
-            "connectedPlayerIds",
-            "roomLifecycle",
-            "roundId",
-            "buildVersion",
-            "sentAtUtc",
-            "gameStartedAtUtc",
-            "serverTickMilliseconds",
-            "serverFramesPerSecond",
-            "rpcReceivedCount",
-            "processMemoryBytes",
-            "processCpuPercent",
-            "processCpuSampleWindowMilliseconds",
-            "networkIngressBytes",
-            "networkEgressBytes",
-            "rpcMethods",
-            "settlement",
-            "players",
-            "playerId",
-            "seatIndex",
-            "connectionState",
-            "latencyMilliseconds",
-            "disconnectedAtUtc",
-            "trustee",
-            "trusteeChangedAtUtc",
-            "connectionChangedAtUtc",
-            "reconnectedAtUtc",
-            "disconnectReason",
-            "connectionStateSequence",
-            "connectionEventId",
-            "methodName",
-            "receivedCount",
-            "rejectedCount",
-            "failedCount",
-            "timeoutCount",
-            "p95DurationMilliseconds",
-            "p99DurationMilliseconds",
-            "status",
-            "resultSequence",
-            "resultHash",
-            "submittedAtUtc",
-            "confirmedAtUtc",
-            "failureReason"
-        ];
-
-        foreach (var field in expectedFields)
-        {
-            Assert.Contains($"{field}:", openApi, StringComparison.Ordinal);
-        }
+            "runtime-telemetry-v1.schema.json");
+        await using var stream = File.OpenRead(path);
+        return await JsonDocument.ParseAsync(stream);
     }
+
+    /// <summary>
+    /// 返回根对象的排序属性名，排序消除 JSON 与反射声明顺序差异。
+    /// </summary>
+    private static string[] GetSchemaPropertyNames(JsonElement schema) =>
+        schema.GetProperty("properties")
+            .EnumerateObject()
+            .Select(property => property.Name)
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+
+    /// <summary>
+    /// 返回指定嵌套定义的排序属性名；定义缺失会立即暴露契约文件损坏。
+    /// </summary>
+    private static string[] GetDefinitionPropertyNames(
+        JsonElement schema,
+        string definitionName) =>
+        GetSchemaPropertyNames(
+            schema.GetProperty("$defs").GetProperty(definitionName));
+
+    /// <summary>
+    /// 按生产 Web JSON 命名策略计算模型线协议属性名。
+    /// </summary>
+    private static string[] GetWirePropertyNames<T>() =>
+        typeof(T)
+            .GetProperties()
+            .Select(property =>
+                JsonNamingPolicy.CamelCase.ConvertName(property.Name))
+            .Order(StringComparer.Ordinal)
+            .ToArray();
 }

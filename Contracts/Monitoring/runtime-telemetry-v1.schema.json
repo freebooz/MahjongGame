@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:guiyang-mahjong:monitoring:runtime-telemetry:v1",
+  "title": "贵阳麻将房间运行遥测 v1",
+  "description": "Lobby 生产、Admin 消费的房间运行快照线协议。属性集合是兼容性边界；可空字段不得被解释为零值。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "roomId",
+    "serverInstanceId",
+    "observedAtUtc",
+    "lifecycle",
+    "currentRound",
+    "connectedPlayers",
+    "buildVersion",
+    "players"
+  ],
+  "properties": {
+    "roomId": { "type": "string", "minLength": 1 },
+    "serverInstanceId": { "type": "string", "minLength": 1 },
+    "observedAtUtc": { "type": "string", "format": "date-time" },
+    "gameStartedAtUtc": { "type": ["string", "null"], "format": "date-time" },
+    "lifecycle": { "type": "string" },
+    "currentRound": { "type": "integer", "minimum": 0 },
+    "connectedPlayers": { "type": "integer", "minimum": 0, "maximum": 4 },
+    "serverTickMilliseconds": { "type": ["number", "null"], "minimum": 0 },
+    "serverFramesPerSecond": { "type": ["number", "null"], "minimum": 0 },
+    "rpcReceivedCount": { "type": ["integer", "null"], "minimum": 0 },
+    "processMemoryBytes": { "type": ["integer", "null"], "minimum": 0 },
+    "processCpuPercent": { "type": ["number", "null"], "minimum": 0 },
+    "networkIngressBytes": { "type": ["integer", "null"], "minimum": 0 },
+    "networkEgressBytes": { "type": ["integer", "null"], "minimum": 0 },
+    "buildVersion": { "type": "string" },
+    "players": {
+      "type": "array",
+      "maxItems": 4,
+      "items": { "$ref": "#/$defs/playerRuntimeTelemetry" }
+    },
+    "telemetrySchemaVersion": { "const": 1 },
+    "processCpuSampleWindowMilliseconds": { "type": ["number", "null"], "minimum": 0 },
+    "networkIngressBytesPerSecond": { "type": ["number", "null"], "minimum": 0 },
+    "networkEgressBytesPerSecond": { "type": ["number", "null"], "minimum": 0 },
+    "rpcMethods": {
+      "type": ["array", "null"],
+      "items": { "$ref": "#/$defs/rpcMethodTelemetry" }
+    },
+    "settlement": {
+      "anyOf": [
+        { "$ref": "#/$defs/settlementRuntimeTelemetry" },
+        { "type": "null" }
+      ]
+    }
+  },
+  "$defs": {
+    "playerRuntimeTelemetry": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "playerId": { "type": "string", "minLength": 1 },
+        "seatIndex": { "type": "integer", "minimum": -1, "maximum": 3 },
+        "connectionState": {
+          "enum": ["Connected", "Disconnected", "Reconnecting"]
+        },
+        "latencyMilliseconds": { "type": ["number", "null"], "minimum": 0 },
+        "disconnectedAtUtc": { "type": ["string", "null"], "format": "date-time" },
+        "trustee": { "type": ["boolean", "null"] },
+        "trusteeChangedAtUtc": { "type": ["string", "null"], "format": "date-time" },
+        "connectionChangedAtUtc": { "type": ["string", "null"], "format": "date-time" },
+        "reconnectedAtUtc": { "type": ["string", "null"], "format": "date-time" },
+        "disconnectReason": { "type": ["string", "null"] },
+        "connectionStateSequence": { "type": ["integer", "null"], "minimum": 0 },
+        "connectionEventId": { "type": ["string", "null"] }
+      }
+    },
+    "rpcMethodTelemetry": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "methodName": { "type": "string", "minLength": 1 },
+        "receivedCount": { "type": "integer", "minimum": 0 },
+        "rejectedCount": { "type": "integer", "minimum": 0 },
+        "failedCount": { "type": "integer", "minimum": 0 },
+        "timeoutCount": { "type": "integer", "minimum": 0 },
+        "p95DurationMilliseconds": { "type": ["number", "null"], "minimum": 0 },
+        "p99DurationMilliseconds": { "type": ["number", "null"], "minimum": 0 }
+      }
+    },
+    "settlementRuntimeTelemetry": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "status": { "type": "string" },
+        "matchId": { "type": "string", "minLength": 1 },
+        "resultSequence": { "type": ["integer", "null"], "minimum": 0 },
+        "resultHash": { "type": ["string", "null"] },
+        "submittedAtUtc": { "type": ["string", "null"], "format": "date-time" },
+        "confirmedAtUtc": { "type": ["string", "null"], "format": "date-time" },
+        "failureReason": { "type": ["string", "null"] }
+      }
+    }
+  }
+}

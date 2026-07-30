@@ -1,7 +1,12 @@
 # 《贵阳捉鸡麻将》全套应用架构与详细说明
 
-> 文档版本：1.0  
-> 核对日期：2026-07-20  
+> 文档状态：**Current / 核心架构**
+> 说明：本文描述系统级边界；监控管理细节以
+> [服务器、房间与玩家实时监控](REALTIME_SERVER_PLAYER_MONITORING_REVIEW_20260728.md)
+> 和 [玩家监控管理设计](PLAYER_MONITORING_ADMIN_DESIGN.md) 为准。
+>
+> 文档版本：1.1
+> 核对日期：2026-07-30
 > 适用范围：Unreal Engine 5.8 PC/Android/平板客户端、Auth、Lobby、Allocator、UE Dedicated Server、PostgreSQL、Redis、CI 与部署清单。
 
 ## 1. 文档目的
@@ -824,11 +829,14 @@ Allocator 使用普通非 root Linux 容器、只读根文件系统、宿主网�
 
 ## 21. 当前验证状态
 
-截至 2026-07-20：
+截至 2026-07-30：
 
 | 项目 | 状态 | 证据/说明 |
 |---|---|---|
-| Linux .NET 全套测试 | 50/50 通过 | Allocator 11、Auth 5+外部存储 2、Lobby 28+外部存储 4 |
+| .NET Release 构建 | 通过 | 11 个项目，0 warning / 0 error |
+| .NET 常规测试 | 149/149 通过 | Admin 65、Lobby 47、Allocator 20、Auth 12、PlayerData 5 |
+| ExternalPersistence | 11/11 通过 | Auth 4、Lobby 7 |
+| Docker 服务最终镜像 | 5/5 通过 | Auth、Lobby、PlayerData、Admin、game-node |
 | Linux 一键部署 | 通过 | 重复 install、真实 readiness、建房/分配/Drain 冒烟 |
 | 自动回滚 | 通过 | 缺失镜像受控失败后恢复上一版本并重新冒烟 |
 | WSL 重启恢复 | 通过 | D 盘 Ubuntu 22.04、systemd、Docker、登录启动任务结果码 0 |
@@ -836,7 +844,7 @@ Allocator 使用普通非 root Linux 容器、只读根文件系统、宿主网�
 | 一服四客户端自动化断线重连 | 通过 | `Saved/Integration/Phase17Reconnect/20260717-100028/result.json` |
 | Win64 Game/Server 历史构建 | 通过 | 阶段 6、7 文档与构建产物 |
 | 三维麻将资产 | 已生成并导入 | Blender、FBX/GLB/USD、UE StaticMesh |
-| UE LinuxServer 首次构建 | 进行中 | v26 Clang 20.1.8 已安装；UAT Build/Cook/Stage 运行中 |
+| UE LinuxServer 与 game-node | 通过构建验证 | 真实 LinuxServer 制品已进入本地 game-node 最终镜像 |
 | 四名玩家人工完整对局 | 待验收 | 自动化结果不能替代人工交互 |
 | Android 当前安装包 | 仓库内未发现 APK/AAB | 需要重新打包并真机验证 |
 | Android 当前连接 | 未发现在线 ADB 设备 | 安装前需重新连接并授权 |
@@ -853,7 +861,7 @@ Allocator 使用普通非 root Linux 容器、只读根文件系统、宿主网�
 7. 四名玩家人工完成创建、加入、准备、整局操作、重连、结算和返回大厅；
 8. Android 手机和平板真机验证刘海、全屏、DPI、中文字体、触控、音频和后台切换；
 9. Kubernetes Secret 由密钥系统注入，镜像从 `latest` 改为不可变 digest；
-10. 确认当前 Phase 8 外部持久化和 CI 变更已提交并在 GitHub Actions 实际通过。
+10. 确认外部持久化、契约门禁和镜像矩阵在目标分支 GitHub Actions 实际通过。
 
 ## 23. 关键文件索引
 
@@ -874,7 +882,6 @@ Allocator 使用普通非 root Linux 容器、只读根文件系统、宿主网�
 | 四端完整对局 | `Scripts/RunFullMatchIntegration.ps1` |
 | 重连集成 | `Scripts/RunReconnectIntegration.ps1` |
 | 三维麻将资产 | `Scripts/Blender/GenerateMahjongTileAssets.py`、`SourceArt/3D/MahjongTiles` |
-| 历史架构图 | `claudedocs/system_architecture_diagrams.md` |
 
 ## 24. 最终说明
 

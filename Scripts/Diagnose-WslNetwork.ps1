@@ -1,10 +1,18 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
     [string]$Distribution = 'Ubuntu-22.04',
-    [string]$RepositoryPath = '/home/freebooz/src/MahjongGame'
+    [string]$RepositoryPath = ''
 )
 
 $ErrorActionPreference = 'Stop'
+# 诊断入口使用与部署一致的环境变量，避免不同脚本指向两个个人目录。
+if ([string]::IsNullOrWhiteSpace($RepositoryPath)) {
+    if ($env:MAHJONG_LINUX_REPOSITORY_PATH) {
+        $RepositoryPath = $env:MAHJONG_LINUX_REPOSITORY_PATH
+    } else {
+        $RepositoryPath = '/srv/guiyang-mahjong'
+    }
+}
 Write-Host '== WSL distributions =='
 wsl.exe --list --verbose
 

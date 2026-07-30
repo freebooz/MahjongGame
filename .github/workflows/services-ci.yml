@@ -4,7 +4,17 @@ on:
   push:
     paths:
       - "Services/**"
+      - ".editorconfig"
+      - ".gitignore"
+      - ".github/CODEOWNERS"
+      - "README.md"
+      - "Docs/README.md"
+      - "Scripts/README.md"
+      - "SourceArt/README.md"
+      - "Artifacts/README.md"
+      - "Evidence/README.md"
       - "Contracts/OpenAPI/**"
+      - "Contracts/Authentication/**"
       - "Contracts/Monitoring/**"
       - "Deploy/capacity/**"
       - "Deploy/linux/**"
@@ -15,6 +25,8 @@ on:
       - "Scripts/Test-InvestigationHistoryContracts.ps1"
       - "Scripts/Test-SloReleaseGate.ps1"
       - "Scripts/Test-GovernanceContracts.ps1"
+      - "Scripts/Test-ProjectStructureGovernance.ps1"
+      - "Scripts/lib/**"
       - "Docs/RUNBOOKS/SLO_MULTI_CLUSTER_GOVERNANCE.md"
       - "Scripts/Load/**"
       - "Scripts/Linux/test-postgres-least-privilege.sh"
@@ -23,7 +35,17 @@ on:
   pull_request:
     paths:
       - "Services/**"
+      - ".editorconfig"
+      - ".gitignore"
+      - ".github/CODEOWNERS"
+      - "README.md"
+      - "Docs/README.md"
+      - "Scripts/README.md"
+      - "SourceArt/README.md"
+      - "Artifacts/README.md"
+      - "Evidence/README.md"
       - "Contracts/OpenAPI/**"
+      - "Contracts/Authentication/**"
       - "Contracts/Monitoring/**"
       - "Deploy/capacity/**"
       - "Deploy/linux/**"
@@ -34,6 +56,8 @@ on:
       - "Scripts/Test-InvestigationHistoryContracts.ps1"
       - "Scripts/Test-SloReleaseGate.ps1"
       - "Scripts/Test-GovernanceContracts.ps1"
+      - "Scripts/Test-ProjectStructureGovernance.ps1"
+      - "Scripts/lib/**"
       - "Docs/RUNBOOKS/SLO_MULTI_CLUSTER_GOVERNANCE.md"
       - "Scripts/Load/**"
       - "Scripts/Linux/test-postgres-least-privilege.sh"
@@ -80,6 +104,10 @@ jobs:
           dotnet-version: 10.0.x
       - name: Restore
         run: dotnet restore GuiyangMahjong.Services.slnx
+      - name: Project structure governance gate
+        working-directory: .
+        shell: pwsh
+        run: ./Scripts/Test-ProjectStructureGovernance.ps1
       - name: Build
         run: dotnet build GuiyangMahjong.Services.slnx --configuration Release --no-restore
       - name: Unit and contract tests
@@ -128,6 +156,49 @@ jobs:
           name: services-test-results
           path: "Services/**/TestResults/*.trx"
           if-no-files-found: error
+
+  docker-build-matrix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: auth
+            dockerfile: Services/GuiyangMahjong.Auth/Dockerfile
+            target: ""
+          - name: lobby
+            dockerfile: Services/GuiyangMahjong.Lobby/Dockerfile
+            target: ""
+          - name: player-data
+            dockerfile: Services/GuiyangMahjong.PlayerData/Dockerfile
+            target: ""
+          - name: admin
+            dockerfile: Services/GuiyangMahjong.Admin/Dockerfile
+            target: ""
+          # Services CI 没有 UE LinuxServer 制品，只验证 Allocator 编译阶段；
+          # 最终 game-node 由携带真实 Artifacts/LinuxServer 的发布链构建。
+          - name: allocator-build
+            dockerfile: Services/GuiyangMahjong.Allocator/Dockerfile
+            target: build
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build ${{ matrix.name }} image
+        shell: bash
+        env:
+          DOCKER_BUILDKIT: "1"
+          MATRIX_DOCKERFILE: ${{ matrix.dockerfile }}
+          MATRIX_NAME: ${{ matrix.name }}
+          MATRIX_TARGET: ${{ matrix.target }}
+        run: |
+          arguments=(
+            --file "${MATRIX_DOCKERFILE}"
+            --tag "local/guiyang-mahjong-${MATRIX_NAME}:ci"
+          )
+          if [[ -n "${MATRIX_TARGET}" ]]; then
+            arguments+=(--target "${MATRIX_TARGET}")
+          fi
+          docker build "${arguments[@]}" .
 
   linux-deployment-files:
     runs-on: ubuntu-latest

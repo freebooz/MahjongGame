@@ -2,6 +2,19 @@
 
 服务端统一部署到 Linux。Windows 仅用于 UE 交叉编译和通过 WSL2 管理本地 Linux 环境；Auth、Lobby、Allocator、PostgreSQL、Redis 与 UE Dedicated Server 均不作为 Windows 服务运行。
 
+## 部署入口分级
+
+| 入口 | 状态 | 用途与约束 |
+| --- | --- | --- |
+| `Deploy/linux/deploy.sh` | Current / Production | Linux 唯一生产安装、升级、状态、备份和回滚入口 |
+| `Deploy/linux/compose.yaml` | Current / Production | Linux 服务编排基线，密钥来自未跟踪 `.env` |
+| `Deploy/observability/compose.yaml` | Current | Prometheus、Loki、Tempo、Grafana 可观测性栈 |
+| `Deploy/kubernetes`、Agones 清单 | Current / Cluster | 多集群与游戏服编排；发布前执行治理契约门禁 |
+| `Deploy/docker-compose.yml` | Compatibility | 旧本地入口，仅用于兼容验证，不得作为新生产部署依据 |
+| Windows Allocator 容器清单 | Historical | 只保留回溯，生产环境禁止使用 |
+
+所有新部署文档和自动化必须指向 Current 入口。兼容/历史入口的变更不得引入第二套密钥、包版本或数据库迁移事实来源。
+
 ## 推荐环境
 
 - Ubuntu 22.04 LTS x86_64（原生服务器、虚拟机或 WSL2）
@@ -55,7 +68,9 @@ vmIdleTimeout=86400000
 为了让 WSL 本地验收栈在没有终端窗口时保持运行，可把仓库提供的启动脚本注册为当前用户登录任务：
 
 ```powershell
-$action = New-ScheduledTaskAction -Execute powershell.exe -Argument "-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File `"H:\MahjongGame\Scripts\Start-WslServerStack.ps1`""
+$projectRoot = (Resolve-Path '.').Path
+$startupScript = Join-Path $projectRoot 'Scripts\Start-WslServerStack.ps1'
+$action = New-ScheduledTaskAction -Execute powershell.exe -Argument "-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$startupScript`""
 $trigger = New-ScheduledTaskTrigger -AtLogOn -User "$env:USERDOMAIN\$env:USERNAME"
 Register-ScheduledTask -TaskName GuiyangMahjong-WSL-Server -Action $action -Trigger $trigger -Force
 ```
@@ -76,7 +91,7 @@ game-node 只接受 `Artifacts/LinuxServer` 中已 Cook/Stage 的真实 UE Linux
 Windows 构建机先安装 UE 5.8 v26 Linux 交叉工具链并设置 `LINUX_MULTIARCH_ROOT`，然后执行：
 
 ```powershell
-.\Scripts\Build-LinuxServer.ps1 -EngineRoot F:\UnrealEngine-5.8.0-release -Configuration Shipping
+.\Scripts\Build-LinuxServer.ps1 -EngineRoot $env:UE_ROOT -Configuration Shipping
 ```
 
 构建输出为 `Artifacts/LinuxServer`，包含 `build-manifest.json`。将完整目录同步到 Linux 仓库后升级：
@@ -90,6 +105,7 @@ sudo ./Deploy/linux/deploy.sh upgrade --version <immutable-version>
 在本机 WSL 环境可用一个命令完成产物校验、同步、variant 切换、镜像构建和升级：
 
 ```powershell
+$env:MAHJONG_LINUX_REPOSITORY_PATH = '/srv/guiyang-mahjong'
 .\Scripts\Deploy-LinuxServerToWsl.ps1 -Configuration Shipping -Version <immutable-version>
 ```
 
@@ -121,8 +137,8 @@ sudo ./Deploy/linux/deploy.sh restore --backup-file /path/to/backup.tar.gz --con
 ## 架构与验收资料
 
 - [完整应用架构](../Docs/FULL_APPLICATION_ARCHITECTURE.md)
-- [Linux/WSL 部署审查与执行计划](../claudedocs/workflow_linux_wsl_deployment.md)
-- [控制平面加固状态](../claudedocs/phase7_control_plane_hardening_status.md)
+- [告警运行手册](../Docs/RUNBOOKS/OBSERVABILITY_ALERTS.md)
+- [多集群与 SLO 治理运行手册](../Docs/RUNBOOKS/SLO_MULTI_CLUSTER_GOVERNANCE.md)
 
 旧的 `Deploy/docker-compose.yml` 和 Windows Kubernetes Allocator 清单只保留作历史兼容；新部署必须使用 `Deploy/linux/compose.yaml`。
 

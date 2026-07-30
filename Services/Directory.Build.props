@@ -1,0 +1,12 @@
+<Project>
+  <PropertyGroup>
+    <!-- 服务端统一使用 .NET 10，避免单个项目升级后形成不可见的运行时分叉。 -->
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <Deterministic>true</Deterministic>
+    <!-- CI 环境启用可复现构建元数据，本地调试不强制写入 CI 标记。 -->
+    <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
+  </PropertyGroup>
+</Project>

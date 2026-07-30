@@ -1,12 +1,19 @@
 [CmdletBinding()]
 param(
-    [string]$EngineRoot = 'F:\UnrealEngine-5.8.0-release',
-    [string]$ProjectPath = 'H:\MahjongGame\GuiyangMahjong.uproject',
-    [string]$OutputPath = 'H:\MahjongGame\Saved\UIReview\Phase20\readiness.json'
+    [string]$EngineRoot = '',
+    [string]$ProjectPath = '',
+    [string]$OutputPath = ''
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+Import-Module (Join-Path $PSScriptRoot 'lib\ProjectEnvironment.psm1') -Force
+$projectRoot = Resolve-MahjongProjectRoot
+$EngineRoot = Resolve-UnrealEngineRoot -ExplicitRoot $EngineRoot
+$ProjectPath = Resolve-MahjongProjectFile -ExplicitPath $ProjectPath -ProjectRoot $projectRoot
+if ([string]::IsNullOrWhiteSpace($OutputPath)) {
+    $OutputPath = Join-Path $projectRoot 'Saved\UIReview\Phase20\readiness.json'
+}
 Add-Type -AssemblyName PresentationCore
 Add-Type -AssemblyName System.Windows.Forms
 

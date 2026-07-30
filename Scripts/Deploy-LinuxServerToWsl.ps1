@@ -1,17 +1,27 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
-    [string]$EngineRoot = 'D:\UnrealEngine-5.8.0-release',
+    [string]$EngineRoot = '',
     [ValidateSet('Development', 'Shipping')]
     [string]$Configuration = 'Development',
     [string]$Distribution = 'Ubuntu',
     [string]$WslUser = 'root',
-    [string]$LinuxRepositoryPath = '/home/administrator/src/MahjongGame',
+    [string]$LinuxRepositoryPath = '',
     [string]$Version = '',
     [switch]$ReuseExistingBuild
 )
 
 $ErrorActionPreference = 'Stop'
-$root = Split-Path -Parent $PSScriptRoot
+Import-Module (Join-Path $PSScriptRoot 'lib\ProjectEnvironment.psm1') -Force
+$root = Resolve-MahjongProjectRoot
+$EngineRoot = Resolve-UnrealEngineRoot -ExplicitRoot $EngineRoot
+# WSL 同步目标允许环境覆盖；通用默认值避免把个人用户名写入自动化入口。
+if ([string]::IsNullOrWhiteSpace($LinuxRepositoryPath)) {
+    if ($env:MAHJONG_LINUX_REPOSITORY_PATH) {
+        $LinuxRepositoryPath = $env:MAHJONG_LINUX_REPOSITORY_PATH
+    } else {
+        $LinuxRepositoryPath = '/srv/guiyang-mahjong'
+    }
+}
 $artifact = Join-Path $root 'Artifacts\LinuxServer'
 if ([string]::IsNullOrWhiteSpace($Version)) {
     $Version = 'ue-linux-{0}' -f [DateTimeOffset]::UtcNow.ToString('yyyyMMdd-HHmmss')

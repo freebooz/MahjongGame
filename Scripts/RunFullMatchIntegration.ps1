@@ -1,13 +1,17 @@
 [CmdletBinding()]
 param(
-    [string]$EngineRoot = 'F:\UnrealEngine-5.8.0-release',
-    [string]$ProjectPath = 'H:\MahjongGame\GuiyangMahjong.uproject',
+    [string]$EngineRoot = '',
+    [string]$ProjectPath = '',
     [int]$Port = 17778,
     [int]$TimeoutSeconds = 180
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+Import-Module (Join-Path $PSScriptRoot 'lib\ProjectEnvironment.psm1') -Force
+$projectRoot = Resolve-MahjongProjectRoot
+$EngineRoot = Resolve-UnrealEngineRoot -ExplicitRoot $EngineRoot
+$ProjectPath = Resolve-MahjongProjectFile -ExplicitPath $ProjectPath -ProjectRoot $projectRoot
 
 function Test-LogMarker {
     param([string]$Path, [string]$Marker)
@@ -38,7 +42,6 @@ if (-not (Test-Path -LiteralPath $editor)) { throw "UnrealEditor-Cmd.exe not fou
 if (-not (Test-Path -LiteralPath $ProjectPath)) { throw "Project not found: $ProjectPath" }
 if ($Port -lt 1024 -or $Port -gt 65535) { throw 'Port must be between 1024 and 65535.' }
 
-$projectRoot = Split-Path -Parent $ProjectPath
 $runId = Get-Date -Format 'yyyyMMdd-HHmmss'
 $outputRoot = Join-Path $projectRoot "Saved\Integration\FullMatch\$runId"
 New-Item -ItemType Directory -Path $outputRoot -Force | Out-Null

@@ -1,12 +1,20 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
     [string]$Distribution = 'Ubuntu',
     [string]$WslUser = 'root',
-    [string]$RepositoryPath = '/home/administrator/src/MahjongGame',
+    [string]$RepositoryPath = '',
     [int]$DockerTimeoutSeconds = 240
 )
 
 $ErrorActionPreference = 'Stop'
+# 登录任务和手工部署必须解析到同一个 Linux 仓库，否则 readiness 可能检查旧版本。
+if ([string]::IsNullOrWhiteSpace($RepositoryPath)) {
+    if ($env:MAHJONG_LINUX_REPOSITORY_PATH) {
+        $RepositoryPath = $env:MAHJONG_LINUX_REPOSITORY_PATH
+    } else {
+        $RepositoryPath = '/srv/guiyang-mahjong'
+    }
+}
 $utf8 = New-Object System.Text.UTF8Encoding($false)
 [Console]::OutputEncoding = $utf8
 $OutputEncoding = $utf8

@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
-    [string]$EngineRoot = 'F:\UnrealEngine-5.8.0-release',
-    [string]$ProjectPath = 'H:\MahjongGame\GuiyangMahjong.uproject',
+    [string]$EngineRoot = '',
+    [string]$ProjectPath = '',
     [string[]]$Resolutions = @('1920x1080', '1280x720'),
     [string[]]$Screens = @(
         'Login', 'Lobby', 'CreateRoomDialog', 'JoinRoomDialog', 'Room',
@@ -13,12 +13,15 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+Import-Module (Join-Path $PSScriptRoot 'lib\ProjectEnvironment.psm1') -Force
+$projectRoot = Resolve-MahjongProjectRoot
+$EngineRoot = Resolve-UnrealEngineRoot -ExplicitRoot $EngineRoot
+$ProjectPath = Resolve-MahjongProjectFile -ExplicitPath $ProjectPath -ProjectRoot $projectRoot
 
 $runner = Join-Path $PSScriptRoot 'RunUIVisualReview.ps1'
 if (-not (Test-Path -LiteralPath $runner)) { throw "Visual review runner not found: $runner" }
 if ($OutputPhase -notmatch '^[A-Za-z0-9_-]+$') { throw 'OutputPhase contains unsupported characters.' }
 
-$projectRoot = Split-Path -Parent $ProjectPath
 $matrixRoot = Join-Path $projectRoot "Saved\UIReview\$OutputPhase"
 New-Item -ItemType Directory -Path $matrixRoot -Force | Out-Null
 $allResults = [System.Collections.Generic.List[object]]::new()

@@ -1,0 +1,11 @@
+# 默认责任人来自仓库 origin 所有者；后续团队扩展时按目录替换为 GitHub Team。
+* @freebooz
+
+# 高风险边界单独列出，确保未来修改仍触发明确审查。
+/Source/ @freebooz
+/Content/ @freebooz
+/SourceArt/ @freebooz
+/Services/ @freebooz
+/Contracts/ @freebooz
+/Deploy/ @freebooz
+/.github/ @freebooz

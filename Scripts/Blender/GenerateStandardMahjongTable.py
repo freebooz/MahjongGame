@@ -1,19 +1,13 @@
-"""Generate the premium 115 x 115 cm PBR Mahjong tabletop in Blender 5.1.
+"""生成 115 × 115 cm 的高保真 PBR 麻将桌台面源模型。
 
-The source scene remains artist-editable and contains:
+脚本只生成圆角胡桃木围框、细木工接缝和下沉式绿色绒布，不包含桌腿、麻将牌、
+中控器或机械结构。可编辑产品相机和四点棚拍灯光保存在独立集合中，不参与模型导出。
+打牌平面固定为 Z=0，以保持 Unreal 运行时牌面放置契约。
 
-* a rounded walnut apron and raised hand rail with modeled joinery seams;
-* a recessed rounded green felt playing surface;
-* image-based Base Color, Roughness, Normal and AO PBR materials;
-* a product-review camera plus three-point studio lighting.
-
-The playing surface is authored at Z=0 so the existing Unreal tile placement
-continues to work.  The model contains no legs, tiles, controller, or mechanics.
-
-Command line:
+命令行：
 
     blender --background --python Scripts/Blender/GenerateStandardMahjongTable.py \
-        -- E:/work/Game/MahjongGame --render --export-fbx --export-glb
+        -- <project-root> --render --export-fbx --export-glb
 """
 
 from __future__ import annotations
@@ -30,15 +24,9 @@ import bpy
 from mathutils import Vector
 
 
-<<<<<<< HEAD
-SCRIPT_VERSION = "3.4.0"
-MODEL_COLLECTION = "MG_MahjongTableTop"
-PRESENTATION_COLLECTION = "MG_MahjongTableTop_Presentation"
-=======
 SCRIPT_VERSION = "4.0.0"
 MODEL_COLLECTION = "MG_MahjongTable_Model"
 PRESENTATION_COLLECTION = "MG_MahjongTable_Studio"
->>>>>>> 0c9535ac9fd94c6fd02ed84a6dedfc084cd8892e
 ASSET_NAME = "SM_StandardMahjongTable"
 WOOD_OBJECT_NAME = "SM_MahjongTable_RoundedWalnutFrame"
 FELT_OBJECT_NAME = "SM_MahjongTable_RecessedFelt"
@@ -50,48 +38,13 @@ JOINT_MATERIAL_NAME = "M_Table_WoodJoint_PBR"
 
 @dataclass(frozen=True)
 class TabletopDimensions:
-    """Production dimensions in meters."""
+    """桌面生产尺寸，统一使用米；实例不可变，确保建模、验证和 manifest 口径一致。"""
 
+    # 外框、打牌区与总高度决定 Unreal 碰撞和摆牌边界。
     size: float = 1.150
-<<<<<<< HEAD
-    thickness: float = 0.065
-    frame_width: float = 0.090
-    felt_thickness: float = 0.006
-    frame_lip_above_felt: float = 0.005
-    rail_edge_bevel: float = 0.012
-    rail_bevel_segments: int = 6
-    base_band_inset: float = 0.003
-    base_band_bevel: float = 0.0035
-    base_band_bevel_segments: int = 3
-    base_band_top_z: float = -0.018
-    bullnose_bottom_z: float = -0.030
-    outer_corner_radius: float = 0.024
-    outer_corner_arc_segments: int = 5
-    # A furniture-tight joint: the previous 3 mm opening read as a structural
-    # crack at gameplay distance. Keep a sub-millimetre seam so the four-rail
-    # construction remains legible without looking incorrectly assembled.
-    miter_joint_width: float = 0.0006
-    felt_corner_radius: float = 0.012
-    felt_corner_segments: int = 16
-
-    @property
-    def playing_size(self) -> float:
-        return self.size - 2.0 * self.frame_width
-
-    @property
-    def felt_top(self) -> float:
-        return 0.0
-
-    @property
-    def frame_top(self) -> float:
-        return self.frame_lip_above_felt
-
-    @property
-    def frame_bottom(self) -> float:
-        return self.frame_top - self.thickness
-=======
     playing_size: float = 0.920
     total_height: float = 0.125
+    # 下围裙和上扶手分别描述家具截面，不允许跨过 Z=0 打牌平面。
     apron_bottom: float = -0.095
     apron_top: float = -0.006
     apron_corner_radius: float = 0.052
@@ -108,12 +61,14 @@ class TabletopDimensions:
     felt_bevel: float = 0.003
     felt_bevel_segments: int = 4
     decorative_band_z: float = -0.028
+    # 接缝是可见的浅层家具细节，宽度单位为米，不代表真实结构裂缝。
     seam_distance_from_corner: float = 0.155
     seam_width: float = 0.0012
->>>>>>> 0c9535ac9fd94c6fd02ed84a6dedfc084cd8892e
 
 
 def arguments() -> argparse.Namespace:
+    """解析 Blender `--` 之后的参数；所有导出和渲染动作默认关闭，避免误写资产。"""
+
     argv = sys.argv[sys.argv.index("--") + 1 :] if "--" in sys.argv else []
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("project_root", nargs="?", help="Mahjong project root")
@@ -126,10 +81,14 @@ def arguments() -> argparse.Namespace:
 
 
 def project_root_from_script() -> Path:
+    """从 `Scripts/Blender` 位置推导仓库根目录，供未显式传参的本地执行使用。"""
+
     return Path(__file__).resolve().parents[2]
 
 
 def clean_scene() -> None:
+    """清空当前 Blender 场景和无引用数据块；调用后现有未保存场景内容不可恢复。"""
+
     bpy.ops.object.select_all(action="SELECT")
     bpy.ops.object.delete(use_global=False)
     for collection in list(bpy.data.collections):
@@ -148,6 +107,8 @@ def clean_scene() -> None:
 
 
 def configure_scene() -> None:
+    """配置米制、渲染器、色彩管理和棚拍世界；不创建生产模型对象。"""
+
     scene = bpy.context.scene
     bpy.context.preferences.filepaths.save_version = 0
     scene.name = "MahjongTable_PBR_AssetScene"
@@ -182,18 +143,24 @@ def configure_scene() -> None:
 
 
 def create_collection(name: str) -> bpy.types.Collection:
+    """创建并挂接场景集合，返回值由调用方持有并决定模型或展示用途。"""
+
     collection = bpy.data.collections.new(name)
     bpy.context.scene.collection.children.link(collection)
     return collection
 
 
 def set_input(node: bpy.types.Node, name: str, value) -> None:
+    """在不同 Blender 小版本间安全设置可选节点输入；不存在的插槽保持默认值。"""
+
     socket = node.inputs.get(name)
     if socket is not None:
         socket.default_value = value
 
 
 def load_texture(texture_dir: Path, filename: str, non_color: bool) -> bpy.types.Image:
+    """加载并打包 PBR 纹理；缺失文件立即失败，防止生成仅靠回退色伪装成功的资产。"""
+
     path = texture_dir / filename
     if not path.is_file():
         raise FileNotFoundError(f"Missing PBR texture: {path}")
@@ -214,6 +181,8 @@ def create_pbr_material(
     coat_roughness: float,
     sheen_weight: float,
 ) -> bpy.types.Material:
+    """创建金属度-粗糙度 PBR 材质并连接 BaseColor、Roughness 和 DirectX Normal。"""
+
     material = bpy.data.materials.new(name)
     material.use_nodes = True
     material.diffuse_color = fallback_color
@@ -250,8 +219,8 @@ def create_pbr_material(
     normal.location = (-650.0, -230.0)
     normal.image = load_texture(texture_dir, f"T_{stem}_Normal_2K.png", True)
 
-    # Source normals are authored for Unreal/DirectX.  Flip G only in Blender so
-    # the packed source remains directly importable by Unreal.
+    # 源法线按 Unreal/DirectX 制作，只在 Blender 节点中翻转绿色通道，
+    # 保证打包的原始纹理仍可直接导入 Unreal。
     separate = nodes.new("ShaderNodeSeparateColor")
     separate.location = (-390.0, -230.0)
     invert_green = nodes.new("ShaderNodeMath")
@@ -282,10 +251,9 @@ def create_pbr_material(
     return material
 
 
-<<<<<<< HEAD
-def rounded_rectangle(
-=======
 def create_joint_material() -> bpy.types.Material:
+    """创建低反差木工接缝材质；接缝用于结构可读性，不能表现成黑色油漆条。"""
+
     material = bpy.data.materials.new(JOINT_MATERIAL_NAME)
     material.use_nodes = True
     material.diffuse_color = (0.012, 0.0035, 0.0012, 1.0)
@@ -303,13 +271,14 @@ def create_joint_material() -> bpy.types.Material:
 
 
 def rounded_perimeter(
->>>>>>> 0c9535ac9fd94c6fd02ed84a6dedfc084cd8892e
     width: float,
     depth: float,
     radius: float,
     z: float,
     corner_segments: int,
 ) -> list[tuple[float, float, float]]:
+    """按顺时针生成圆角矩形周界点；半径会收敛到几何可行范围。"""
+
     half_x = width * 0.5
     half_y = depth * 0.5
     radius = min(radius, half_x - 0.001, half_y - 0.001)
@@ -334,6 +303,8 @@ def rounded_perimeter(
 
 
 def recalculate_normals(obj: bpy.types.Object) -> None:
+    """向外重算法线；旧 Blender 缺少对应操作时保持现有法线并继续。"""
+
     bpy.context.view_layer.objects.active = obj
     obj.select_set(True)
     bpy.ops.object.mode_set(mode="EDIT")
@@ -347,6 +318,8 @@ def recalculate_normals(obj: bpy.types.Object) -> None:
 
 
 def add_weighted_smoothing(obj: bpy.types.Object) -> None:
+    """启用平滑并按 50 度设置锐边，减少家具大曲面的分面高光。"""
+
     for polygon in obj.data.polygons:
         polygon.use_smooth = True
     try:
@@ -368,6 +341,8 @@ def create_rounded_prism(
     collection: bpy.types.Collection,
     corner_segments: int = 14,
 ) -> bpy.types.Object:
+    """创建封闭圆角棱柱、应用倒角和平滑，并生成环向木纹 UV。"""
+
     bottom = rounded_perimeter(width, depth, radius, z_bottom, corner_segments)
     top = rounded_perimeter(width, depth, radius, z_top, corner_segments)
     count = len(bottom)
@@ -404,7 +379,7 @@ def create_rounded_prism(
 
 
 def cylindrical_wood_uv(obj: bpy.types.Object) -> None:
-    """Keep the walnut grain running around the rounded frame perimeter."""
+    """生成沿圆角围框连续行进的胡桃木纹 UV，并在角度接缝处修正跨区插值。"""
 
     mesh = obj.data
     uv_layer = mesh.uv_layers.get("UVMap") or mesh.uv_layers.new(name="UVMap")
@@ -412,6 +387,8 @@ def cylindrical_wood_uv(obj: bpy.types.Object) -> None:
     min_z, max_z = min(z_values), max(z_values)
 
     def perimeter_coordinate(point: Vector) -> float:
+        """把 XY 极角映射到四个 UV 周界单元，保持四边纹理密度一致。"""
+
         angle = math.atan2(point.y, point.x)
         return (angle + math.pi) / (math.tau) * 4.0
 
@@ -427,67 +404,10 @@ def cylindrical_wood_uv(obj: bpy.types.Object) -> None:
             uv_layer.data[loop_index].uv = (cross, value)
 
 
-<<<<<<< HEAD
-def join_frame_segments(
-    segment_parts: dict[str, list[bpy.types.Object]],
-    joint_width_mm: float,
-) -> bpy.types.Object:
-    """Join four objects while preserving four disconnected geometry islands."""
-
-    bpy.ops.object.select_all(action="DESELECT")
-    active = None
-    for segment_name, parts in segment_parts.items():
-        for part in parts:
-            group = part.vertex_groups.new(name=segment_name)
-            group.add(range(len(part.data.vertices)), 1.0, "REPLACE")
-            part.select_set(True)
-            active = active or part
-    bpy.context.view_layer.objects.active = active
-    bpy.ops.object.join()
-    frame = bpy.context.object
-    frame.name = FRAME_OBJECT_NAME
-    frame.data.name = f"{FRAME_OBJECT_NAME}_Mesh"
-    frame["asset_role"] = "four_segment_mitered_wood_frame"
-    frame["segment_names"] = ",".join(FRAME_PART_NAMES)
-    frame["segment_count"] = 4
-    frame["joint_angle_degrees"] = 45.0
-    frame["joint_width_mm"] = joint_width_mm
-    frame["joint_fill_geometry"] = False
-    frame["shared_uv"] = True
-    frame["mobile_game_ready"] = True
-    frame.select_set(False)
-    return frame
-
-
-def create_mitered_frame(
-    dimensions: TabletopDimensions,
-    wood_material: bpy.types.Material,
-    collection: bpy.types.Collection,
-) -> bpy.types.Object:
-    """Create four discrete rails meeting at exact 45-degree miter seams."""
-
-    half = dimensions.size * 0.5
-    inner = dimensions.playing_size * 0.5
-    z_bottom = dimensions.frame_bottom
-    z_top = dimensions.frame_top
-
-    def front_outline(
-        outer: float,
-        opening: float,
-        radius: float,
-        segments: int,
-    ) -> tuple[list[tuple[float, float]], tuple[int, ...]]:
-        center_right = Vector((outer - radius, -outer + radius))
-        center_left = Vector((-outer + radius, -outer + radius))
-        points = [(-opening, -opening), (opening, -opening)]
-        for index in range(segments + 1):
-            angle = math.radians(-45.0 - 45.0 * index / segments)
-            points.append(
-=======
 def rail_profile_contours(
     dimensions: TabletopDimensions,
 ) -> tuple[tuple[float, float, float], ...]:
-    """Outside-to-inside furniture profile matching the supplied reference."""
+    """返回从外向内的家具截面控制点，顺序同时决定扶手环面的连接方向。"""
 
     return (
         (1.132, 0.054, dimensions.rail_bottom),
@@ -512,10 +432,10 @@ def create_profiled_rail(
     material: bpy.types.Material,
     collection: bpy.types.Collection,
 ) -> bpy.types.Object:
-    """Create one continuous rounded ring from a furniture-style cross-section."""
+    """沿圆角周界扫掠家具截面，创建连续扶手环及稳定的截面/周界 UV。"""
 
-    # Ordered outside-to-inside around the entire rail cross-section.  The last
-    # profile is connected back to the first along the underside.
+    # 截面按外到内有序排列，最后一个轮廓从底面闭合到第一个轮廓，
+    # 从而避免导出后出现开放边或碰撞漏面。
     contours = rail_profile_contours(dimensions)
     loops = [
         rounded_perimeter(
@@ -535,7 +455,6 @@ def create_profiled_rail(
         for point_index in range(point_count):
             following_point = (point_index + 1) % point_count
             faces.append(
->>>>>>> 0c9535ac9fd94c6fd02ed84a6dedfc084cd8892e
                 (
                     profile_index * point_count + point_index,
                     profile_index * point_count + following_point,
@@ -544,111 +463,7 @@ def create_profiled_rail(
                 )
             )
 
-<<<<<<< HEAD
-    def rotate_outline(
-        outline: list[tuple[float, float]], quarter_turns: int
-    ) -> list[tuple[float, float]]:
-        result = []
-        for x, y in outline:
-            for _ in range(quarter_turns % 4):
-                x, y = -y, x
-            result.append((x, y))
-        return result
-
-    cap_front, cap_bevel_edges = front_outline(
-        half,
-        inner,
-        dimensions.outer_corner_radius,
-        dimensions.outer_corner_arc_segments,
-    )
-    base_outer = half - dimensions.base_band_inset
-    base_inner = inner + dimensions.base_band_inset
-    base_front, base_bevel_edges = front_outline(
-        base_outer,
-        base_inner,
-        max(0.006, dimensions.outer_corner_radius - dimensions.base_band_inset),
-        dimensions.outer_corner_arc_segments,
-    )
-    quarter_turns = (0, 2, 3, 1)
-    cap_outlines = tuple(rotate_outline(cap_front, turns) for turns in quarter_turns)
-    base_outlines = tuple(rotate_outline(base_front, turns) for turns in quarter_turns)
-    grain_axes = ("X", "X", "Y", "Y")
-    segment_parts: dict[str, list[bpy.types.Object]] = {}
-    for name, cap_outline, base_outline, grain_axis in zip(
-        FRAME_PART_NAMES, cap_outlines, base_outlines, grain_axes
-    ):
-        base = create_beveled_prism(
-            f"{name}_BaseBand",
-            base_outline,
-            z_bottom,
-            dimensions.base_band_top_z,
-            dimensions.base_band_bevel,
-            dimensions.base_band_bevel_segments,
-            wood_material,
-            collection,
-            base_bevel_edges,
-        )
-        cap = create_beveled_prism(
-            f"{name}_BullnoseCap",
-            cap_outline,
-            dimensions.bullnose_bottom_z,
-            z_top,
-            dimensions.rail_edge_bevel,
-            dimensions.rail_bevel_segments,
-            wood_material,
-            collection,
-            cap_bevel_edges,
-        )
-        for part in (base, cap):
-            part["asset_role"] = "independent_mitered_wood_rail"
-            part["joint_angle_degrees"] = 45.0
-            part["mobile_game_ready"] = True
-            apply_directional_wood_uv(part, grain_axis)
-        segment_parts[name] = [base, cap]
-    return join_frame_segments(
-        segment_parts,
-        dimensions.miter_joint_width * 1000.0,
-    )
-
-
-def create_felt_surface(
-    dimensions: TabletopDimensions,
-    material: bpy.types.Material,
-    collection: bpy.types.Collection,
-) -> bpy.types.Object:
-    segments = dimensions.felt_corner_segments
-    top = rounded_rectangle(
-        dimensions.playing_size - 0.004,
-        dimensions.playing_size - 0.004,
-        dimensions.felt_corner_radius,
-        dimensions.felt_top,
-        segments,
-    )
-    bottom = rounded_rectangle(
-        dimensions.playing_size - 0.006,
-        dimensions.playing_size - 0.006,
-        dimensions.felt_corner_radius - 0.001,
-        dimensions.felt_top - dimensions.felt_thickness,
-        segments,
-    )
-    vertices = top + bottom
-    point_count = len(top)
-    top_center = len(vertices)
-    vertices.append((0.0, 0.0, dimensions.felt_top))
-    bottom_center = len(vertices)
-    vertices.append((0.0, 0.0, dimensions.felt_top - dimensions.felt_thickness))
-
-    faces: list[tuple[int, ...]] = []
-    for index in range(point_count):
-        following = (index + 1) % point_count
-        faces.append((top_center, index, following))
-        faces.append((bottom_center, point_count + following, point_count + index))
-        faces.append((index, point_count + index, point_count + following, following))
-
-    mesh = bpy.data.meshes.new(f"{FELT_NAME}_Mesh")
-=======
     mesh = bpy.data.meshes.new(f"{WOOD_OBJECT_NAME}_RailMesh")
->>>>>>> 0c9535ac9fd94c6fd02ed84a6dedfc084cd8892e
     mesh.from_pydata(vertices, [], faces)
     mesh.materials.append(material)
     mesh.validate()
@@ -688,7 +503,7 @@ def create_joinery_seams(
     material: bpy.types.Material,
     collection: bpy.types.Collection,
 ) -> bpy.types.Object:
-    """Author the fine cross-grain joints visible near every rounded corner."""
+    """在四个圆角附近生成细窄木工接缝；接缝独立成物体以保留材质控制。"""
 
     contours = rail_profile_contours(dimensions)
     half_width = dimensions.seam_width * 0.5
@@ -698,15 +513,15 @@ def create_joinery_seams(
     faces: list[tuple[int, int, int, int]] = []
 
     def add_quad(points: tuple[tuple[float, float, float], ...]) -> None:
+        """写入双面四边形，使极窄接缝在不同剔除设置下都可审查。"""
+
         start = len(vertices)
         vertices.extend(points)
         face = (start, start + 1, start + 2, start + 3)
         faces.append(face)
         faces.append(tuple(reversed(face)))
 
-    # Narrow ribbons follow the exact rounded rail cross-section.  They sit only
-    # 0.12 mm above the wood to read as a shallow furniture joint, never a black
-    # painted stripe.
+    # 窄带严格贴合扶手截面，只抬高 0.12 mm，目标是浅木工缝而非黑色装饰条。
     surface_bias = 0.00012
     for side in (-1.0, 1.0):
         for position in positions:
@@ -762,7 +577,7 @@ def create_joinery_seams(
                     )
                 )
 
-    # Matching vertical joinery lines continue down the side apron.
+    # 同一接缝向下延续到围裙侧面，避免扶手和围裙的结构语言断裂。
     apron_outer = dimensions.size * 0.5 - 0.00008
     z_bottom = dimensions.apron_bottom + dimensions.apron_bevel
     z_top = dimensions.apron_top - 0.001
@@ -805,6 +620,8 @@ def create_felt(
     material: bpy.types.Material,
     collection: bpy.types.Collection,
 ) -> bpy.types.Object:
+    """创建 Z=0 的下沉绒布并改用平面 UV；返回网格供导出和边界验证。"""
+
     obj = create_rounded_prism(
         FELT_OBJECT_NAME,
         dimensions.playing_size,
@@ -818,7 +635,7 @@ def create_felt(
         collection,
         corner_segments=dimensions.rail_corner_segments,
     )
-    # Felt uses a stable planar projection rather than the perimeter wood UV.
+    # 绒布使用稳定平面投影，不能继承木框的环向 UV。
     mesh = obj.data
     uv_layer = mesh.uv_layers.get("UVMap") or mesh.uv_layers.new(name="UVMap")
     half = dimensions.playing_size * 0.5
@@ -835,6 +652,8 @@ def create_felt(
 
 
 def join_wood_parts(parts: list[bpy.types.Object]) -> bpy.types.Object:
+    """合并围裙、扶手和装饰带；调用会修改输入对象并返回唯一木框对象。"""
+
     bpy.ops.object.select_all(action="DESELECT")
     for part in parts:
         part.select_set(True)
@@ -849,6 +668,8 @@ def join_wood_parts(parts: list[bpy.types.Object]) -> bpy.types.Object:
 
 
 def triangulate_for_export(objects: list[bpy.types.Object]) -> None:
+    """应用确定性三角化，确保 FBX/GLB 与 manifest 的三角形口径一致。"""
+
     for obj in objects:
         bpy.context.view_layer.objects.active = obj
         obj.select_set(True)
@@ -860,6 +681,8 @@ def triangulate_for_export(objects: list[bpy.types.Object]) -> None:
 
 
 def point_camera(camera: bpy.types.Object, target: Vector) -> None:
+    """令相机或面光源的本地 -Z 轴指向目标，副作用是覆盖对象旋转。"""
+
     camera.rotation_euler = (target - camera.location).to_track_quat("-Z", "Y").to_euler()
 
 
@@ -872,6 +695,8 @@ def add_area_light(
     color: tuple[float, float, float],
     target: Vector,
 ) -> bpy.types.Object:
+    """创建朝向目标的圆盘面光源，返回对象供棚拍集合持有。"""
+
     data = bpy.data.lights.new(name, "AREA")
     data.energy = energy
     data.shape = "DISK"
@@ -885,6 +710,8 @@ def add_area_light(
 
 
 def create_studio(dimensions: TabletopDimensions, collection: bpy.types.Collection) -> None:
+    """创建产品审查相机和四点灯光；展示集合不会包含在模型导出选择中。"""
+
     target = Vector((0.0, 0.0, -0.018))
     camera_data = bpy.data.cameras.new("MahjongTable_ProductCamera")
     camera = bpy.data.objects.new("MahjongTable_ProductCamera", camera_data)
@@ -938,6 +765,8 @@ def create_studio(dimensions: TabletopDimensions, collection: bpy.types.Collecti
 
 
 def mesh_triangle_count(objects: list[bpy.types.Object]) -> int:
+    """按多边形拓扑计算导出前三角形总数，只统计 MESH 对象。"""
+
     return sum(
         sum(max(0, len(polygon.vertices) - 2) for polygon in obj.data.polygons)
         for obj in objects
@@ -946,6 +775,8 @@ def mesh_triangle_count(objects: list[bpy.types.Object]) -> int:
 
 
 def mesh_bounds(objects: list[bpy.types.Object]) -> tuple[Vector, Vector]:
+    """返回所有模型顶点在世界空间的最小/最大边界；空输入属于调用错误。"""
+
     points = [
         obj.matrix_world @ vertex.co
         for obj in objects
@@ -959,6 +790,8 @@ def mesh_bounds(objects: list[bpy.types.Object]) -> tuple[Vector, Vector]:
 
 
 def sha256(path: Path) -> str:
+    """以 1 MiB 分块计算文件 SHA-256，避免大导出文件一次性进入内存。"""
+
     digest = hashlib.sha256()
     with path.open("rb") as stream:
         for block in iter(lambda: stream.read(1024 * 1024), b""):
@@ -967,6 +800,8 @@ def sha256(path: Path) -> str:
 
 
 def select_model(objects: list[bpy.types.Object]) -> None:
+    """只选择给定模型并设置活动对象，防止相机和灯光混入导出文件。"""
+
     bpy.ops.object.select_all(action="DESELECT")
     for obj in objects:
         obj.select_set(True)
@@ -974,6 +809,8 @@ def select_model(objects: list[bpy.types.Object]) -> None:
 
 
 def export_fbx(path: Path, objects: list[bpy.types.Object]) -> None:
+    """按 Unreal 坐标和单位约定导出所选网格；目标文件会被 Blender 覆盖。"""
+
     select_model(objects)
     bpy.ops.export_scene.fbx(
         filepath=str(path),
@@ -995,6 +832,8 @@ def export_fbx(path: Path, objects: list[bpy.types.Object]) -> None:
 
 
 def export_glb(path: Path, objects: list[bpy.types.Object]) -> None:
+    """导出自包含 GLB 审查文件；仅包括模型集合中的所选网格。"""
+
     select_model(objects)
     bpy.ops.export_scene.gltf(
         filepath=str(path),
@@ -1012,6 +851,8 @@ def write_manifest(
     objects: list[bpy.types.Object],
     generated_files: list[Path],
 ) -> None:
+    """写入尺寸、拓扑、PBR、棚拍和文件校验和 manifest，供导入与审计复核。"""
+
     minimum, maximum = mesh_bounds(objects)
     bounds = maximum - minimum
     manifest = {
@@ -1020,26 +861,6 @@ def write_manifest(
         "blender_version": bpy.app.version_string,
         "asset_root": ASSET_NAME,
         "asset_scope": "tabletop_only",
-<<<<<<< HEAD
-        "frame_construction": "four_independent_rails_with_45_degree_miter_joints",
-        "frame_mesh_layout": {
-            "object_count": 1,
-            "segment_count": 4,
-            "joint_fill_geometry": False,
-            "segments": list(FRAME_PART_NAMES),
-            "shared_uv": True,
-            "grain_direction": {
-                "Frame_Front": "longitudinal_X",
-                "Frame_Back": "longitudinal_X",
-                "Frame_Left": "longitudinal_Y",
-                "Frame_Right": "longitudinal_Y",
-            },
-            "uv_scale_consistent": True,
-            "uv_v_tiles_per_rail": 4.0,
-        },
-        "excluded_parts": ["legs", "center_controller", "mahjong_tiles", "mechanical_structure"],
-        "nominal_dimensions_mm": [1150.0, 1150.0, 65.0],
-=======
         "reference_style": "premium_rounded_walnut_frame_with_recessed_green_felt",
         "frame_construction": "segmented_rail_with_geometric_joinery_seams",
         "nominal_dimensions_mm": [
@@ -1047,7 +868,6 @@ def write_manifest(
             dimensions.size * 1000.0,
             dimensions.total_height * 1000.0,
         ],
->>>>>>> 0c9535ac9fd94c6fd02ed84a6dedfc084cd8892e
         "measured_bounds_mm": {
             "minimum": [round(value * 1000.0, 4) for value in minimum],
             "maximum": [round(value * 1000.0, 4) for value in maximum],
@@ -1075,14 +895,9 @@ def write_manifest(
         "triangle_count": mesh_triangle_count(objects),
         "mobile_triangle_budget": 5000,
         "materials": [
-<<<<<<< HEAD
-            "M_Table_Walnut_PBR",
-            "M_Table_Felt_Green_PBR",
-=======
             WOOD_MATERIAL_NAME,
             JOINT_MATERIAL_NAME,
             FELT_MATERIAL_NAME,
->>>>>>> 0c9535ac9fd94c6fd02ed84a6dedfc084cd8892e
         ],
         "material_workflow": "PBR metallic-roughness",
         "pbr_channels": ["BaseColor", "Roughness", "Normal", "AO"],
@@ -1114,6 +929,8 @@ def write_manifest(
 
 
 def main() -> None:
+    """执行生成流程；只有显式开关才保存、导出或渲染，并在写入前校验边界和预算。"""
+
     args = arguments()
     project_root = (
         Path(args.project_root).resolve()
@@ -1132,15 +949,6 @@ def main() -> None:
     configure_scene()
     dimensions = TabletopDimensions()
     model_collection = create_collection(MODEL_COLLECTION)
-<<<<<<< HEAD
-    presentation_collection = create_collection(PRESENTATION_COLLECTION)
-    walnut = create_walnut_material()
-    felt_material = create_felt_material()
-    frame = create_mitered_frame(dimensions, walnut, model_collection)
-    felt = create_felt_surface(dimensions, felt_material, model_collection)
-    objects = [frame, felt]
-    smart_uv(felt)
-=======
     studio_collection = create_collection(PRESENTATION_COLLECTION)
     wood_material = create_pbr_material(
         WOOD_MATERIAL_NAME,
@@ -1161,7 +969,6 @@ def main() -> None:
         sheen_weight=0.03,
     )
     joint_material = create_joint_material()
->>>>>>> 0c9535ac9fd94c6fd02ed84a6dedfc084cd8892e
 
     apron = create_rounded_prism(
         "RoundedWalnut_Apron",

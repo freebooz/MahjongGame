@@ -2,12 +2,12 @@
 param(
     [Parameter(Mandatory)]
     [int]$AutomationToolProcessId,
-    [string]$EngineRoot = 'D:\UnrealEngine-5.8.0-release',
+    [string]$EngineRoot = '',
     [ValidateSet('Development', 'Shipping')]
     [string]$Configuration = 'Development',
     [string]$Distribution = 'Ubuntu',
     [string]$WslUser = 'root',
-    [string]$LinuxRepositoryPath = '/home/administrator/src/MahjongGame',
+    [string]$LinuxRepositoryPath = '',
     [string]$Version = '',
     [int]$PollSeconds = 15
 )
