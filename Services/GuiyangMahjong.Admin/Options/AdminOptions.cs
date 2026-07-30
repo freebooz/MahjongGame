@@ -2,6 +2,11 @@ using System.ComponentModel.DataAnnotations;
 
 namespace GuiyangMahjong.Admin.Options;
 
+/// <summary>
+/// Admin 根配置。
+/// 聚合企业身份、RBAC/ABAC、审批执行、监控来源、归档和实时容量策略；
+/// 所有秘密只从服务端安全配置注入，不能下发 Angular 或写入日志。
+/// </summary>
 public sealed class AdminOptions
 {
     public const string SectionName = "Admin";
@@ -233,6 +238,10 @@ public sealed class AuditArchiveOptions
     [Range(1, 30)] public int TimeoutSeconds { get; init; } = 5;
 }
 
+/// <summary>
+/// 仅用于本地联调的静态 Admin 主体。
+/// 生产启用企业身份后不得使用静态 AccessToken；角色和属性仍受白名单及 ABAC 校验。
+/// </summary>
 public sealed class AdminPrincipalOptions
 {
     [Required, MinLength(3), MaxLength(128)] public string OperatorId { get; init; } = string.Empty;
@@ -268,6 +277,7 @@ public sealed class AdminManagementOptions
     [Range(1, 365)] public int RiskLabelTtlDays { get; init; } = 30;
 }
 
+/// <summary>Auth 只读玩家目录监控来源；MonitoringToken 不得复用 Auth 管理命令凭据。</summary>
 public sealed class AuthMonitoringOptions
 {
     public bool Enabled { get; init; } = true;
@@ -276,6 +286,10 @@ public sealed class AuthMonitoringOptions
     [Range(1, 30)] public int TimeoutSeconds { get; init; } = 5;
 }
 
+/// <summary>
+/// 兼容单 Lobby 来源的只读监控配置。
+/// Source/Region/Cluster/Lobby/Node 标识用于可靠性隔离和管理命令路由。
+/// </summary>
 public sealed class LobbyMonitoringOptions
 {
     public bool Enabled { get; init; } = true;
@@ -316,6 +330,10 @@ public sealed class WalletExecutionOptions
     [Range(1, 30)] public int TimeoutSeconds { get; init; } = 5;
 }
 
+/// <summary>
+/// 单个 Allocator 监控来源及拓扑身份。
+/// 只读 MonitoringToken 与高风险 ManagementCommandToken 强制分离。
+/// </summary>
 public sealed class AllocatorMonitoringOptions
 {
     public bool Enabled { get; init; } = true;

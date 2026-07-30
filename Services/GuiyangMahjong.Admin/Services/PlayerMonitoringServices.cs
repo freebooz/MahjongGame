@@ -10,6 +10,7 @@ using Microsoft.Extensions.Options;
 
 namespace GuiyangMahjong.Admin.Services;
 
+/// <summary>Admin 读取 Auth 脱敏玩家目录和详情的只读客户端边界。</summary>
 public interface IPlayerDirectoryClient
 {
     /// <summary>读取一页已脱敏玩家目录；游标由 Auth 生成并绑定搜索条件。</summary>
@@ -18,14 +19,21 @@ public interface IPlayerDirectoryClient
         string? cursor,
         int pageSize,
         CancellationToken cancellationToken);
+
+    /// <summary>读取玩家身份、会话、登录、设备和控制历史；不存在返回空。</summary>
     Task<AuthPlayerDirectoryDetail?> GetPlayerAsync(
         string playerId, CancellationToken cancellationToken);
 }
 
+/// <summary>
+/// 使用 Auth 只读监控凭据的玩家目录 HTTP 客户端。
+/// 透传绑定搜索条件的键集游标并施加硬超时，不接触刷新令牌哈希或管理写接口。
+/// </summary>
 public sealed class HttpPlayerDirectoryClient(
     IHttpClientFactory httpClientFactory,
     IOptions<AdminOptions> options) : IPlayerDirectoryClient
 {
+    /// <inheritdoc/>
     public async Task<CursorPage<AuthPlayerDirectoryItem>> ListPlayersPageAsync(
         string? search,
         string? cursor,
@@ -50,6 +58,7 @@ public sealed class HttpPlayerDirectoryClient(
                 "Auth player page response is empty.");
     }
 
+    /// <inheritdoc/>
     public async Task<AuthPlayerDirectoryDetail?> GetPlayerAsync(
         string playerId, CancellationToken cancellationToken)
     {

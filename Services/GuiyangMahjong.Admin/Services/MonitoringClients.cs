@@ -7,8 +7,13 @@ using Microsoft.Extensions.Options;
 
 namespace GuiyangMahjong.Admin.Services;
 
+/// <summary>
+/// Admin 读取 Lobby 房间、遥测、事件和玩家在线/历史的只读客户端边界。
+/// 分页游标由来源生成并绑定筛选条件；实现不得使用房间管理写凭据。
+/// </summary>
 public interface ILobbyMonitoringClient
 {
+    /// <summary>为后台全量快照读取受容量上限保护的房间集合。</summary>
     Task<IReadOnlyList<RoomMonitorSnapshot>> ListRoomsAsync(CancellationToken cancellationToken);
     /// <summary>按 Lobby 原生键集游标读取一页房间，筛选在数据库分页前完成。</summary>
     Task<CursorPage<RoomMonitorSnapshot>> ListRoomsPageAsync(
@@ -39,10 +44,16 @@ public interface ILobbyMonitoringClient
             cursor,
             pageSize,
             cancellationToken);
+
+    /// <summary>读取房间最新运行遥测；不存在或来源不支持时返回空，由聚合层判定陈旧。</summary>
     Task<RoomRuntimeTelemetry?> GetRuntimeAsync(
         string roomId, CancellationToken cancellationToken);
+
+    /// <summary>读取房间最近的有界事件时间线；不返回凭据或私密牌局内容。</summary>
     Task<RoomTimelineEvent[]> ListEventsAsync(
         string roomId, CancellationToken cancellationToken);
+
+    /// <summary>批量读取最多受控数量玩家的在线位置，跨 Lobby 冲突由实现确定性裁决。</summary>
     Task<PlayerPresenceSnapshot[]> GetPlayerPresenceAsync(
         IReadOnlyCollection<string> playerIds, CancellationToken cancellationToken);
     /// <summary>读取 Lobby 持久玩家房间历史，不从当前活动房间反推。</summary>
@@ -66,8 +77,10 @@ public interface ILobbyMonitoringClient
             [], null, null));
 }
 
+/// <summary>Admin 读取各 Allocator Dedicated Server 实例的只读客户端边界。</summary>
 public interface IAllocatorMonitoringClient
 {
+    /// <summary>并行读取已启用静态和动态来源，并返回带拓扑身份的实例快照。</summary>
     Task<IReadOnlyList<MonitoredInstance>> ListInstancesAsync(CancellationToken cancellationToken);
 }
 
@@ -82,11 +95,17 @@ public interface IPlayerDataMonitoringClient
     Task<bool> CheckReadyAsync(CancellationToken cancellationToken);
 }
 
+/// <summary>
+/// 基于 HTTP 的多 Lobby 监控客户端。
+/// 静态与动态拓扑来源按 SourceId 去重，单来源使用原生游标；
+/// 多来源聚合采用绑定拓扑筛选的 Admin 游标并受 MaximumRooms 限制。
+/// </summary>
 public sealed class HttpLobbyMonitoringClient(
     IHttpClientFactory httpClientFactory,
     IOptions<AdminOptions> options,
     TopologyRegistry topologyRegistry) : ILobbyMonitoringClient
 {
+    /// <inheritdoc/>
     public async Task<IReadOnlyList<RoomMonitorSnapshot>> ListRoomsAsync(
         CancellationToken cancellationToken)
     {
@@ -188,6 +207,7 @@ public sealed class HttpLobbyMonitoringClient(
             pageSize,
             cancellationToken);
 
+    /// <inheritdoc/>
     public async Task<CursorPage<RoomMonitorSnapshot>> ListRoomsTopologyPageAsync(
         string? regionId,
         string? clusterId,
@@ -271,6 +291,7 @@ public sealed class HttpLobbyMonitoringClient(
         };
     }
 
+    /// <inheritdoc/>
     public async Task<RoomRuntimeTelemetry?> GetRuntimeAsync(
         string roomId, CancellationToken cancellationToken)
     {
@@ -288,6 +309,7 @@ public sealed class HttpLobbyMonitoringClient(
         return null;
     }
 
+    /// <inheritdoc/>
     public async Task<RoomTimelineEvent[]> ListEventsAsync(
         string roomId, CancellationToken cancellationToken)
     {
@@ -306,6 +328,7 @@ public sealed class HttpLobbyMonitoringClient(
         return [];
     }
 
+    /// <inheritdoc/>
     public async Task<PlayerPresenceSnapshot[]> GetPlayerPresenceAsync(
         IReadOnlyCollection<string> playerIds, CancellationToken cancellationToken)
     {
@@ -477,11 +500,17 @@ public sealed class HttpLobbyMonitoringClient(
     }
 }
 
+/// <summary>
+/// 基于 HTTP 的多 Allocator 只读监控客户端。
+/// 每个来源施加独立超时并附加 TraceId；动态注册只能提供拓扑地址，
+/// 实际凭据始终来自 Admin 安全配置。
+/// </summary>
 public sealed class HttpAllocatorMonitoringClient(
     IHttpClientFactory httpClientFactory,
     IOptions<AdminOptions> options,
     TopologyRegistry topologyRegistry) : IAllocatorMonitoringClient
 {
+    /// <inheritdoc/>
     public async Task<IReadOnlyList<MonitoredInstance>> ListInstancesAsync(
         CancellationToken cancellationToken)
     {

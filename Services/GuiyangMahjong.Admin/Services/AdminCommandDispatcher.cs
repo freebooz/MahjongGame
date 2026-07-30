@@ -7,15 +7,22 @@ using Microsoft.Extensions.Options;
 
 namespace GuiyangMahjong.Admin.Services;
 
+/// <summary>执行单个已审批 Outbox 命令的下游适配器边界。</summary>
 public interface IAdminCommandExecutor
 {
+    /// <summary>
+    /// 执行命令并返回成功、可重试性和脱敏后状态。
+    /// 实现不得自行更新 Admin 动作/Outbox，事务完成由派发器统一负责。
+    /// </summary>
     Task<AdminCommandExecutionResult> ExecuteAsync(
         AdminCommandOutboxRecord command,
         CancellationToken cancellationToken);
 }
 
+/// <summary>未配置下游命令适配器时的关闭式实现；所有命令返回不可重试失败且无副作用。</summary>
 public sealed class UnsupportedAdminCommandExecutor : IAdminCommandExecutor
 {
+    /// <inheritdoc/>
     public Task<AdminCommandExecutionResult> ExecuteAsync(
         AdminCommandOutboxRecord command,
         CancellationToken cancellationToken) =>
@@ -30,6 +37,11 @@ public sealed class UnsupportedAdminCommandExecutor : IAdminCommandExecutor
             $"No command adapter is configured for {command.ActionType}."));
 }
 
+/// <summary>
+/// Admin 事务 Outbox 的单批次派发器。
+/// 以 workerId/租约领取命令，调用执行器后原子完成动作、Outbox 和审计；
+/// 不确定异常按瞬态失败重试，超过上限或明确永久失败进入终态。
+/// </summary>
 public sealed class AdminCommandDispatcher(
     IAdminActionStore store,
     IAdminCommandExecutor executor,
@@ -39,6 +51,10 @@ public sealed class AdminCommandDispatcher(
 {
     private readonly AdminManagementOptions management = options.Value.Management;
 
+    /// <summary>
+    /// 领取最多 10 条到期命令并顺序执行，返回本次领取数量。
+    /// 取消会传播且不会错误确认未完成命令，单条结果通过租约所有者条件提交。
+    /// </summary>
     public async Task<int> DispatchOnceAsync(
         string workerId,
         CancellationToken cancellationToken)
@@ -195,6 +211,11 @@ public sealed class AdminCommandDispatcher(
     }
 }
 
+/// <summary>
+/// 周期驱动 AdminCommandDispatcher 的后台服务。
+/// 使用实例唯一 workerId；执行开关关闭时不启动，宿主取消后退出，
+/// 循环异常记录后继续，避免派发静默停摆。
+/// </summary>
 public sealed class AdminCommandDispatcherService(
     AdminCommandDispatcher dispatcher,
     IOptions<AdminOptions> options,

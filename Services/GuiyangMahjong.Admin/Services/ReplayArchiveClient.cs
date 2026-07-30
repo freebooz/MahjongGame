@@ -19,12 +19,15 @@ public sealed record ReplayAccessGrant(
 /// </summary>
 public interface IReplayArchiveClient
 {
+    /// <summary>为指定案件、玩家、回放和操作者生成短时 Admin 代理 URL；不暴露对象键。</summary>
     ReplayAccessGrant CreateAccess(
         string caseId,
         string playerId,
         string eventId,
         string operatorId,
         DateTimeOffset now);
+
+    /// <summary>固定时间验证访问签名及短时过期窗口，所有绑定字段任一变化都会失败。</summary>
     bool ValidateAccess(
         string caseId,
         string playerId,
@@ -33,6 +36,11 @@ public interface IReplayArchiveClient
         long expiresUnixSeconds,
         string signature,
         DateTimeOffset now);
+
+    /// <summary>
+    /// 从只读对象网关下载受大小限制的回放，并可校验目录提供的 SHA-256；
+    /// 对象键禁止绝对 URL 和路径穿越。
+    /// </summary>
     Task<byte[]> DownloadAsync(
         string objectKey,
         string? expectedSha256,
@@ -44,6 +52,7 @@ public sealed class HttpReplayArchiveClient(
     IHttpClientFactory httpClientFactory,
     IOptions<AdminOptions> options) : IReplayArchiveClient
 {
+    /// <inheritdoc/>
     public ReplayAccessGrant CreateAccess(
         string caseId,
         string playerId,
@@ -71,6 +80,7 @@ public sealed class HttpReplayArchiveClient(
             caseId);
     }
 
+    /// <inheritdoc/>
     public bool ValidateAccess(
         string caseId,
         string playerId,
@@ -96,6 +106,7 @@ public sealed class HttpReplayArchiveClient(
         return valid;
     }
 
+    /// <inheritdoc/>
     public async Task<byte[]> DownloadAsync(
         string objectKey,
         string? expectedSha256,

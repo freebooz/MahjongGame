@@ -2,6 +2,7 @@ using System.Text.Json;
 
 namespace GuiyangMahjong.Admin.Domain;
 
+/// <summary>Admin 可创建的调查案件类型；类型决定所需角色、证据范围和后续闭环。</summary>
 public enum AdminCaseType
 {
     DisputeInvestigation,
@@ -11,6 +12,11 @@ public enum AdminCaseType
     RoomLogExport
 }
 
+/// <summary>
+/// 管理案件的不可变业务记录。
+/// SourceCommandId/ActionRequestId 关联审批执行，BeforeState 固化立案前证据；
+/// 结案字段只能从 Open 单向填写，EvidencePackageHash 绑定最终调查材料。
+/// </summary>
 public sealed record AdminCaseRecord(
     string CaseId,
     string SourceCommandId,
@@ -31,6 +37,7 @@ public sealed record AdminCaseRecord(
     string? Resolution = null,
     string? EvidencePackageHash = null);
 
+/// <summary>案件创建结果；Duplicate 表示来源命令已创建同一案件，调用方应复用返回记录。</summary>
 public sealed record AdminCaseCreateResult(
     AdminCaseRecord Case,
     bool Duplicate);
