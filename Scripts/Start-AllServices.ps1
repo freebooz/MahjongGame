@@ -127,13 +127,15 @@ function Wait-Endpoint {
 if (!(Test-Path -LiteralPath $composeFile)) {
     throw "Compose file was not found: $composeFile"
 }
-if (!(Test-Path -LiteralPath $linuxServerArtifact)) {
-    throw "Linux Dedicated Server artifact was not found: $linuxServerArtifact"
-}
-$serverBinary = Get-ChildItem -LiteralPath $linuxServerArtifact -Recurse -File -Filter 'GuiyangMahjongServer' |
-    Select-Object -First 1
-if ($null -eq $serverBinary) {
-    throw "GuiyangMahjongServer is missing from $linuxServerArtifact"
+if (!$SkipBuild) {
+    if (!(Test-Path -LiteralPath $linuxServerArtifact)) {
+        throw "Linux Dedicated Server artifact was not found: $linuxServerArtifact"
+    }
+    $serverBinary = Get-ChildItem -LiteralPath $linuxServerArtifact -Recurse -File -Filter 'GuiyangMahjongServer' |
+        Select-Object -First 1
+    if ($null -eq $serverBinary) {
+        throw "GuiyangMahjongServer is missing from $linuxServerArtifact"
+    }
 }
 
 & docker info *> $null
@@ -242,22 +244,6 @@ if (!$SkipBuild) {
 Invoke-Compose up --detach postgres redis
 Wait-ContainerHealthy -Service postgres
 Wait-ContainerHealthy -Service redis
-
-$postgresContainerId = (& docker compose @composeArguments ps --quiet postgres).Trim()
-$networkSettings = (& docker inspect --format '{{json .NetworkSettings.Networks}}' $postgresContainerId) |
-    ConvertFrom-Json
-$allocatorInternalHost = @(
-    $networkSettings.PSObject.Properties.Value |
-        ForEach-Object { $_.Gateway } |
-        Where-Object { ![string]::IsNullOrWhiteSpace($_) }
-) | Select-Object -First 1
-if ([string]::IsNullOrWhiteSpace($allocatorInternalHost)) {
-    throw 'Could not detect the Compose gateway for the host-networked Allocator.'
-}
-Set-MissingEnvironmentValue -Name 'ALLOCATOR_INTERNAL_HOST' `
-    -Value $allocatorInternalHost -Force
-Remove-Item -LiteralPath 'Env:ALLOCATOR_INTERNAL_HOST' -ErrorAction SilentlyContinue
-$environment = Get-EnvironmentMap
 
 $dataRoot = $environment['MAHJONG_DATA_ROOT']
 if (!$dataRoot.StartsWith('/') -or $dataRoot -eq '/') {

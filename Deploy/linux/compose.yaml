@@ -139,10 +139,8 @@ services:
       Allocator__GameServerPrefixArguments__0: ${GAME_SERVER_MAP:?GAME_SERVER_MAP is required}
       Allocator__MatchResultOutboxDirectory: /var/lib/guiyang-mahjong/outbox
       Allocator__StateFilePath: /var/lib/guiyang-mahjong/state/instances.json
-      # UE uses a dynamic UDP port range. Host networking avoids the Docker
-      # bridge/NAT return-path loss seen when a Windows client connects to a
-      # WSL mirrored-network address on the same machine.
-      Allocator__LobbyInternalUrl: http://127.0.0.1:${LOBBY_PORT:-18080}
+      # Allocator 与 Lobby 通过 Compose 服务名通信，避免依赖 Docker Desktop 宿主机网关地址。
+      Allocator__LobbyInternalUrl: http://lobby:8080
       Allocator__ServiceToken: ${ALLOCATOR_SERVICE_TOKEN:?ALLOCATOR_SERVICE_TOKEN is required}
       Allocator__MonitoringReadOnlyToken: ${ADMIN_TOPOLOGY_ALLOCATOR_TOKEN:?ADMIN_TOPOLOGY_ALLOCATOR_TOKEN is required}
       Allocator__ManagementCommandToken: ${ALLOCATOR_MANAGEMENT_COMMAND_TOKEN:?ALLOCATOR_MANAGEMENT_COMMAND_TOKEN is required}
@@ -153,14 +151,19 @@ services:
       Allocator__NodeId: ${MAHJONG_NODE_ID:-game-node}
       Allocator__AllocatorId: ${MAHJONG_ALLOCATOR_ID:-allocator-local-1}
       Allocator__TopologyRegistration__Enabled: ${ADMIN_TOPOLOGY_DISCOVERY_ENABLED:-true}
-      Allocator__TopologyRegistration__AdminBaseUrl: http://127.0.0.1:${ADMIN_PORT:-18083}
-      Allocator__TopologyRegistration__PublicBaseUrl: http://${ALLOCATOR_INTERNAL_HOST:-host.docker.internal}:${ALLOCATOR_PORT:-18081}
+      Allocator__TopologyRegistration__AdminBaseUrl: http://admin:8080
+      # 此地址仅供同一 Compose 网络中的监控组件访问，不是返回给游戏客户端的公网地址。
+      Allocator__TopologyRegistration__PublicBaseUrl: http://game-node:${ALLOCATOR_PORT:-18081}
       Allocator__TopologyRegistration__RegistrationToken: ${ADMIN_TOPOLOGY_REGISTRATION_TOKEN:?ADMIN_TOPOLOGY_REGISTRATION_TOKEN is required}
       Allocator__TopologyRegistration__SourceId: ${MAHJONG_ALLOCATOR_ID:-allocator-local-1}
       Allocator__TopologyRegistration__Generation: ${MAHJONG_DEPLOYMENT_GENERATION:-1}
     volumes:
       - ${MAHJONG_DATA_ROOT:-/var/lib/guiyang-mahjong}/allocator:/var/lib/guiyang-mahjong
-    network_mode: host
+    ports:
+      # 发布 Allocator HTTP 接口，供本机健康检查和管理工具访问。
+      - "${ALLOCATOR_PORT:-18081}:${ALLOCATOR_PORT:-18081}/tcp"
+      # Dedicated Server 使用动态 UDP 端口；显式映射可确保 Windows 客户端的数据进入 Docker Desktop。
+      - "${GAME_PORT_START:-19000}-${GAME_PORT_END:-19099}:${GAME_PORT_START:-19000}-${GAME_PORT_END:-19099}/udp"
     healthcheck:
       test: ["CMD-SHELL", "curl --fail --silent --show-error http://127.0.0.1:${ALLOCATOR_PORT:-18081}/health/ready"]
       interval: 5s
@@ -210,7 +213,7 @@ services:
       Lobby__TopologyRegistration__SourceId: ${MAHJONG_LOBBY_ID:-lobby-local-1}
       Lobby__TopologyRegistration__Generation: ${MAHJONG_DEPLOYMENT_GENERATION:-1}
       Lobby__Allocator__Enabled: "true"
-      Lobby__Allocator__BaseUrl: http://${ALLOCATOR_INTERNAL_HOST:-host.docker.internal}:${ALLOCATOR_PORT:-18081}
+      Lobby__Allocator__BaseUrl: http://game-node:${ALLOCATOR_PORT:-18081}
       Lobby__Allocator__ServiceToken: ${ALLOCATOR_SERVICE_TOKEN:?ALLOCATOR_SERVICE_TOKEN is required}
       Lobby__Allocator__GameServerBuildVersion: ${MAHJONG_VERSION:-dev}
     depends_on:
@@ -371,7 +374,7 @@ services:
       Admin__Allocators__0__Enabled: "true"
       Admin__Allocators__0__ClusterId: ${MAHJONG_CLUSTER_ID:-local-linux}
       Admin__Allocators__0__NodeId: ${MAHJONG_NODE_ID:-game-node}
-      Admin__Allocators__0__BaseUrl: http://${ALLOCATOR_INTERNAL_HOST:-host.docker.internal}:${ALLOCATOR_PORT:-18081}
+      Admin__Allocators__0__BaseUrl: http://game-node:${ALLOCATOR_PORT:-18081}
       Admin__Allocators__0__MonitoringToken: ${ADMIN_TOPOLOGY_ALLOCATOR_TOKEN:?ADMIN_TOPOLOGY_ALLOCATOR_TOKEN is required}
       Admin__Allocators__0__ManagementCommandToken: ${ALLOCATOR_MANAGEMENT_COMMAND_TOKEN:?ALLOCATOR_MANAGEMENT_COMMAND_TOKEN is required}
     depends_on:
