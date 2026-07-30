@@ -2,7 +2,10 @@
 !Contracts/
 !Contracts/**
 !Services/Directory.Build.props
+!Services/Directory.Build.targets
 !Services/Directory.Packages.props
+!Services/Schema/
+!Services/Schema/**
 !Services/GuiyangMahjong.Lobby/
 !Services/GuiyangMahjong.Lobby/**
 Services/GuiyangMahjong.Lobby/bin/
