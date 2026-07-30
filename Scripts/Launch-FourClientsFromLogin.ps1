@@ -16,9 +16,13 @@ param(
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 $client = (Resolve-Path -LiteralPath $ClientExecutable).Path
-$packagedBinary = Join-Path (Split-Path -Parent $client) `
-    'GuiyangMahjong\Binaries\Win64\GuiyangMahjongClient.exe'
-if (Test-Path -LiteralPath $packagedBinary) {
+$packagedBinaryRoot = Join-Path (Split-Path -Parent $client) `
+    'GuiyangMahjong\Binaries\Win64'
+$packagedBinary = @(
+    (Join-Path $packagedBinaryRoot 'GuiyangMahjongClient-Win64-Shipping.exe'),
+    (Join-Path $packagedBinaryRoot 'GuiyangMahjongClient.exe')
+) | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+if ($packagedBinary) {
     $client = (Resolve-Path -LiteralPath $packagedBinary).Path
 }
 if ([string]::IsNullOrWhiteSpace($SessionRoot)) {
