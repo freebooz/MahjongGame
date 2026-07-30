@@ -42,7 +42,7 @@ public sealed class RedisPostgresLobbyStore : ILobbyStore
 
     public async Task InitializeAsync(CancellationToken cancellationToken)
     {
-        var schemaPath = Path.Combine(AppContext.BaseDirectory, "Storage", "schema.sql");
+        var schemaPath = LobbyStoragePaths.SchemaPath;
         var sql = await File.ReadAllTextAsync(schemaPath, cancellationToken);
         await using var command = postgres.CreateCommand(sql);
         await command.ExecuteNonQueryAsync(cancellationToken);

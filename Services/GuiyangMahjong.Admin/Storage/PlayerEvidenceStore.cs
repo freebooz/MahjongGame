@@ -212,7 +212,7 @@ public sealed class PostgresPlayerEvidenceStore(NpgsqlDataSource postgres)
 {
     public async Task InitializeAsync(CancellationToken cancellationToken)
     {
-        var path = Path.Combine(AppContext.BaseDirectory, "Storage", "schema.sql");
+        var path = AdminStoragePaths.SchemaPath;
         await using var command = postgres.CreateCommand(
             await File.ReadAllTextAsync(path, cancellationToken));
         await command.ExecuteNonQueryAsync(cancellationToken);

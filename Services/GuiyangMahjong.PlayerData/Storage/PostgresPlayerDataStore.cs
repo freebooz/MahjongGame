@@ -13,10 +13,7 @@ public sealed class PostgresPlayerDataStore(NpgsqlDataSource postgres)
 
     public async Task InitializeAsync(CancellationToken cancellationToken)
     {
-        var path = Path.Combine(
-            AppContext.BaseDirectory,
-            "Storage",
-            "schema.sql");
+        var path = PlayerDataStoragePaths.SchemaPath;
         await using var command = postgres.CreateCommand(
             await File.ReadAllTextAsync(path, cancellationToken));
         await command.ExecuteNonQueryAsync(cancellationToken);

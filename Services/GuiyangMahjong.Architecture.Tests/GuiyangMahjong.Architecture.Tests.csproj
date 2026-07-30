@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+  <ItemGroup>
+    <!-- 同时引用四个数据库服务，专门验证组合测试输出中 Schema 仍保持隔离。 -->
+    <ProjectReference Include="..\GuiyangMahjong.Auth\GuiyangMahjong.Auth.csproj" />
+    <ProjectReference Include="..\GuiyangMahjong.Lobby\GuiyangMahjong.Lobby.csproj" />
+    <ProjectReference Include="..\GuiyangMahjong.PlayerData\GuiyangMahjong.PlayerData.csproj" />
+    <ProjectReference Include="..\GuiyangMahjong.Admin\GuiyangMahjong.Admin.csproj" />
+  </ItemGroup>
+</Project>
