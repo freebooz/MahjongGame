@@ -1,3 +1,5 @@
+using GuiyangMahjong.Schema;
+
 namespace GuiyangMahjong.Admin.Storage;
 
 /// <summary>
@@ -8,11 +10,8 @@ internal static class AdminStoragePaths
 {
     /// <summary>
     /// 获取随当前进程发布的 Admin Schema 绝对路径。
-    /// 所有 Admin Store 共享该只读路径；文件生命周期由构建和发布系统管理。
+    /// 服务目录由程序集名称推导；所有 Store 共享该只读且失败关闭的解析结果。
     /// </summary>
-    internal static string SchemaPath { get; } = Path.Combine(
-        AppContext.BaseDirectory,
-        "Schemas",
-        "Admin",
-        "schema.sql");
+    internal static string SchemaPath { get; } =
+        ServiceSchemaPath.Resolve(typeof(AdminStoragePaths).Assembly);
 }

@@ -1,3 +1,5 @@
+using GuiyangMahjong.Schema;
+
 namespace GuiyangMahjong.Auth.Storage;
 
 /// <summary>
@@ -8,11 +10,8 @@ internal static class AuthStoragePaths
 {
     /// <summary>
     /// 获取随当前进程发布的 Auth Schema 绝对路径。
-    /// 文件缺失时由调用方的文件读取操作快速失败，禁止静默跳过数据库初始化。
+    /// 服务目录由程序集名称推导；文件缺失时解析器立即失败并阻止数据库初始化。
     /// </summary>
-    internal static string SchemaPath { get; } = Path.Combine(
-        AppContext.BaseDirectory,
-        "Schemas",
-        "Auth",
-        "schema.sql");
+    internal static string SchemaPath { get; } =
+        ServiceSchemaPath.Resolve(typeof(AuthStoragePaths).Assembly);
 }

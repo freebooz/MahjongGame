@@ -1,3 +1,5 @@
+using GuiyangMahjong.Schema;
+
 namespace GuiyangMahjong.Lobby.Storage;
 
 /// <summary>
@@ -8,11 +10,8 @@ internal static class LobbyStoragePaths
 {
     /// <summary>
     /// 获取随当前进程发布的 Lobby Schema 绝对路径。
-    /// 缺失文件必须阻止启动初始化，防止服务在不完整表结构上继续运行。
+    /// 服务目录由程序集名称推导；缺失文件必须阻止服务在不完整表结构上运行。
     /// </summary>
-    internal static string SchemaPath { get; } = Path.Combine(
-        AppContext.BaseDirectory,
-        "Schemas",
-        "Lobby",
-        "schema.sql");
+    internal static string SchemaPath { get; } =
+        ServiceSchemaPath.Resolve(typeof(LobbyStoragePaths).Assembly);
 }

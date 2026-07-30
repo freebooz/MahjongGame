@@ -1,3 +1,5 @@
+using GuiyangMahjong.Schema;
+
 namespace GuiyangMahjong.PlayerData.Storage;
 
 /// <summary>
@@ -8,11 +10,8 @@ internal static class PlayerDataStoragePaths
 {
     /// <summary>
     /// 获取随当前进程发布的 PlayerData Schema 绝对路径。
-    /// 调用方应让缺失或不可读错误直接终止初始化，不使用空 Schema 回退。
+    /// 服务目录由程序集名称推导；缺失或不可读错误直接终止初始化，不使用空回退。
     /// </summary>
-    internal static string SchemaPath { get; } = Path.Combine(
-        AppContext.BaseDirectory,
-        "Schemas",
-        "PlayerData",
-        "schema.sql");
+    internal static string SchemaPath { get; } =
+        ServiceSchemaPath.Resolve(typeof(PlayerDataStoragePaths).Assembly);
 }

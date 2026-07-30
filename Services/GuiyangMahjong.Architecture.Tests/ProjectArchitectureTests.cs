@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Xml.Linq;
 using Xunit;
 
@@ -118,6 +119,7 @@ public sealed class ProjectArchitectureTests
         Assert.Contains("ValidateMahjongSchemaConfiguration", targetsText);
         Assert.Contains("ValidateMahjongSchemaBuildOutput", targetsText);
         Assert.Contains("ValidateMahjongSchemaPublishOutput", targetsText);
+        Assert.Contains("ServiceSchemaPath.cs", targetsText);
 
         foreach (var serviceName in expectedServiceNames)
         {
@@ -141,6 +143,77 @@ public sealed class ProjectArchitectureTests
                     content.Attribute("Include")?.Value,
                     @"Storage\schema.sql",
                     StringComparison.OrdinalIgnoreCase));
+
+            var storagePathsSource = Path.Combine(
+                servicesRoot,
+                $"GuiyangMahjong.{serviceName}",
+                "Storage",
+                $"{serviceName}StoragePaths.cs");
+            var storagePathsText = File.ReadAllText(storagePathsSource);
+            Assert.Contains("ServiceSchemaPath.Resolve", storagePathsText);
+            Assert.DoesNotContain("Path.Combine", storagePathsText);
+        }
+    }
+
+    /// <summary>
+    /// 通过各服务程序集的内部 StoragePaths 验证实际运行时读取路径，
+    /// 并确认共享解析器在 Schema 缺失时抛出 FileNotFoundException。
+    /// </summary>
+    [Fact]
+    public void RuntimeSchemaResolvers_MatchBuildLayoutAndFailClosed()
+    {
+        var serviceNames = new[]
+        {
+            "Auth",
+            "Lobby",
+            "PlayerData",
+            "Admin"
+        };
+
+        foreach (var serviceName in serviceNames)
+        {
+            var assemblyPath = Path.Combine(
+                AppContext.BaseDirectory,
+                $"GuiyangMahjong.{serviceName}.dll");
+            var assembly = Assembly.LoadFrom(assemblyPath);
+            var storagePathsType = assembly.GetType(
+                $"GuiyangMahjong.{serviceName}.Storage.{serviceName}StoragePaths",
+                throwOnError: true)
+                ?? throw new InvalidOperationException(
+                    $"无法加载 {serviceName} StoragePaths。");
+            var schemaProperty = storagePathsType.GetProperty(
+                "SchemaPath",
+                BindingFlags.Static | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException(
+                    $"{serviceName} 缺少内部 SchemaPath 属性。");
+            var actualPath = Assert.IsType<string>(
+                schemaProperty.GetValue(null));
+            var expectedPath = Path.GetFullPath(Path.Combine(
+                AppContext.BaseDirectory,
+                "Schemas",
+                serviceName,
+                "schema.sql"));
+            Assert.Equal(expectedPath, actualPath);
+
+            var resolverType = assembly.GetType(
+                "GuiyangMahjong.Schema.ServiceSchemaPath",
+                throwOnError: true)
+                ?? throw new InvalidOperationException(
+                    $"{serviceName} 未注入共享 Schema 解析器。");
+            var testableResolve = resolverType.GetMethod(
+                "Resolve",
+                BindingFlags.Static | BindingFlags.NonPublic,
+                binder: null,
+                types: [typeof(Assembly), typeof(string)],
+                modifiers: null)
+                ?? throw new InvalidOperationException(
+                    $"{serviceName} Schema 解析器缺少可测试重载。");
+            var missingRoot = Path.Combine(
+                Path.GetTempPath(),
+                $"missing-mahjong-schema-{Guid.NewGuid():N}");
+            var invocation = Assert.Throws<TargetInvocationException>(() =>
+                testableResolve.Invoke(null, [assembly, missingRoot]));
+            Assert.IsType<FileNotFoundException>(invocation.InnerException);
         }
     }
 
