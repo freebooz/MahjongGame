@@ -36,17 +36,111 @@ public sealed class ProjectArchitectureTests
             ["Admin"] = "admin_monitor"
         };
         var resolvedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var schemaOutputRoot = Path.Combine(
+            AppContext.BaseDirectory,
+            "Schemas");
 
         foreach (var (serviceName, marker) in expectedMarkers)
         {
+            var projectRoot = FindProjectRoot();
+            var serviceDirectory = Path.Combine(
+                projectRoot,
+                "Services",
+                $"GuiyangMahjong.{serviceName}");
+            var sourcePath = Path.Combine(
+                serviceDirectory,
+                "Storage",
+                "schema.sql");
             var path = Path.Combine(
                 AppContext.BaseDirectory,
                 "Schemas",
                 serviceName,
                 "schema.sql");
+            Assert.True(
+                File.Exists(sourcePath),
+                $"缺少 {serviceName} Schema 源文件：{sourcePath}");
             Assert.True(File.Exists(path), $"缺少 {serviceName} Schema：{path}");
             Assert.True(resolvedPaths.Add(Path.GetFullPath(path)));
             Assert.Contains(marker, File.ReadAllText(path), StringComparison.Ordinal);
+            Assert.Equal(
+                File.ReadAllBytes(sourcePath),
+                File.ReadAllBytes(path));
+        }
+
+        var actualRelativePaths = Directory
+            .EnumerateFiles(
+                schemaOutputRoot,
+                "schema.sql",
+                SearchOption.AllDirectories)
+            .Select(path => Path.GetRelativePath(
+                AppContext.BaseDirectory,
+                path).Replace('\\', '/'))
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+        var expectedRelativePaths = expectedMarkers.Keys
+            .Select(serviceName => $"Schemas/{serviceName}/schema.sql")
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+        Assert.Equal(expectedRelativePaths, actualRelativePaths);
+        Assert.False(File.Exists(Path.Combine(
+            AppContext.BaseDirectory,
+            "schema.sql")));
+        Assert.False(File.Exists(Path.Combine(
+            AppContext.BaseDirectory,
+            "Storage",
+            "schema.sql")));
+    }
+
+    /// <summary>
+    /// 确认数据库服务只声明安全且唯一的服务名，复制和哈希校验统一来自
+    /// Directory.Build.targets，禁止项目重新引入手写 TargetPath。
+    /// </summary>
+    [Fact]
+    public void SchemaProjects_UseCentralizedCollisionProofBuildContract()
+    {
+        var projectRoot = FindProjectRoot();
+        var servicesRoot = Path.Combine(projectRoot, "Services");
+        var expectedServiceNames = new[]
+        {
+            "Auth",
+            "Lobby",
+            "PlayerData",
+            "Admin"
+        };
+        var declaredServiceNames = new HashSet<string>(
+            StringComparer.OrdinalIgnoreCase);
+
+        var targetsPath = Path.Combine(
+            servicesRoot,
+            "Directory.Build.targets");
+        Assert.True(File.Exists(targetsPath), $"缺少 Schema 构建契约：{targetsPath}");
+        var targetsText = File.ReadAllText(targetsPath);
+        Assert.Contains("ValidateMahjongSchemaConfiguration", targetsText);
+        Assert.Contains("ValidateMahjongSchemaBuildOutput", targetsText);
+        Assert.Contains("ValidateMahjongSchemaPublishOutput", targetsText);
+
+        foreach (var serviceName in expectedServiceNames)
+        {
+            var projectPath = Path.Combine(
+                servicesRoot,
+                $"GuiyangMahjong.{serviceName}",
+                $"GuiyangMahjong.{serviceName}.csproj");
+            var project = XDocument.Load(projectPath);
+            var declaration = project
+                .Descendants("MahjongSchemaServiceName")
+                .Select(element => element.Value.Trim())
+                .Single();
+
+            Assert.Equal(serviceName, declaration);
+            Assert.True(
+                declaredServiceNames.Add(declaration),
+                $"重复 Schema 服务目录：{declaration}");
+            Assert.DoesNotContain(
+                project.Descendants("Content"),
+                content => string.Equals(
+                    content.Attribute("Include")?.Value,
+                    @"Storage\schema.sql",
+                    StringComparison.OrdinalIgnoreCase));
         }
     }
 

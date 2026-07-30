@@ -3,6 +3,8 @@
     <InvariantGlobalization>false</InvariantGlobalization>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <!-- Schema 输出规则由 Services/Directory.Build.targets 统一生成和校验。 -->
+    <MahjongSchemaServiceName>Auth</MahjongSchemaServiceName>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Npgsql" />
@@ -15,11 +17,5 @@
              Link="OpenAPI\auth-v1.openapi.yaml"
              CopyToOutputDirectory="PreserveNewest"
              CopyToPublishDirectory="PreserveNewest" />
-    <!-- 唯一输出路径避免测试同时引用多个服务时发生同名 Schema 覆盖。 -->
-    <Content Include="Storage\schema.sql">
-      <TargetPath>Schemas/Auth/schema.sql</TargetPath>
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-    </Content>
   </ItemGroup>
 </Project>

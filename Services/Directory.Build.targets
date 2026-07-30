@@ -1,0 +1,73 @@
+<Project>
+  <!--
+    数据库服务只声明 MahjongSchemaServiceName；源位置、输出层级和复制策略由此文件统一管理。
+    这样新增或重命名服务时不会在多个项目中复制一套容易漂移的 TargetPath 配置。
+  -->
+  <PropertyGroup Condition="'$(MahjongSchemaServiceName)' != ''">
+    <MahjongSchemaSourcePath>$(MSBuildProjectDirectory)\Storage\schema.sql</MahjongSchemaSourcePath>
+    <MahjongSchemaRelativeOutputPath>Schemas/$(MahjongSchemaServiceName)/schema.sql</MahjongSchemaRelativeOutputPath>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(MahjongSchemaServiceName)' != ''">
+    <Content Include="$(MahjongSchemaSourcePath)"
+             Link="$(MahjongSchemaRelativeOutputPath)"
+             TargetPath="$(MahjongSchemaRelativeOutputPath)"
+             CopyToOutputDirectory="IfDifferent"
+             CopyToPublishDirectory="IfDifferent" />
+  </ItemGroup>
+
+  <!--
+    在复制前失败关闭：服务名只能形成单层安全目录，源 Schema 缺失时禁止继续生成不完整产物。
+  -->
+  <Target Name="ValidateMahjongSchemaConfiguration"
+          BeforeTargets="PrepareForBuild"
+          Condition="'$(MahjongSchemaServiceName)' != ''">
+    <Error Condition="'$(MahjongSchemaServiceName)' != 'Auth'
+                      and '$(MahjongSchemaServiceName)' != 'Lobby'
+                      and '$(MahjongSchemaServiceName)' != 'PlayerData'
+                      and '$(MahjongSchemaServiceName)' != 'Admin'"
+           Text="MahjongSchemaServiceName '$(MahjongSchemaServiceName)' 未进入中央四服务白名单；新增数据库服务必须先更新 Services/Directory.Build.targets。" />
+    <Error Condition="!Exists('$(MahjongSchemaSourcePath)')"
+           Text="数据库 Schema 源文件不存在：$(MahjongSchemaSourcePath)" />
+  </Target>
+
+  <!--
+    Build 完成后比较源文件与输出文件摘要，防止增量构建留下陈旧 Schema 或复制到错误目录。
+  -->
+  <Target Name="ValidateMahjongSchemaBuildOutput"
+          AfterTargets="Build"
+          Condition="'$(MahjongSchemaServiceName)' != ''">
+    <PropertyGroup>
+      <_MahjongSchemaBuildOutputPath>$(TargetDir)$(MahjongSchemaRelativeOutputPath)</_MahjongSchemaBuildOutputPath>
+    </PropertyGroup>
+    <Error Condition="!Exists('$(_MahjongSchemaBuildOutputPath)')"
+           Text="构建产物缺少隔离 Schema：$(_MahjongSchemaBuildOutputPath)" />
+    <GetFileHash Files="$(MahjongSchemaSourcePath)" Algorithm="SHA256">
+      <Output TaskParameter="Items" ItemName="_MahjongSchemaBuildSourceHash" />
+    </GetFileHash>
+    <GetFileHash Files="$(_MahjongSchemaBuildOutputPath)" Algorithm="SHA256">
+      <Output TaskParameter="Items" ItemName="_MahjongSchemaBuildOutputHash" />
+    </GetFileHash>
+    <Error Condition="'@(_MahjongSchemaBuildSourceHash->'%(FileHash)')' != '@(_MahjongSchemaBuildOutputHash->'%(FileHash)')'"
+           Text="构建产物 Schema 与源文件不一致：$(_MahjongSchemaBuildOutputPath)" />
+  </Target>
+
+  <!-- Publish 目录单独复核，避免容器或部署包绕过普通 Build 输出检查。 -->
+  <Target Name="ValidateMahjongSchemaPublishOutput"
+          AfterTargets="Publish"
+          Condition="'$(MahjongSchemaServiceName)' != ''">
+    <PropertyGroup>
+      <_MahjongSchemaPublishOutputPath>$(PublishDir)$(MahjongSchemaRelativeOutputPath)</_MahjongSchemaPublishOutputPath>
+    </PropertyGroup>
+    <Error Condition="!Exists('$(_MahjongSchemaPublishOutputPath)')"
+           Text="发布产物缺少隔离 Schema：$(_MahjongSchemaPublishOutputPath)" />
+    <GetFileHash Files="$(MahjongSchemaSourcePath)" Algorithm="SHA256">
+      <Output TaskParameter="Items" ItemName="_MahjongSchemaPublishSourceHash" />
+    </GetFileHash>
+    <GetFileHash Files="$(_MahjongSchemaPublishOutputPath)" Algorithm="SHA256">
+      <Output TaskParameter="Items" ItemName="_MahjongSchemaPublishOutputHash" />
+    </GetFileHash>
+    <Error Condition="'@(_MahjongSchemaPublishSourceHash->'%(FileHash)')' != '@(_MahjongSchemaPublishOutputHash->'%(FileHash)')'"
+           Text="发布产物 Schema 与源文件不一致：$(_MahjongSchemaPublishOutputPath)" />
+  </Target>
+</Project>

@@ -4,6 +4,8 @@
     <NoWarn>$(NoWarn);CS1591</NoWarn>
     <!-- Angular 源码目录只参与前端构建，不作为 ASP.NET 静态内容直接发布。 -->
     <AdminClientRoot>$(MSBuildProjectDirectory)\ClientApp</AdminClientRoot>
+    <!-- Schema 输出规则由 Services/Directory.Build.targets 统一生成和校验。 -->
+    <MahjongSchemaServiceName>Admin</MahjongSchemaServiceName>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
@@ -13,12 +15,6 @@
     <ProjectReference Include="..\GuiyangMahjong.Observability\GuiyangMahjong.Observability.csproj" />
   </ItemGroup>
   <ItemGroup>
-    <!-- 唯一输出路径避免测试同时引用多个服务时发生同名 Schema 覆盖。 -->
-    <Content Include="Storage\schema.sql">
-      <TargetPath>Schemas/Admin/schema.sql</TargetPath>
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-    </Content>
     <Content Update="wwwroot\**\*" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
   <Target Name="BuildAngularAdminClient"
