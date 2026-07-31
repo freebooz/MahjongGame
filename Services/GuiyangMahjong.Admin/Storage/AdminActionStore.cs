@@ -149,6 +149,9 @@ public sealed class InMemoryAdminActionStore : IAdminActionStore
             || existing.RequestedBy != proposed.RequestedBy
             || existing.Reason != proposed.Reason
             || existing.TicketId != proposed.TicketId
+            || existing.ReasonCode != proposed.ReasonCode
+            || existing.OperationDescription != proposed.OperationDescription
+            || existing.IdempotencyKey != proposed.IdempotencyKey
             || existing.ExpectedStateSequence != proposed.ExpectedStateSequence
             || existing.Parameters.HasValue != proposed.Parameters.HasValue
             || (existing.Parameters.HasValue

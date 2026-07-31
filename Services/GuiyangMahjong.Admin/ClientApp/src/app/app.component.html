@@ -160,7 +160,7 @@
     <form method="dialog">
       <h2>设置只读访问凭证</h2>
       <p>凭证仅保存在当前浏览器标签页，关闭标签页后自动清除。</p>
-      <label>Bearer Token<input id="credential" type="password" autocomplete="off"></label>
+      <label>企业短期访问令牌（仅用于建立 BFF 会话，不会持久化）<input id="credential" type="password" autocomplete="off"></label>
       <div class="dialog-actions"><button value="cancel" class="secondary">取消</button><button id="saveCredential" value="default">连接</button></div>
     </form>
   </dialog>
@@ -175,7 +175,11 @@
       </label>
       <label><span id="actionTargetLabel">目标 ID</span><input id="actionTarget" readonly></label>
       <label>关联工单<input id="actionTicket" placeholder="例如 INC-20260727-001"></label>
+      <label>原因码
+        <select id="actionReasonCode"><option value="OPERATOR_REQUEST">OPERATOR_REQUEST</option><option value="INCIDENT_RESPONSE">INCIDENT_RESPONSE</option><option value="CUSTOMER_DISPUTE">CUSTOMER_DISPUTE</option><option value="RISK_REVIEW">RISK_REVIEW</option></select>
+      </label>
       <label>操作原因<textarea id="actionReason" rows="4" placeholder="至少 10 个字符"></textarea></label>
+      <label>操作说明<textarea id="actionDescription" rows="3" placeholder="说明预期影响和操作范围，至少 10 个字符"></textarea></label>
       <section id="assetParameterFields" class="confirmation" hidden>
         <strong>资产操作必须关联已审批的补偿审查案件：</strong>
         <label>补偿案件<select id="assetCaseId"></select></label>

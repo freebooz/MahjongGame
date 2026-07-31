@@ -22,6 +22,10 @@ public static class AdminRoles
     public const string ChatCompliance = "chat.compliance";
     public const string AuditViewer = "audit.viewer";
     public const string SeniorGovernanceApprover = "governance.senior-approver";
+    public const string GovernancePublisher = "governance.publisher";
+    public const string RefundOperator = "refund.operator";
+    public const string BatchSanctionOperator = "sanction.batch-operator";
+    public const string GovernanceApprover = "governance.approver";
 
     /// <summary>配置和身份令牌允许声明的全部角色白名单；未知角色在启动或认证时拒绝。</summary>
     public static readonly IReadOnlySet<string> Known = new HashSet<string>(
@@ -39,7 +43,11 @@ public static class AdminRoles
             CompensationOperator,
             ChatCompliance,
             AuditViewer,
-            SeniorGovernanceApprover
+            SeniorGovernanceApprover,
+            GovernancePublisher,
+            RefundOperator,
+            BatchSanctionOperator,
+            GovernanceApprover
         ],
         StringComparer.Ordinal);
 }

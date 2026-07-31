@@ -102,6 +102,9 @@ public sealed class PostgresAdminActionStore(
             || existing.RequestedBy != proposed.RequestedBy
             || existing.Reason != proposed.Reason
             || existing.TicketId != proposed.TicketId
+            || existing.ReasonCode != proposed.ReasonCode
+            || existing.OperationDescription != proposed.OperationDescription
+            || existing.IdempotencyKey != proposed.IdempotencyKey
             || existing.ExpectedStateSequence != proposed.ExpectedStateSequence
             || existing.Parameters.HasValue != proposed.Parameters.HasValue
             || (existing.Parameters.HasValue
@@ -153,7 +156,7 @@ public sealed class PostgresAdminActionStore(
         await using var update = new NpgsqlCommand(
             """
             UPDATE admin_monitor.action_requests
-            SET confirmed_at_utc=$1, status=$2, version=$3
+            SET confirmed_at_utc=$1, status=$2, version=$3, confirmation=$6
             WHERE action_request_id=$4 AND version=$5
             """,
             connection,
@@ -163,6 +166,7 @@ public sealed class PostgresAdminActionStore(
         update.Parameters.AddWithValue(action.Version);
         update.Parameters.AddWithValue(Guid.Parse(action.ActionRequestId));
         update.Parameters.AddWithValue(expectedVersion);
+        update.Parameters.AddWithValue((object?)action.Confirmation ?? DBNull.Value);
         if (await update.ExecuteNonQueryAsync(cancellationToken) != 1)
         {
             await transaction.RollbackAsync(cancellationToken);
@@ -446,8 +450,9 @@ public sealed class PostgresAdminActionStore(
                 action_request_id, action_type, target_type, target_id, requested_by,
                 requested_at_utc, confirmation_expires_at_utc, confirmed_at_utc,
                 reason, ticket_id, trace_id, expected_state_sequence, expected_state_hash,
-                before_state, status, expires_at_utc, version, action_parameters)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+                before_state, status, expires_at_utc, version, action_parameters,
+                reason_code, operation_description, confirmation, idempotency_key)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
             """,
             connection,
             transaction);
@@ -469,6 +474,10 @@ public sealed class PostgresAdminActionStore(
         command.Parameters.AddWithValue(action.ExpiresAtUtc);
         command.Parameters.AddWithValue(action.Version);
         AddNullableJson(command, action.Parameters);
+        command.Parameters.AddWithValue(action.ReasonCode);
+        command.Parameters.AddWithValue(action.OperationDescription);
+        command.Parameters.AddWithValue((object?)action.Confirmation ?? DBNull.Value);
+        command.Parameters.AddWithValue((object?)action.IdempotencyKey ?? DBNull.Value);
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
@@ -599,7 +608,8 @@ public sealed class PostgresAdminActionStore(
                action.confirmed_at_utc, action.reason, action.ticket_id, action.trace_id,
                action.expected_state_sequence, action.expected_state_hash,
                action.before_state::text, action.status, action.version,
-               action.action_parameters::text,
+               action.action_parameters::text, action.reason_code,
+               action.operation_description, action.confirmation, action.idempotency_key,
                approval.approval_id, approval.approved_by, approval.approved_at_utc,
                approval.decision, approval.comment
         FROM admin_monitor.action_requests AS action
@@ -609,14 +619,14 @@ public sealed class PostgresAdminActionStore(
 
     private static AdminActionRecord ReadAction(NpgsqlDataReader reader)
     {
-        AdminActionApproval? approval = reader.IsDBNull(18)
+        AdminActionApproval? approval = reader.IsDBNull(22)
             ? null
             : new AdminActionApproval(
-                reader.GetGuid(18).ToString(),
-                reader.GetString(19),
-                reader.GetFieldValue<DateTimeOffset>(20),
-                Enum.Parse<ApprovalDecision>(reader.GetString(21)),
-                reader.GetString(22));
+                reader.GetGuid(22).ToString(),
+                reader.GetString(23),
+                reader.GetFieldValue<DateTimeOffset>(24),
+                Enum.Parse<ApprovalDecision>(reader.GetString(25)),
+                reader.GetString(26));
         return new AdminActionRecord(
             reader.GetGuid(0).ToString(),
             Enum.Parse<AdminManagementActionType>(reader.GetString(1)),
@@ -636,7 +646,11 @@ public sealed class PostgresAdminActionStore(
             Enum.Parse<AdminActionStatus>(reader.GetString(15)),
             approval,
             reader.GetInt32(16),
-            ReadNullableJson(reader, 17));
+            ReadNullableJson(reader, 17),
+            reader.GetString(18),
+            reader.GetString(19),
+            reader.IsDBNull(20) ? null : reader.GetString(20),
+            reader.IsDBNull(21) ? null : reader.GetString(21));
     }
 
     private static AdminCommandOutboxRecord ReadOutbox(NpgsqlDataReader reader) =>

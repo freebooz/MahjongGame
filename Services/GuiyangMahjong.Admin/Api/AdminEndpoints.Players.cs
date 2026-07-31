@@ -27,21 +27,27 @@ public static partial class AdminEndpoints
             int? pageSize,
             HttpContext context,
             PlayerMonitoringService monitoring,
+            AdminDataRedactionService redaction,
             IOptions<AdminOptions> options,
             CancellationToken cancellationToken) =>
         {
             RequireRole(context, AdminRoles.PlayerViewer);
-            return Results.Ok(await monitoring.ListPlayersAsync(
+            var page = await monitoring.ListPlayersAsync(
                 search,
                 cursor,
                 pageSize ?? options.Value.RealtimeCapacity.DefaultPageSize,
-                cancellationToken));
+                cancellationToken);
+            return Results.Ok(page with
+            {
+                Items = page.Items.Select(item => redaction.RedactPlayer(item, false)).ToArray()
+            });
         });
         api.MapGet("/players/{playerId}", async (
             string playerId,
             string? ticketId,
             HttpContext context,
             PlayerMonitoringService monitoring,
+            AdminDataRedactionService redaction,
             IAdminActionStore auditStore,
             IAdminCaseStore caseStore,
             AdminAbacPolicyService abacPolicy,
@@ -114,6 +120,7 @@ public static partial class AdminEndpoints
             }
             return Results.Ok(player with
             {
+                Summary = redaction.RedactPlayer(player.Summary, canViewIdentityHistory),
                 Sessions = canViewIdentityHistory ? player.Sessions : [],
                 LoginHistory =
                     canViewIdentityHistory ? player.LoginHistory : [],
@@ -295,4 +302,3 @@ public static partial class AdminEndpoints
             cancellationToken);
     }
 }
-

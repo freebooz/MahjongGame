@@ -257,7 +257,11 @@ public sealed class MonitoringAggregationService(
                 loaded.Rooms.Health,
                 loaded.Instances.Health,
                 runtimeResult.Health,
-                timelineResult.Health));
+                timelineResult.Health),
+            room.RoomEpoch,
+            room.RuleSetVersion,
+            room.BuildVersion,
+            room.Seats);
     }
 
     /// <summary>

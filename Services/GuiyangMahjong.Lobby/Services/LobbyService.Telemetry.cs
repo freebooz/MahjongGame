@@ -45,6 +45,17 @@ public sealed partial class LobbyService
         }
         ValidateRpcTelemetry(heartbeat.RpcMethods);
         ValidateSettlementTelemetry(room, heartbeat.Settlement);
+        if (heartbeat.ActionSequence is < 0
+            || heartbeat.StateVersion is < 0
+            || heartbeat.SnapshotVersion is < 0
+            || heartbeat.SnapshotCreatedAtUtc > observedAtUtc.AddMinutes(1)
+            || heartbeat.RecoveryState is not null
+                and not ("Healthy" or "Recovering" or "Recovered" or "Failed")
+            || heartbeat.LastTraceId is { Length: > 128 })
+        {
+            // 恢复与快照字段参与事故判断，宁可拒绝异常口径也不能在看板展示虚假健康状态。
+            throw Invalid("GameServer heartbeat recovery telemetry is invalid.");
+        }
 
         var players = heartbeat.Players
             ?? (heartbeat.ConnectedPlayerIds ?? [])
@@ -62,6 +73,10 @@ public sealed partial class LobbyService
                 || player.PlayerId.Length > 80
                 || player.SeatIndex is < -1 or > 3
                 || player.LatencyMilliseconds is < 0 or > 120_000
+                || player.PacketLossPercent is < 0 or > 100
+                || !IsFinite(player.PacketLossPercent)
+                || player.IllegalActionCount is < 0
+                || player.ReconnectCount is < 0
                 || !IsFinite(player.LatencyMilliseconds)
                 || player.ConnectionState is not ("Connected" or "Disconnected" or "Reconnecting")
                 || player.ConnectionStateSequence is < 0
@@ -99,7 +114,14 @@ public sealed partial class LobbyService
             ingressRate,
             egressRate,
             heartbeat.RpcMethods,
-            heartbeat.Settlement ?? previous?.Settlement);
+            heartbeat.Settlement ?? previous?.Settlement,
+            heartbeat.ActionSequence,
+            heartbeat.StateVersion,
+            room.RoomEpoch,
+            heartbeat.SnapshotVersion,
+            heartbeat.SnapshotCreatedAtUtc,
+            heartbeat.RecoveryState,
+            heartbeat.LastTraceId);
         var rpcDelta = previous is not null
             && previous.ServerInstanceId == serverInstanceId
             && heartbeat.RpcReceivedCount is { } currentRpc

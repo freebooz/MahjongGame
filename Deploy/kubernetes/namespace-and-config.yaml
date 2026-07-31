@@ -57,6 +57,13 @@ data:
   Admin__Abac__HighValueCompensationThreshold: "100000"
   Admin__Abac__BreakGlassMaximumMinutes: "15"
   Admin__WebSecurity__RequireHttps: "true"
+  # BFF 会话使用 Admin 自有 PostgreSQL 表；Cookie 不携带企业令牌，设备/IP 仅保存不可逆摘要。
+  Admin__WebSecurity__BrowserSessionEnabled: "true"
+  Admin__WebSecurity__SessionCookieName: __Host-mahjong-admin
+  Admin__WebSecurity__SessionLifetimeMinutes: "10"
+  Admin__WebSecurity__CsrfHeaderName: X-Admin-CSRF
+  Admin__WebSecurity__BindDevice: "true"
+  Admin__WebSecurity__BindIpNetwork: "true"
   Admin__RealtimeCapacity__DefaultPageSize: "100"
   Admin__RealtimeCapacity__MaximumPageSize: "200"
   Admin__RealtimeCapacity__MaximumRooms: "10000"

@@ -141,7 +141,11 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE
     admin_monitor.management_cases,
     admin_monitor.player_asset_operations,
     admin_monitor.player_evidence,
-    admin_monitor.player_chat_access_grants
+    admin_monitor.player_chat_access_grants,
+    admin_monitor.admin_sessions
+TO mahjong_admin_rw;
+-- 登录安全事件只能追加和查询，禁止 Admin 运行身份覆盖或删除历史失败记录。
+GRANT SELECT, INSERT ON TABLE admin_monitor.admin_login_security_events
 TO mahjong_admin_rw;
 GRANT SELECT, INSERT ON TABLE admin_monitor.audit_ledger
 TO mahjong_admin_rw, mahjong_audit_append;

@@ -3,7 +3,7 @@
  * 这里只注册 DOM 事件和启动策略，业务请求、渲染和实时同步分别位于独立 TypeScript 模块。
  */
 import {
-  byId,configureRefreshHandler,resetPage,setConnection,state
+  byId,configureRefreshHandler,establishBrowserSession,resetPage,setConnection,state
 } from "./admin-console-state";
 import {refresh} from "./admin-console-dashboard";
 import {
@@ -34,8 +34,12 @@ async function bootstrapMonitoring(){
  */
 export function initializeAdminConsole(){
   configureRefreshHandler(refresh);
-  byId("credentialButton").onclick=()=>{byId("credential").value=state.token;byId("credentialDialog").showModal();};
-  byId("saveCredential").onclick=()=>{state.token=byId("credential").value.trim();setTimeout(bootstrapMonitoring);};
+  byId("credentialButton").onclick=()=>{byId("credential").value="";byId("credentialDialog").showModal();};
+  byId("saveCredential").onclick=async()=>{
+    const input=byId("credential"),token=input.value.trim();input.value="";
+    try{await establishBrowserSession(token);await bootstrapMonitoring();}
+    catch(error){state.authenticated=false;setConnection(false,error.message);}
+  };
   byId("refreshButton").onclick=refresh;
   byId("lifecycle").onchange=()=>{resetPage("rooms");void refresh();};
   for(const filterId of ["regionFilter","clusterFilter","lobbyFilter","nodeFilter"]){

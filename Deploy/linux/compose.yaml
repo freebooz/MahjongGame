@@ -533,6 +533,13 @@ services:
       Admin__Abac__HighValueCompensationThreshold: ${ADMIN_HIGH_VALUE_COMPENSATION_THRESHOLD:-100000}
       Admin__Abac__BreakGlassMaximumMinutes: "15"
       Admin__WebSecurity__RequireHttps: "true"
+      # 浏览器只保存 HttpOnly 会话 Cookie；CSRF 值仅驻留页面内存，管理员会话由 PostgreSQL 跨副本共享。
+      Admin__WebSecurity__BrowserSessionEnabled: ${ADMIN_BROWSER_SESSION_ENABLED:-true}
+      Admin__WebSecurity__SessionCookieName: ${ADMIN_SESSION_COOKIE_NAME:-__Host-mahjong-admin}
+      Admin__WebSecurity__SessionLifetimeMinutes: ${ADMIN_SESSION_LIFETIME_MINUTES:-10}
+      Admin__WebSecurity__CsrfHeaderName: ${ADMIN_CSRF_HEADER_NAME:-X-Admin-CSRF}
+      Admin__WebSecurity__BindDevice: "true"
+      Admin__WebSecurity__BindIpNetwork: "true"
       Admin__RealtimeCapacity__DefaultPageSize: ${ADMIN_DEFAULT_PAGE_SIZE:-100}
       Admin__RealtimeCapacity__MaximumPageSize: ${ADMIN_MAXIMUM_PAGE_SIZE:-200}
       Admin__RealtimeCapacity__MaximumRooms: ${ADMIN_MAXIMUM_ROOMS:-10000}

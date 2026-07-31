@@ -7,7 +7,14 @@ public sealed record GameServerRouteSnapshot(
     string ServerInstanceId,
     string MatchId,
     string ServerIp,
-    int ServerPort);
+    int ServerPort,
+    long RoomEpoch = 1,
+    string BuildVersion = "",
+    string RuleSetVersion = "",
+    int ProtocolVersion = 1);
+
+/// <summary>房间座位的只读投影；座位索引在当前 RoomEpoch 内稳定，不包含私有手牌。</summary>
+public sealed record RoomSeatSnapshot(string PlayerId, int SeatIndex, DateTimeOffset JoinedAtUtc);
 
 /// <summary>
 /// Admin 使用的房间配置与控制快照。
@@ -50,6 +57,13 @@ public sealed record RoomMonitorSnapshot
     public string LobbyId { get; init; } = "lobby-local-1";
     public string NodeId { get; init; } = "node-local-1";
     public string SourceId { get; init; } = "legacy-lobby";
+
+    // 阶段4之后的权威并发、路由和版本字段；默认值仅用于读取旧快照，不能用于执行高风险命令。
+    public long StateVersion { get; init; }
+    public long RoomEpoch { get; init; } = 1;
+    public string RuleSetVersion { get; init; } = "legacy-v1";
+    public string BuildVersion { get; init; } = "unassigned";
+    public RoomSeatSnapshot[] Seats { get; init; } = [];
 }
 
 /// <summary>
@@ -68,7 +82,12 @@ public sealed record GameServerInstanceSnapshot(
     DateTimeOffset? RegisteredAtUtc,
     DateTimeOffset? LastHeartbeatAtUtc,
     string BuildVersion,
-    string? FailureReason);
+    string? FailureReason,
+    long RoomEpoch = 1,
+    string? AllocationId = null,
+    string Provider = "LocalProcess",
+    long FencingToken = 1,
+    string? Fleet = null);
 
 /// <summary>带集群、节点、区域和数据源身份的实例投影，用于多集群聚合与命令路由。</summary>
 public sealed record MonitoredInstance(
@@ -96,6 +115,9 @@ public sealed record CountGroup(string Key, int Count);
 /// <param name="DisconnectReason">受控掉线原因；连接正常或未知时为 null。</param>
 /// <param name="ConnectionStateSequence">连接状态单调序号，用于识别重复心跳。</param>
 /// <param name="ConnectionEventId">最近连接状态事件的幂等标识。</param>
+/// <param name="PacketLossPercent">服务端观测丢包率百分比，范围 0～100。</param>
+/// <param name="IllegalActionCount">本实例累计拒绝的非法动作数。</param>
+/// <param name="ReconnectCount">本实例观察到的成功重连次数。</param>
 public sealed record PlayerRuntimeTelemetry(
     string PlayerId,
     int SeatIndex,
@@ -108,7 +130,10 @@ public sealed record PlayerRuntimeTelemetry(
     DateTimeOffset? ReconnectedAtUtc = null,
     string? DisconnectReason = null,
     long? ConnectionStateSequence = null,
-    string? ConnectionEventId = null);
+    string? ConnectionEventId = null,
+    double? PacketLossPercent = null,
+    long? IllegalActionCount = null,
+    int? ReconnectCount = null);
 
 /// <summary>
 /// 固定方法白名单的 RPC 累计指标；方法名不得含玩家、房间或请求参数，避免高基数。
@@ -173,6 +198,13 @@ public sealed record SettlementRuntimeTelemetry(
 /// <param name="NetworkEgressBytesPerSecond">相邻有效样本计算的出站字节速率。</param>
 /// <param name="RpcMethods">固定方法白名单的 RPC 分类指标。</param>
 /// <param name="Settlement">显式结算状态投影。</param>
+/// <param name="ActionSequence">当前权威动作单调序号。</param>
+/// <param name="StateVersion">当前权威状态版本。</param>
+/// <param name="RoomEpoch">当前房间路由代际。</param>
+/// <param name="SnapshotVersion">最近有效快照版本。</param>
+/// <param name="SnapshotCreatedAtUtc">最近快照创建时间。</param>
+/// <param name="RecoveryState">崩溃恢复状态摘要。</param>
+/// <param name="LastTraceId">最近权威变化的跨服务 TraceId。</param>
 public sealed record RoomRuntimeTelemetry(
     string RoomId,
     string ServerInstanceId,
@@ -195,7 +227,14 @@ public sealed record RoomRuntimeTelemetry(
     double? NetworkIngressBytesPerSecond = null,
     double? NetworkEgressBytesPerSecond = null,
     RpcMethodTelemetry[]? RpcMethods = null,
-    SettlementRuntimeTelemetry? Settlement = null);
+    SettlementRuntimeTelemetry? Settlement = null,
+    long? ActionSequence = null,
+    long? StateVersion = null,
+    long? RoomEpoch = null,
+    int? SnapshotVersion = null,
+    DateTimeOffset? SnapshotCreatedAtUtc = null,
+    string? RecoveryState = null,
+    string? LastTraceId = null);
 
 /// <summary>
 /// Admin 房间事件时间线条目。
@@ -268,7 +307,11 @@ public sealed record RoomDetail(
     RoomRuntimeTelemetry? Runtime,
     RoomTimelineEvent[] Timeline,
     string TelemetryStatus,
-    MonitoringReliabilityMetadata? Reliability = null);
+    MonitoringReliabilityMetadata? Reliability = null,
+    long RoomEpoch = 1,
+    string RuleSetVersion = "legacy-v1",
+    string BuildVersion = "unassigned",
+    RoomSeatSnapshot[]? Seats = null);
 
 /// <summary>Auth 玩家目录的 Admin 线协议模型；IP 已脱敏，风险标签和控制时间来自 Auth 权威状态。</summary>
 public sealed record AuthPlayerDirectoryItem(
@@ -376,7 +419,13 @@ public sealed record PlayerMonitorListItem(
     long ControlVersion,
     DateTimeOffset? FrozenUntilUtc,
     DateTimeOffset? MutedUntilUtc,
-    string[] RiskLabels);
+    string[] RiskLabels,
+    double? PacketLossPercent = null,
+    int? ReconnectCount = null,
+    bool? Trustee = null,
+    long? IllegalActionCount = null,
+    string? ConnectionState = null,
+    DateTimeOffset? DisconnectedAtUtc = null);
 
 /// <summary>
 /// 玩家监控详情聚合。

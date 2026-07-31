@@ -316,6 +316,12 @@ public sealed record ManagedRoomBootstrap(
 /// <param name="Settlement">Dedicated Server 当前观察到的显式结算投影。</param>
 /// <param name="RoomEpoch">DS 启动时获得的路由代际；重新分配后必须与房间当前值完全一致。</param>
 /// <param name="FencingToken">Allocator 实例租约令牌；当前与 RoomEpoch 同步递增，旧实例不得续租。</param>
+/// <param name="ActionSequence">当前权威动作单调序号；旧 DS 未提供时为 null。</param>
+/// <param name="StateVersion">当前牌局状态版本；用于识别陈旧操作。</param>
+/// <param name="SnapshotVersion">最近成功快照版本；没有快照时为 null。</param>
+/// <param name="SnapshotCreatedAtUtc">最近成功快照的 DS UTC 时间。</param>
+/// <param name="RecoveryState">受控恢复状态，例如 Healthy、Recovering 或 Failed。</param>
+/// <param name="LastTraceId">最近一次权威状态变化的 TraceId，不得包含凭据。</param>
 public sealed record GameServerHeartbeat(
     string RoomId,
     string HeartbeatCredential,
@@ -339,7 +345,13 @@ public sealed record GameServerHeartbeat(
     RpcMethodTelemetry[]? RpcMethods = null,
     SettlementRuntimeTelemetry? Settlement = null,
     long RoomEpoch = 0,
-    long FencingToken = 0);
+    long FencingToken = 0,
+    long? ActionSequence = null,
+    long? StateVersion = null,
+    int? SnapshotVersion = null,
+    DateTimeOffset? SnapshotCreatedAtUtc = null,
+    string? RecoveryState = null,
+    string? LastTraceId = null);
 
 /// <summary>
 /// 单个固定 RPC 方法自进程启动以来的有界累计指标；MethodName 只能来自代码白名单，
@@ -396,6 +408,9 @@ public sealed record SettlementRuntimeTelemetry(
 /// <param name="DisconnectReason">受控掉线原因；连接正常或未知时为 null。</param>
 /// <param name="ConnectionStateSequence">玩家连接状态单调序号，用于对重复心跳去重。</param>
 /// <param name="ConnectionEventId">本次连接状态变化的幂等事件标识。</param>
+/// <param name="PacketLossPercent">服务端观测丢包率百分比，范围 0～100。</param>
+/// <param name="IllegalActionCount">本实例累计拒绝的非法玩家动作数。</param>
+/// <param name="ReconnectCount">本实例观察到的成功重连次数。</param>
 public sealed record PlayerRuntimeTelemetry(
     string PlayerId,
     int SeatIndex,
@@ -408,7 +423,10 @@ public sealed record PlayerRuntimeTelemetry(
     DateTimeOffset? ReconnectedAtUtc = null,
     string? DisconnectReason = null,
     long? ConnectionStateSequence = null,
-    string? ConnectionEventId = null);
+    string? ConnectionEventId = null,
+    double? PacketLossPercent = null,
+    long? IllegalActionCount = null,
+    int? ReconnectCount = null);
 
 /// <summary>
 /// Lobby 写入监控存储并提供给 Admin 的房间运行快照。
@@ -436,6 +454,13 @@ public sealed record PlayerRuntimeTelemetry(
 /// <param name="NetworkEgressBytesPerSecond">相邻有效心跳间的应用出站字节速率。</param>
 /// <param name="RpcMethods">固定方法白名单的 RPC 分类指标。</param>
 /// <param name="Settlement">当前显式结算状态投影。</param>
+/// <param name="ActionSequence">当前权威动作序号。</param>
+/// <param name="StateVersion">当前权威状态版本。</param>
+/// <param name="RoomEpoch">房间路由代际；旧实例数据不得覆盖更高代际。</param>
+/// <param name="SnapshotVersion">最近有效快照版本。</param>
+/// <param name="SnapshotCreatedAtUtc">最近快照创建时间。</param>
+/// <param name="RecoveryState">崩溃恢复状态摘要。</param>
+/// <param name="LastTraceId">最近权威变化的跨服务 TraceId。</param>
 public sealed record RoomRuntimeTelemetry(
     string RoomId,
     string ServerInstanceId,
@@ -458,7 +483,14 @@ public sealed record RoomRuntimeTelemetry(
     double? NetworkIngressBytesPerSecond = null,
     double? NetworkEgressBytesPerSecond = null,
     RpcMethodTelemetry[]? RpcMethods = null,
-    SettlementRuntimeTelemetry? Settlement = null);
+    SettlementRuntimeTelemetry? Settlement = null,
+    long? ActionSequence = null,
+    long? StateVersion = null,
+    long? RoomEpoch = null,
+    int? SnapshotVersion = null,
+    DateTimeOffset? SnapshotCreatedAtUtc = null,
+    string? RecoveryState = null,
+    string? LastTraceId = null);
 
 /// <summary>
 /// 房间事件时间线的持久化条目。

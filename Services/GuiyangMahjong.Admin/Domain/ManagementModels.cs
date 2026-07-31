@@ -30,7 +30,11 @@ public enum AdminManagementActionType
     GrantPlayerCompensation,
     RevokeErroneousReward,
     ViewPlayerReplay,
-    CreatePlayerSupportTicket
+    CreatePlayerSupportTicket,
+    OrderRefund,
+    RulePublish,
+    ConfigurationPublish,
+    BatchSanction
 }
 
 /// <summary>
@@ -64,7 +68,9 @@ public sealed record CreateAdminActionRequest(
     string Reason,
     string TicketId,
     long? ExpectedStateSequence,
-    JsonElement? Parameters = null);
+    JsonElement? Parameters = null,
+    string? ReasonCode = null,
+    string? OperationDescription = null);
 
 /// <summary>二次确认请求；确认文本必须与服务端生成的目标确认值一致。</summary>
 public sealed record ConfirmAdminActionRequest(string TargetConfirmation);
@@ -107,7 +113,11 @@ public sealed record AdminActionRecord(
     AdminActionStatus Status,
     AdminActionApproval? Approval,
     int Version,
-    JsonElement? Parameters = null);
+    JsonElement? Parameters = null,
+    string ReasonCode = "LEGACY_UNSPECIFIED",
+    string OperationDescription = "",
+    string? Confirmation = null,
+    string? IdempotencyKey = null);
 
 /// <summary>
 /// 防篡改审计链中的一条不可变记录。

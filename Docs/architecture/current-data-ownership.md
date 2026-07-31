@@ -62,6 +62,8 @@
 | `player_asset_operations` | `operation_id` | 玩家/时间索引 | 指向 action 和 case |
 | `player_evidence` | `event_id` | `(evidence_type, source_reference)` UNIQUE；玩家索引 | 仅投影证据 |
 | `player_chat_access_grants` | `grant_id` | 玩家/有效期查询索引 | 范围、理由、审批、TraceId |
+| `admin_sessions` | `session_hash` | 未撤销会话到期索引 | 仅保存会话/CSRF/设备/IP 摘要和授权快照，不保存企业 Token |
+| `admin_login_security_events` | `event_id` | 操作者/时间索引 | 追加式登录成功、失败及异常设备/IP 证据；禁止更新、删除和清空 |
 
 ## 3. 数据所有权矩阵
 
@@ -120,7 +122,6 @@
 
 - 迁移生成：当前为人工维护 Schema SQL，不是自动生成。
 - 升级：独立迁移 Job 顺序应用 Auth、Lobby、PlayerData、Admin Schema 及权限 SQL。
-- 回滚：当前没有正式 downgrade；只能使用发布前备份、人工逆向 SQL 或应用向前修复。
+- 回滚：阶段10新增 `rollback-stage10.sql` 可在先关闭 BFF 会话后精确删除管理员会话和登录安全事件表；其他历史 Schema 仍采用发布前备份或向前修复。
 - 数据校验：有架构测试验证 Schema 输出隔离；外部 PostgreSQL 测试验证关键唯一约束和事务。
-- 阶段 0 未执行任何数据库变更，因此本阶段回滚不涉及数据库。
-
+- 阶段10已在临时 PostgreSQL 17 上验证 Admin Schema 前滚、并发持久化和精确回滚；生产仍必须由独立 migration 身份执行。

@@ -1,5 +1,41 @@
 CREATE SCHEMA IF NOT EXISTS admin_monitor;
 
+-- 管理员浏览器会话只保存不可逆摘要和授权快照；企业令牌、原始设备标识及完整 IP 禁止入库。
+CREATE TABLE IF NOT EXISTS admin_monitor.admin_sessions (
+    session_hash TEXT PRIMARY KEY CHECK (length(session_hash) = 64),
+    csrf_hash TEXT NOT NULL CHECK (length(csrf_hash) = 64),
+    operator_id TEXT NOT NULL CHECK (length(operator_id) BETWEEN 1 AND 128),
+    roles_json JSONB NOT NULL,
+    regions_json JSONB NOT NULL,
+    case_ids_json JSONB NOT NULL,
+    shift_id TEXT NULL,
+    mfa_satisfied BOOLEAN NOT NULL,
+    break_glass_until_utc TIMESTAMPTZ NULL,
+    device_hash TEXT NOT NULL CHECK (length(device_hash) = 64),
+    ip_network_hash TEXT NOT NULL CHECK (length(ip_network_hash) = 64),
+    created_at_utc TIMESTAMPTZ NOT NULL,
+    expires_at_utc TIMESTAMPTZ NOT NULL,
+    revoked_at_utc TIMESTAMPTZ NULL,
+    CHECK (expires_at_utc > created_at_utc)
+);
+CREATE INDEX IF NOT EXISTS ix_admin_sessions_expiry
+    ON admin_monitor.admin_sessions(expires_at_utc)
+    WHERE revoked_at_utc IS NULL;
+
+-- 登录安全事件是追加式调查证据，只记录摘要；运行身份没有 UPDATE/DELETE 权限。
+CREATE TABLE IF NOT EXISTS admin_monitor.admin_login_security_events (
+    event_id UUID PRIMARY KEY,
+    operator_id TEXT NOT NULL,
+    outcome TEXT NOT NULL CHECK (outcome IN ('Succeeded', 'Rejected')),
+    reason_code TEXT NOT NULL,
+    device_hash TEXT NOT NULL CHECK (length(device_hash) = 64),
+    ip_network_hash TEXT NOT NULL CHECK (length(ip_network_hash) = 64),
+    occurred_at_utc TIMESTAMPTZ NOT NULL,
+    trace_id TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_admin_login_security_operator_time
+    ON admin_monitor.admin_login_security_events(operator_id, occurred_at_utc DESC);
+
 CREATE TABLE IF NOT EXISTS admin_monitor.action_requests (
     action_request_id UUID PRIMARY KEY,
     action_type VARCHAR(64) NOT NULL,
@@ -18,7 +54,11 @@ CREATE TABLE IF NOT EXISTS admin_monitor.action_requests (
     status VARCHAR(32) NOT NULL,
     expires_at_utc TIMESTAMPTZ NOT NULL,
     version INTEGER NOT NULL DEFAULT 1,
-    action_parameters JSONB
+    action_parameters JSONB,
+    reason_code VARCHAR(64) NOT NULL DEFAULT 'LEGACY_UNSPECIFIED',
+    operation_description TEXT NOT NULL DEFAULT '',
+    confirmation TEXT,
+    idempotency_key VARCHAR(256)
 );
 
 CREATE INDEX IF NOT EXISTS ix_admin_action_requests_status_requested
@@ -29,7 +69,11 @@ ALTER TABLE admin_monitor.action_requests
     ADD COLUMN IF NOT EXISTS confirmed_at_utc TIMESTAMPTZ,
     ADD COLUMN IF NOT EXISTS expected_state_hash CHAR(64),
     ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 1,
-    ADD COLUMN IF NOT EXISTS action_parameters JSONB;
+    ADD COLUMN IF NOT EXISTS action_parameters JSONB,
+    ADD COLUMN IF NOT EXISTS reason_code VARCHAR(64) NOT NULL DEFAULT 'LEGACY_UNSPECIFIED',
+    ADD COLUMN IF NOT EXISTS operation_description TEXT NOT NULL DEFAULT '',
+    ADD COLUMN IF NOT EXISTS confirmation TEXT,
+    ADD COLUMN IF NOT EXISTS idempotency_key VARCHAR(256);
 
 UPDATE admin_monitor.action_requests
 SET confirmation_expires_at_utc =
@@ -102,6 +146,18 @@ BEGIN
     RAISE EXCEPTION 'admin_monitor.audit_ledger is append-only';
 END;
 $$ LANGUAGE plpgsql;
+
+-- 登录失败与异常设备/IP 记录同属不可变安全证据，禁止任何运行路径覆盖或清空。
+DROP TRIGGER IF EXISTS trg_prevent_admin_login_security_mutation
+    ON admin_monitor.admin_login_security_events;
+CREATE TRIGGER trg_prevent_admin_login_security_mutation
+    BEFORE UPDATE OR DELETE ON admin_monitor.admin_login_security_events
+    FOR EACH ROW EXECUTE FUNCTION admin_monitor.prevent_audit_mutation();
+DROP TRIGGER IF EXISTS trg_prevent_admin_login_security_truncate
+    ON admin_monitor.admin_login_security_events;
+CREATE TRIGGER trg_prevent_admin_login_security_truncate
+    BEFORE TRUNCATE ON admin_monitor.admin_login_security_events
+    FOR EACH STATEMENT EXECUTE FUNCTION admin_monitor.prevent_audit_mutation();
 
 DROP TRIGGER IF EXISTS trg_prevent_audit_update_delete
     ON admin_monitor.audit_ledger;

@@ -49,7 +49,14 @@
         { "$ref": "#/$defs/settlementRuntimeTelemetry" },
         { "type": "null" }
       ]
-    }
+    },
+    "actionSequence": { "type": ["integer", "null"], "minimum": 0 },
+    "stateVersion": { "type": ["integer", "null"], "minimum": 0 },
+    "roomEpoch": { "type": ["integer", "null"], "minimum": 1 },
+    "snapshotVersion": { "type": ["integer", "null"], "minimum": 0 },
+    "snapshotCreatedAtUtc": { "type": ["string", "null"], "format": "date-time" },
+    "recoveryState": { "type": ["string", "null"] },
+    "lastTraceId": { "type": ["string", "null"] }
   },
   "$defs": {
     "playerRuntimeTelemetry": {
@@ -69,7 +76,10 @@
         "reconnectedAtUtc": { "type": ["string", "null"], "format": "date-time" },
         "disconnectReason": { "type": ["string", "null"] },
         "connectionStateSequence": { "type": ["integer", "null"], "minimum": 0 },
-        "connectionEventId": { "type": ["string", "null"] }
+        "connectionEventId": { "type": ["string", "null"] },
+        "packetLossPercent": { "type": ["number", "null"], "minimum": 0, "maximum": 100 },
+        "illegalActionCount": { "type": ["integer", "null"], "minimum": 0 },
+        "reconnectCount": { "type": ["integer", "null"], "minimum": 0 }
       }
     },
     "rpcMethodTelemetry": {

@@ -811,6 +811,58 @@ public sealed class ProjectArchitectureTests
     }
 
     /// <summary>
+    /// 阶段10冻结 Admin 数据和基础设施边界：生产项目不得引用业务实现、Kubernetes/Agones SDK，
+    /// 持久化写 SQL 只能指向 admin_monitor，防止后台演化为任意数据修改工具。
+    /// </summary>
+    [Fact]
+    public void Admin_UsesOwnedSchemaAndControlledServiceCommandsOnly()
+    {
+        var root = FindProjectRoot();
+        var adminRoot = Path.Combine(root, "Services", "GuiyangMahjong.Admin");
+        var project = XDocument.Load(Path.Combine(adminRoot, "GuiyangMahjong.Admin.csproj"));
+        var references = project.Descendants("ProjectReference")
+            .Select(item => item.Attribute("Include")?.Value ?? string.Empty)
+            .ToArray();
+        foreach (var forbidden in new[]
+                 {
+                     "GuiyangMahjong.Auth", "GuiyangMahjong.Lobby", "GuiyangMahjong.Allocator",
+                     "GuiyangMahjong.PlayerData", "GuiyangMahjong.GameData"
+                 })
+        {
+            Assert.DoesNotContain(references, value => value.Contains(forbidden, StringComparison.OrdinalIgnoreCase));
+        }
+
+        var packages = project.Descendants("PackageReference")
+            .Select(item => item.Attribute("Include")?.Value ?? string.Empty)
+            .ToArray();
+        Assert.DoesNotContain(packages, value => value.Contains("Kubernetes", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(packages, value => value.Contains("Agones", StringComparison.OrdinalIgnoreCase));
+
+        var sqlTexts = Directory.EnumerateFiles(adminRoot, "*.*", SearchOption.AllDirectories)
+            .Where(path => path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase)
+                || path.EndsWith(".sql", StringComparison.OrdinalIgnoreCase))
+            .Where(path => !path.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase)
+                && !path.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase))
+            .Select(File.ReadAllText)
+            .ToArray();
+        foreach (var forbiddenMutation in new[]
+                 {
+                     "INSERT INTO room.", "UPDATE room.", "DELETE FROM room.",
+                     "INSERT INTO settlement.", "UPDATE settlement.", "DELETE FROM settlement.",
+                     "INSERT INTO player_data.", "UPDATE player_data.", "DELETE FROM player_data.",
+                     "INSERT INTO auth.", "UPDATE auth.", "DELETE FROM auth."
+                 })
+        {
+            Assert.DoesNotContain(sqlTexts, text => text.Contains(forbiddenMutation, StringComparison.OrdinalIgnoreCase));
+        }
+
+        // 模块必须包含真实可调用代码，避免仅建立空目录通过结构验收。
+        Assert.True(File.Exists(Path.Combine(adminRoot, "TrustSafety", "TrustSafetyReadModels.cs")));
+        Assert.True(File.Exists(Path.Combine(adminRoot, "Api", "TrustSafetyEndpoints.cs")));
+        Assert.True(File.Exists(Path.Combine(adminRoot, "Api", "AdminBffEndpoints.cs")));
+    }
+
+    /// <summary>
     /// 从测试输出逐级查找同时含 `.git`、`.uproject` 和 Services 的项目根。
     /// 找不到时抛出异常，避免架构测试误读其他目录后给出伪通过。
     /// </summary>
