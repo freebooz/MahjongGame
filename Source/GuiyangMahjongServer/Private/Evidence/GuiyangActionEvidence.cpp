@@ -29,10 +29,11 @@ FString FGuiyangActionEvidence::NormalizeRequest(const FMahjongActionRequest& Re
 FString FGuiyangActionEvidence::CalculateHash(const FGuiyangActionEvidenceRecord& Record)
 {
     const FString Canonical = FString::Printf(
-        TEXT("evidence-v1|previous=%s|match=%s|room=%s|epoch=%lld|action=%lld|before=%d|after=%d|stateHash=%s|player=%s|seat=%d|type=%s|payload=%s|occurred=%s"),
+        TEXT("evidence-v1|previous=%s|match=%s|room=%s|epoch=%lld|action=%lld|before=%d|after=%d|stateHash=%s|player=%s|seat=%d|type=%s|replayable=%d|payload=%s|occurred=%s"),
         Record.PreviousHash.IsEmpty() ? TEXT("genesis") : *Record.PreviousHash.ToLower(),
         *Record.MatchId, *Record.RoomId, Record.RoomEpoch, Record.ActionSequence,
         Record.StateVersionBefore, Record.StateVersionAfter, *Record.StateHashAfter, *Record.PlayerId,
-        Record.SeatId, *Record.ActionType, *Record.NormalizedPayload, *Record.OccurredAtUtc);
+        Record.SeatId, *Record.ActionType, Record.bReplayable ? 1 : 0,
+        *Record.NormalizedPayload, *Record.OccurredAtUtc);
     return Sha256Hex(Canonical);
 }

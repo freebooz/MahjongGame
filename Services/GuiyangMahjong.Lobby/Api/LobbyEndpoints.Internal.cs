@@ -123,6 +123,31 @@ public static partial class LobbyEndpoints
                 RequestIdMiddleware.GetRequestId(context), matchId, report, cancellationToken));
         });
 
+        app.MapPost("/internal/settlement-authority/validate", async (
+            HttpContext context,
+            SettlementAuthorityRequest request,
+            LobbyService lobbyService,
+            IOptions<LobbyOptions> options,
+            CancellationToken cancellationToken) =>
+        {
+            if (!HasInternalCredential(context, options.Value.Settlement.AuthorityToken))
+                return Results.Unauthorized();
+            return Results.Ok(await lobbyService.ValidateSettlementAuthorityAsync(request, cancellationToken));
+        });
+
+        app.MapPost("/internal/settlement-authority/committed", async (
+            HttpContext context,
+            ExternalSettlementCommittedRequest request,
+            LobbyService lobbyService,
+            IOptions<LobbyOptions> options,
+            CancellationToken cancellationToken) =>
+        {
+            if (!HasInternalCredential(context, options.Value.Settlement.AuthorityToken))
+                return Results.Unauthorized();
+            return Results.Ok(await lobbyService.MarkExternalSettlementCommittedAsync(
+                RequestIdMiddleware.GetRequestId(context), request, cancellationToken));
+        });
+
         app.MapPost("/internal/admin/players/{playerId}/disconnect", async (
             string playerId,
             AdminDisconnectPlayerRequest request,

@@ -64,6 +64,9 @@ builder.Services
                     options.ManagementCommandToken,
                     StringComparison.Ordinal)),
         "Allocator topology registration requires a dedicated 32+ character credential.")
+    .Validate(options => options.SettlementSigningKey.Length >= 32
+                         && options.GameDataRecoveryToken.Length >= 32,
+        "Allocator settlement signing and GameData recovery credentials require at least 32 characters.")
     .ValidateOnStart();
 
 builder.Services.AddSingleton(TimeProvider.System);

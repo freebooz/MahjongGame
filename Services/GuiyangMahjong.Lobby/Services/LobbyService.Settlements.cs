@@ -48,6 +48,15 @@ public sealed partial class LobbyService
         bool trustedRecovery,
         CancellationToken cancellationToken)
     {
+        if (!trustedRecovery
+            && string.Equals(options.Settlement.Mode, "GameData", StringComparison.Ordinal))
+        {
+            // 正式切流后旧入口不再持久化结果；DS 必须使用 GameData 强信封，回滚时显式改回 Legacy。
+            throw new LobbyOperationException(
+                LobbyErrorCode.VersionMismatch,
+                "最终结算已迁移到 GameData，请升级 Dedicated Server",
+                StatusCodes.Status426UpgradeRequired);
+        }
         ValidateMatchResult(matchId, report);
         var room = await store.GetRoomByIdAsync(report.RoomId, cancellationToken)
             ?? throw new LobbyOperationException(

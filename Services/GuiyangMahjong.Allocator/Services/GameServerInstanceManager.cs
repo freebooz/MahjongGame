@@ -221,7 +221,9 @@ public sealed class GameServerInstanceManager
                 request.RoomEpoch,
                 request.RoomEpoch,
                 request.RuleSetVersion,
-                request.ProtocolVersion);
+                request.ProtocolVersion,
+                options.GameDataInternalUrl,
+                options.SettlementSigningKey);
             using var startupTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             startupTimeout.CancelAfter(TimeSpan.FromSeconds(options.StartupTimeoutSeconds));
             GameServerProviderHandle handle;

@@ -188,10 +188,13 @@ USTRUCT()
 struct GUIYANGMAHJONGCORE_API FMahjongDeckRecoveryState
 {
     GENERATED_BODY()
+    /** 按权威摸牌顺序保存完整牌墙；包含未公开牌，只能进入受限恢复快照。 */
     UPROPERTY() TArray<FMahjongTile> Deck;
+    /** 牌墙顺时针起点和开门位置；三者共同决定恢复后的物理牌墙语义。 */
     UPROPERTY() int32 ClockwiseDrawStartIndex = 0;
     UPROPERTY() int32 WallBreakSide = 0;
     UPROPERTY() int32 WallBreakStackFromRight = 0;
+    /** 已从顺时针起点消耗的牌数；恢复后下一次摸牌必须从该偏移继续。 */
     UPROPERTY() int32 ClockwiseDrawOffset = 0;
 };
 

@@ -128,6 +128,8 @@ private:
     int64 LastSnapshotActionSequence = 0;
     bool bRecoveredGameServer = false;
     bool bSettlementEvidenceReady = true;
+    /** 只消费一次的恢复计时器剩余值；重新武装后立即清空。 */
+    TOptional<float> RecoveredActionTimeoutRemainingSeconds;
     /** 当前编排模式及托管世界初始化状态。 */
     bool bManagedGameServer = false;
     bool bAgonesGameServer = false;

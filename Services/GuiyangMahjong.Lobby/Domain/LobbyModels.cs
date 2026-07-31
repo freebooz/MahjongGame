@@ -201,6 +201,45 @@ public sealed record MatchResultAck(
     bool Accepted,
     bool Duplicate);
 
+/// <summary>GameData 发送的结算权威校验请求；CredentialSha256 是一次性结果凭据的不可逆摘要。</summary>
+public sealed record SettlementAuthorityRequest(
+    string MatchId,
+    string RoomId,
+    string ServerInstanceId,
+    long RoomEpoch,
+    string RuleSetVersion,
+    string ServerBuild,
+    string CredentialSha256);
+
+/// <summary>Lobby 返回的当前单一权威实例与参与者集合；不返回房间密码、Ticket 或凭据。</summary>
+public sealed record SettlementAuthorityResponse(
+    bool Authorized,
+    string MatchId,
+    string RoomId,
+    string ServerInstanceId,
+    long RoomEpoch,
+    string RuleSetVersion,
+    string ServerBuild,
+    string[] PlayerIds,
+    string? FailureCode = null);
+
+/// <summary>GameData 事务提交后的房间关闭通知；SettlementId 只用于审计关联，不能修改结果。</summary>
+public sealed record ExternalSettlementCommittedRequest(
+    string MatchId,
+    string RoomId,
+    int RoundNo,
+    int SettlementVersion,
+    string SettlementId,
+    DateTimeOffset CommittedAtUtc);
+
+/// <summary>Lobby 对外部结算回调的幂等确认。</summary>
+public sealed record ExternalSettlementCommittedAck(
+    string MatchId,
+    string RoomId,
+    string SettlementId,
+    bool Closed,
+    bool Duplicate);
+
 /// <summary>
 /// Dedicated Server 启动后的注册载荷。
 /// RegistrationCredential 是一次性秘密，监听地址/端口和版本必须与 Allocator 预期绑定。

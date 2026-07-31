@@ -64,11 +64,17 @@ public sealed class AllocatorOptions
     [Range(1, 300)] public int FailureNotificationRetrySeconds { get; init; } = 5;
     [Range(1, 300)] public int MatchResultRecoveryDelaySeconds { get; init; } = 15;
     [Required, Url] public string LobbyInternalUrl { get; init; } = "http://127.0.0.1:18080";
+    /// <summary>最终结算 GameData 内网地址；只注入 DS/Agones，不暴露为玩家 HTTP 入口。</summary>
+    [Required, Url] public string GameDataInternalUrl { get; init; } = "http://127.0.0.1:18085";
     [MinLength(32)] public string ServiceToken { get; init; } = string.Empty;
     public string MonitoringReadOnlyToken { get; init; } = string.Empty;
     public string ManagementCommandToken { get; init; } = string.Empty;
     [MinLength(32)] public string LobbyCallbackToken { get; init; } = string.Empty;
     [MinLength(32)] public string JoinTicketSigningKey { get; init; } = string.Empty;
+    /// <summary>注入 Dedicated Server 的结算 HMAC 密钥；不得写入命令行、状态文件或日志。</summary>
+    [MinLength(32)] public string SettlementSigningKey { get; init; } = string.Empty;
+    /// <summary>Allocator 仅用于恢复已签名 v2 Outbox 的 GameData 专用令牌。</summary>
+    [MinLength(32)] public string GameDataRecoveryToken { get; init; } = string.Empty;
     /// <summary>Allocator 所属地域、集群、节点和逻辑实例标识；用于跨集群聚合与故障隔离。</summary>
     [Required] public string RegionId { get; init; } = "local";
     [Required] public string ClusterId { get; init; } = "local";

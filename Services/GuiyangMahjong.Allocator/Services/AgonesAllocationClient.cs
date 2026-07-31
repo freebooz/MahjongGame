@@ -27,7 +27,8 @@ public sealed record AgonesAllocationSpec(
     string RuleSetVersion = "guiyang-zhuoji-v1",
     string ProtocolVersion = "1",
     int RequestedCapacity = 4,
-    long FencingToken = 1);
+    long FencingToken = 1,
+    string GameDataInternalUrl = "http://127.0.0.1:18085");
 
 /// <summary>Agones 分配结果；名称用于后续状态/关闭，地址和端口是客户端可达入口。</summary>
 public sealed record AgonesAllocationResult(string GameServerName, string Address, int Port);
@@ -98,6 +99,7 @@ public sealed class KubernetesAgonesAllocationClient : IAgonesAllocationClient, 
             ["mahjong.freebooz/server-instance-id"] = spec.ServerInstanceId,
             ["mahjong.freebooz/registration-credential"] = spec.RegistrationCredential,
             ["mahjong.freebooz/lobby-internal-url"] = spec.LobbyInternalUrl,
+            ["mahjong.freebooz/gamedata-internal-url"] = spec.GameDataInternalUrl,
             ["mahjong.freebooz/build-version"] = spec.BuildVersion,
             ["mahjong.freebooz/room-epoch"] =
                 spec.RoomEpoch.ToString(System.Globalization.CultureInfo.InvariantCulture),

@@ -15,6 +15,9 @@
   <Project Path="GuiyangMahjong.PlayerData.Tests/GuiyangMahjong.PlayerData.Tests.csproj" />
   <Project Path="Apps/GuiyangMahjong.EdgeGateway/GuiyangMahjong.EdgeGateway.csproj" />
   <Project Path="Apps/GuiyangMahjong.EdgeGateway.Tests/GuiyangMahjong.EdgeGateway.Tests.csproj" />
+  <!-- 阶段 7：最终结算、战绩、回放证据和基础排行榜的独立部署单元及测试。 -->
+  <Project Path="Apps/GuiyangMahjong.GameData/GuiyangMahjong.GameData.csproj" />
+  <Project Path="Apps/GuiyangMahjong.GameData.Tests/GuiyangMahjong.GameData.Tests.csproj" />
   <!-- 阶段 2 共享契约：只能描述跨边界数据，禁止引用业务服务和持久化实现。 -->
   <Project Path="Contracts/GuiyangMahjong.Contracts.Common/GuiyangMahjong.Contracts.Common.csproj" />
   <Project Path="Contracts/GuiyangMahjong.Contracts.Api/GuiyangMahjong.Contracts.Api.csproj" />

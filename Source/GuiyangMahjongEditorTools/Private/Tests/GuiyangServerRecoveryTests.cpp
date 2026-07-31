@@ -28,6 +28,7 @@ namespace GuiyangServerRecoveryTests
         return Seats;
     }
 
+    /** 构造跨 Epoch 测试所需的最小托管启动配置；Root 由测试独占并在结束时清理。 */
     FGuiyangGameServerLaunchConfig MakeConfig(const FString& Root, const int64 Epoch)
     {
         FGuiyangGameServerLaunchConfig Config;
@@ -64,6 +65,26 @@ bool FGuiyangTableSnapshotRoundTripTest::RunTest(const FString& Parameters)
     TestTrue(TEXT("恢复后状态应再次导出"), Restored->ExportRecoveryState(RoundTripped));
     TestEqual(TEXT("恢复前后完整状态哈希必须一致"),
         FGuiyangRuntimeRecoveryStore::CalculateTableStateHash(RoundTripped), OriginalHash);
+
+    FMahjongPrivatePlayerState DealerState;
+    TestTrue(TEXT("恢复前的庄家私有状态应存在"), Original->GetPrivateState(0, DealerState));
+    FMahjongActionRequest DeterministicAction;
+    DeterministicAction.ClientActionId = TEXT("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+    DeterministicAction.ClientSequence = 1;
+    DeterministicAction.ExpectedStateVersion = Original->GetPublicState().StateSequence;
+    DeterministicAction.RoundId = Original->GetPublicState().RoundId;
+    DeterministicAction.TurnId = Original->GetPublicState().TurnId;
+    DeterministicAction.Type = EMahjongActionType::Play;
+    DeterministicAction.TargetTileId = DealerState.Hand.Tiles[0].UniqueId;
+    TestTrue(TEXT("原实例应接受确定性动作"), Original->SubmitTurnAction(0, DeterministicAction).bSuccess);
+    TestTrue(TEXT("恢复实例应接受相同确定性动作"), Restored->SubmitTurnAction(0, DeterministicAction).bSuccess);
+    FMahjongTableRecoveryState OriginalAfterAction;
+    FMahjongTableRecoveryState RestoredAfterAction;
+    TestTrue(TEXT("原实例动作后状态应导出"), Original->ExportRecoveryState(OriginalAfterAction));
+    TestTrue(TEXT("恢复实例动作后状态应导出"), Restored->ExportRecoveryState(RestoredAfterAction));
+    TestEqual(TEXT("相同动作在恢复实例上必须产生相同完整状态哈希"),
+        FGuiyangRuntimeRecoveryStore::CalculateTableStateHash(RestoredAfterAction),
+        FGuiyangRuntimeRecoveryStore::CalculateTableStateHash(OriginalAfterAction));
     return true;
 }
 

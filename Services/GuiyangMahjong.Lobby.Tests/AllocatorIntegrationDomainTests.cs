@@ -21,7 +21,7 @@ public sealed class AllocatorIntegrationDomainTests
     public async Task Route_IsUnavailableUntilRegistrationThenGetsShortLivedTicket()
     {
         var fixture = CreateFixture();
-        var owner = new PlayerIdentity("owner-route", "Owner", "Guest");
+        var owner = StrongPlayer("owner-route");
         var created = await fixture.Service.CreateRoomAsync(
             Guid.NewGuid().ToString(), owner, NewCreateRequest(), CancellationToken.None);
 
@@ -328,7 +328,7 @@ public sealed class AllocatorIntegrationDomainTests
     public async Task ReconnectRoute_UsesAuthenticatedPlayerMappingInsteadOfClientHints()
     {
         var fixture = CreateFixture();
-        var owner = new PlayerIdentity("owner-reconnect", "Owner", "Guest");
+        var owner = StrongPlayer("owner-reconnect");
         var created = await fixture.Service.CreateRoomAsync(
             Guid.NewGuid().ToString(), owner, NewCreateRequest(), CancellationToken.None);
         var room = await fixture.Store.GetRoomByIdAsync(created.RoomId, CancellationToken.None);
@@ -481,6 +481,17 @@ public sealed class AllocatorIntegrationDomainTests
             NullLogger<LobbyService>.Instance);
         return new Fixture(service, store, monitoring, allocator, time);
     }
+
+    /// <summary>构造带真实会话和网关版本上下文的玩家，避免测试依赖生产禁用的旧直连开关。</summary>
+    private static PlayerIdentity StrongPlayer(string playerId) => new(
+        playerId,
+        "Owner",
+        "Guest",
+        Guid.NewGuid().ToString("N"),
+        0,
+        0,
+        "test",
+        "1");
 
     private static CreateRoomRequest NewCreateRequest() => new(
         4,

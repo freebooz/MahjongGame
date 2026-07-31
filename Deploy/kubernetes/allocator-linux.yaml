@@ -81,6 +81,7 @@ spec:
               valueFrom: {fieldRef: {fieldPath: status.hostIP}}
           volumeMounts:
             - {name: allocator-data, mountPath: /var/lib/guiyang-mahjong}
+            - {name: game-recovery, mountPath: /var/lib/guiyang-mahjong/game-shared}
             - {name: tmp, mountPath: /tmp}
           readinessProbe:
             httpGet: {path: /health/ready, port: http}
@@ -103,6 +104,8 @@ spec:
           persistentVolumeClaim: {claimName: mahjong-allocator-data}
         - name: tmp
           emptyDir: {sizeLimit: 256Mi}
+        - name: game-recovery
+          persistentVolumeClaim: {claimName: mahjong-game-recovery}
 ---
 apiVersion: v1
 kind: Service

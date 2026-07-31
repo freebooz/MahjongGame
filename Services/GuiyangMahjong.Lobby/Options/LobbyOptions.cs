@@ -8,6 +8,8 @@ public sealed class LobbyOptions
     public const string SectionName = "Lobby";
 
     [Range(1, 1)] public int ProtocolVersion { get; init; } = 1;
+    /// <summary>仅供旧直连自动化/紧急回滚；生产 false 时没有网关版本上下文就不得签发 Join Ticket。</summary>
+    public bool AllowLegacyClientVersionContext { get; init; }
     [Range(10, 1000)] public int RoomCodeRetryLimit { get; init; } = 100;
     [Range(1, 4)] public int MaximumPlayersPerRoom { get; init; } = 4;
     [Range(1, 20)] public int PasswordFailureLimit { get; init; } = 5;
@@ -43,6 +45,19 @@ public sealed class LobbyOptions
     [Required] public TopologyRegistrationOptions TopologyRegistration { get; init; } = new();
     /// <summary>基础匹配与重连窗口配置；环境变量使用 Lobby__Matchmaking__* 覆盖。</summary>
     [Required] public MatchmakingOptions Matchmaking { get; init; } = new();
+    /// <summary>阶段 7 结算迁移配置；生产切流后使用 GameData，Legacy 仅作为受控回滚入口。</summary>
+    [Required] public SettlementIntegrationOptions Settlement { get; init; } = new();
+}
+
+/// <summary>Lobby 与 GameData 的职责切换配置；不会改变玩家 HTTP 或 UE 游戏网络路径。</summary>
+public sealed class SettlementIntegrationOptions
+{
+    /// <summary>Legacy、Shadow 或 GameData；GameData 模式禁止旧 Lobby 最终结算写入。</summary>
+    [Required] public string Mode { get; init; } = "Legacy";
+    /// <summary>GameData 内网地址，Shadow 对比和正式切流共用。</summary>
+    [Required, Url] public string GameDataBaseUrl { get; init; } = "http://127.0.0.1:18085";
+    /// <summary>GameData 调用 Lobby 权威校验/关闭回调的用途隔离凭据。</summary>
+    public string AuthorityToken { get; init; } = string.Empty;
 }
 
 /// <summary>

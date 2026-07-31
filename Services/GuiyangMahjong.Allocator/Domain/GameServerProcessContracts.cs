@@ -21,7 +21,9 @@ public sealed record GameServerLaunchSpec(
     long RoomEpoch = 1,
     long FencingToken = 1,
     string RuleSetVersion = "guiyang-zhuoji-v1",
-    string ProtocolVersion = "1");
+    string ProtocolVersion = "1",
+    string GameDataInternalUrl = "http://127.0.0.1:18085",
+    string SettlementSigningKey = "");
 
 /// <summary>
 /// 可由 Allocator 管理的游戏服进程抽象。

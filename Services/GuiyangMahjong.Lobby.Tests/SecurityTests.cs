@@ -65,7 +65,9 @@ public sealed class SecurityTests
             "Guest",
             "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
             5,
-            2);
+            2,
+            "client-build-17",
+            "1");
         var room = new LobbyRoom
         {
             RoomId = "11111111-1111-1111-1111-111111111111",
@@ -100,7 +102,7 @@ public sealed class SecurityTests
         Assert.Equal(player.SessionId, payload.RootElement.GetProperty("sessionId").GetString());
         Assert.Equal(5, payload.RootElement.GetProperty("sessionEpoch").GetInt64());
         Assert.Equal(8, payload.RootElement.GetProperty("roomEpoch").GetInt64());
-        Assert.Equal("server-build-42", payload.RootElement.GetProperty("clientBuild").GetString());
+        Assert.Equal("client-build-17", payload.RootElement.GetProperty("clientBuild").GetString());
         Assert.Equal("guiyang-zhuoji-v1", payload.RootElement.GetProperty("ruleSetVersion").GetString());
     }
 

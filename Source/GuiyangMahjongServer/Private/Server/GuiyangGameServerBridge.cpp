@@ -21,10 +21,13 @@
 #include "Misc/Paths.h"
 #include "Room/GuiyangManagedRoomDefinition.h"
 #include "Room/GuiyangRoomManager.h"
+#include "Snapshot/GuiyangRuntimeRecoveryStore.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
 #include "TimerManager.h"
+#include "openssl/hmac.h"
+#include "openssl/sha.h"
 
 namespace GuiyangGameServerPrivate
 {
@@ -44,6 +47,33 @@ namespace GuiyangGameServerPrivate
         const TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&Body);
         FJsonSerializer::Serialize(Object, Writer);
         return Body;
+    }
+
+    /** 使用注册后获得的用途隔离结果凭据计算最终信封 HMAC-SHA256；密钥不进入日志或持久化正文。 */
+    FString HmacSha256Hex(const FString& Key, const FString& Canonical)
+    {
+        const FTCHARToUTF8 KeyUtf8(*Key);
+        const FTCHARToUTF8 DataUtf8(*Canonical);
+        uint8 Digest[EVP_MAX_MD_SIZE] = {};
+        unsigned int DigestLength = 0;
+        const unsigned char* Result = HMAC(
+            EVP_sha256(), KeyUtf8.Get(), KeyUtf8.Length(),
+            reinterpret_cast<const unsigned char*>(DataUtf8.Get()), DataUtf8.Length(),
+            Digest, &DigestLength);
+        return Result && DigestLength == SHA256_DIGEST_LENGTH
+            ? BytesToHex(Digest, DigestLength).ToLower()
+            : FString();
+    }
+
+    /** 对短期工作负载凭据生成不可逆 SHA-256 摘要，供 Lobby 绑定实例身份而不暴露原文。 */
+    FString Sha256Hex(const FString& Value)
+    {
+        const FTCHARToUTF8 Utf8(*Value);
+        uint8 Digest[SHA256_DIGEST_LENGTH] = {};
+        return SHA256(
+            reinterpret_cast<const unsigned char*>(Utf8.Get()), Utf8.Length(), Digest)
+            ? BytesToHex(Digest, SHA256_DIGEST_LENGTH).ToLower()
+            : FString();
     }
 
     /**
@@ -128,6 +158,10 @@ bool FGuiyangGameServerLaunchConfig::TryParse(const TCHAR* CommandLine, const FS
     OutConfig.ServerInstanceId.TrimStartAndEndInline();
     OutConfig.LobbyInternalUrl.TrimStartAndEndInline();
     OutConfig.LobbyInternalUrl.RemoveFromEnd(TEXT("/"));
+    OutConfig.GameDataInternalUrl = FPlatformMisc::GetEnvironmentVariable(TEXT("MAHJONG_GAMEDATA_INTERNAL_URL"));
+    OutConfig.GameDataInternalUrl.TrimStartAndEndInline();
+    if (OutConfig.GameDataInternalUrl.IsEmpty()) OutConfig.GameDataInternalUrl = OutConfig.LobbyInternalUrl;
+    OutConfig.GameDataInternalUrl.RemoveFromEnd(TEXT("/"));
     OutConfig.RegistrationCredential = RegistrationCredential;
     OutConfig.RegistrationCredential.TrimStartAndEndInline();
     OutConfig.BuildVersion.TrimStartAndEndInline();
@@ -135,6 +169,8 @@ bool FGuiyangGameServerLaunchConfig::TryParse(const TCHAR* CommandLine, const FS
     OutConfig.ProtocolVersion.TrimStartAndEndInline();
     OutConfig.AdvertisedIp.TrimStartAndEndInline();
     OutConfig.JoinTicketSigningKey = SigningKey;
+    OutConfig.SettlementSigningKey = FPlatformMisc::GetEnvironmentVariable(TEXT("MAHJONG_SETTLEMENT_SIGNING_KEY"));
+    OutConfig.SettlementSigningKey.TrimStartAndEndInline();
     OutConfig.MatchResultOutboxPath = MatchResultOutboxPath.TrimStartAndEnd();
     FPaths::NormalizeFilename(OutConfig.MatchResultOutboxPath);
     OutConfig.RecoveryDirectory = FPlatformMisc::GetEnvironmentVariable(TEXT("MAHJONG_RECOVERY_DIRECTORY"));
@@ -161,12 +197,15 @@ bool FGuiyangGameServerLaunchConfig::TryParse(const TCHAR* CommandLine, const FS
         || OutConfig.LeaseFencingToken < 1
         || (!OutConfig.LobbyInternalUrl.StartsWith(TEXT("http://"))
             && !OutConfig.LobbyInternalUrl.StartsWith(TEXT("https://")))
+        || (!OutConfig.GameDataInternalUrl.StartsWith(TEXT("http://"))
+            && !OutConfig.GameDataInternalUrl.StartsWith(TEXT("https://")))
         || OutConfig.BuildVersion.Len() > 80
         || OutConfig.RuleSetVersion.IsEmpty() || OutConfig.RuleSetVersion.Len() > 80
         || OutConfig.ProtocolVersion.IsEmpty() || OutConfig.ProtocolVersion.Len() > 32
         || OutConfig.AdvertisedIp.Len() > 255
         || OutConfig.RegistrationCredential.Len() < 32
         || OutConfig.JoinTicketSigningKey.Len() < 32
+        || OutConfig.SettlementSigningKey.Len() < 32
         || OutConfig.MatchResultOutboxPath.IsEmpty()
         || OutConfig.MatchResultOutboxPath.Len() > 1024
         || FPaths::IsRelative(OutConfig.MatchResultOutboxPath)
@@ -285,25 +324,34 @@ bool UGuiyangGameServerBridge::AppendShuffleAuditRecord(
 
 void UGuiyangGameServerBridge::QueueFinalSettlement(
     const FMahjongFinalSettlementResult& Result,
-    const int64 ResultSequence,
+    const int32 SettlementVersion,
     const TArray<FGuiyangShuffleAuditProof>& ShuffleProofs,
-    const FString& EventChainDigest)
+    const FString& EventChainDigest,
+    const FString& FinalStateHash,
+    const FString& ActionLogHash,
+    const FString& RandomCommitment,
+    const FString& EvidenceId,
+    const TArray<FGuiyangRecoveryEvidenceObject>& EvidenceObjects)
 {
+    FGuid ParsedEvidenceId;
     if (!bRegistered || bShuttingDown || ResultCredential.Len() < 32
         || Result.MatchId != Config.MatchId || Result.RoomId != Config.RoomId
-        || ResultSequence < 1 || Result.CompletedRounds < 1 || Result.CompletedRounds > 16
+        || SettlementVersion < 1 || Result.CompletedRounds < 1 || Result.CompletedRounds > 16
         || Result.Players.IsEmpty() || Result.Players.Num() > 4
-        || ShuffleProofs.Num() != Result.CompletedRounds || EventChainDigest.Len() != 64)
+        || ShuffleProofs.Num() != Result.CompletedRounds || EventChainDigest.Len() != 64
+        || FinalStateHash.Len() != 64 || ActionLogHash.Len() != 64
+        || RandomCommitment.Len() != 64 || EvidenceObjects.Num() < 2
+        || !FGuid::Parse(EvidenceId, ParsedEvidenceId))
     {
         UE_LOG(LogMahjongServer, Error,
             TEXT("Final settlement report rejected locally InstanceId=%s MatchId=%s Sequence=%lld"),
-            *Config.ServerInstanceId, *Result.MatchId, ResultSequence);
+            *Config.ServerInstanceId, *Result.MatchId, static_cast<int64>(SettlementVersion));
         return;
     }
     // 进程内同一时刻只允许一个待确认结算；相同序号视为幂等重试。
     if (!PendingMatchResultBody.IsEmpty())
     {
-        if (PendingMatchId == Result.MatchId && PendingResultSequence == ResultSequence) return;
+        if (PendingMatchId == Result.MatchId && PendingResultSequence == SettlementVersion) return;
         UE_LOG(LogMahjongServer, Error,
             TEXT("A different final settlement is already pending InstanceId=%s MatchId=%s"),
             *Config.ServerInstanceId, *Config.MatchId);
@@ -311,10 +359,22 @@ void UGuiyangGameServerBridge::QueueFinalSettlement(
     }
 
     const TSharedRef<FJsonObject> Body = MakeShared<FJsonObject>();
-    Body->SetStringField(TEXT("roomId"), Result.RoomId);
-    Body->SetStringField(TEXT("serverInstanceId"), Config.ServerInstanceId);
-    Body->SetNumberField(TEXT("resultSequence"), static_cast<double>(ResultSequence));
-    Body->SetNumberField(TEXT("completedRounds"), Result.CompletedRounds);
+    Body->SetStringField(TEXT("match_id"), Result.MatchId);
+    Body->SetStringField(TEXT("room_id"), Result.RoomId);
+    Body->SetNumberField(TEXT("round_no"), Result.CompletedRounds);
+    Body->SetNumberField(TEXT("settlement_version"), SettlementVersion);
+    Body->SetStringField(TEXT("server_instance_id"), Config.ServerInstanceId);
+    Body->SetNumberField(TEXT("room_epoch"), static_cast<double>(Config.RoomEpoch));
+    Body->SetStringField(TEXT("ruleset_version"), Config.RuleSetVersion);
+    Body->SetStringField(TEXT("server_build"), Config.BuildVersion);
+    // 只绑定短期工作负载凭据的不可逆摘要；凭据原文只用于本次 HTTP Authorization。
+    const FString WorkloadCredentialHash = GuiyangGameServerPrivate::Sha256Hex(ResultCredential);
+    if (WorkloadCredentialHash.Len() != 64) return;
+    Body->SetStringField(TEXT("workload_credential_hash"), WorkloadCredentialHash);
+    Body->SetStringField(TEXT("final_state_hash"), FinalStateHash.ToLower());
+    Body->SetStringField(TEXT("action_log_hash"), ActionLogHash.ToLower());
+    Body->SetStringField(TEXT("random_commitment"), RandomCommitment.ToLower());
+    Body->SetStringField(TEXT("evidence_id"), EvidenceId);
     // 在落盘前验证每名玩家及座位唯一性，防止无效结果进入可靠 Outbox。
     TArray<TSharedPtr<FJsonValue>> Players;
     TSet<FString> PlayerIds;
@@ -331,17 +391,17 @@ void UGuiyangGameServerBridge::QueueFinalSettlement(
         }
         PlayerIds.Add(Player.PlayerId);
         const TSharedRef<FJsonObject> PlayerObject = MakeShared<FJsonObject>();
-        PlayerObject->SetStringField(TEXT("playerId"), Player.PlayerId);
-        PlayerObject->SetNumberField(TEXT("seatIndex"), Player.SeatIndex);
+        PlayerObject->SetStringField(TEXT("player_id"), Player.PlayerId);
+        PlayerObject->SetNumberField(TEXT("seat_id"), Player.SeatIndex);
         PlayerObject->SetNumberField(TEXT("rank"), Player.Rank);
-        PlayerObject->SetNumberField(TEXT("totalScore"), Player.TotalScore);
+        PlayerObject->SetNumberField(TEXT("total_score"), Player.TotalScore);
         Players.Add(MakeShared<FJsonValueObject>(PlayerObject));
     }
-    Body->SetArrayField(TEXT("players"), Players);
-    TArray<TSharedPtr<FJsonValue>> ProofValues;
+    Body->SetArrayField(TEXT("player_results"), Players);
+    int32 ExpectedProofRound = 1;
     for (const FGuiyangShuffleAuditProof& Proof : ShuffleProofs)
     {
-        if (Proof.RoundId != ProofValues.Num() + 1 || Proof.SeedHex.Len() != 8
+        if (Proof.RoundId != ExpectedProofRound++ || Proof.SeedHex.Len() != 8
             || Proof.ServerNonceHex.Len() != 64 || Proof.SeedCommitment.Len() != 64
             || Proof.DeckOrderDigest.Len() != 64 || Proof.RuleVersion < 1
             || Proof.RevealedAtUtc < Proof.CreatedAtUtc)
@@ -351,22 +411,55 @@ void UGuiyangGameServerBridge::QueueFinalSettlement(
                 *Config.ServerInstanceId, Proof.RoundId);
             return;
         }
-        const TSharedRef<FJsonObject> ProofObject = MakeShared<FJsonObject>();
-        ProofObject->SetStringField(TEXT("algorithm"), Proof.Algorithm);
-        ProofObject->SetNumberField(TEXT("roundId"), Proof.RoundId);
-        ProofObject->SetStringField(TEXT("seedHex"), Proof.SeedHex);
-        ProofObject->SetStringField(TEXT("serverNonceHex"), Proof.ServerNonceHex);
-        ProofObject->SetStringField(TEXT("seedCommitment"), Proof.SeedCommitment);
-        ProofObject->SetStringField(TEXT("deckOrderDigest"), Proof.DeckOrderDigest);
-        ProofObject->SetStringField(TEXT("ruleId"), Proof.RuleId);
-        ProofObject->SetNumberField(TEXT("ruleVersion"), Proof.RuleVersion);
-        ProofObject->SetStringField(TEXT("ruleHash"), Proof.RuleHash);
-        ProofObject->SetStringField(TEXT("createdAtUtc"), Proof.CreatedAtUtc.ToIso8601());
-        ProofObject->SetStringField(TEXT("revealedAtUtc"), Proof.RevealedAtUtc.ToIso8601());
-        ProofValues.Add(MakeShared<FJsonValueObject>(ProofObject));
     }
-    Body->SetArrayField(TEXT("shuffleProofs"), ProofValues);
-    Body->SetStringField(TEXT("eventChainDigest"), EventChainDigest);
+    // 公平性证明已固化到受限证据对象；网络信封只保留组合承诺和证据清单，避免扩散完整种子。
+    TArray<FGuiyangRecoveryEvidenceObject> SortedEvidence = EvidenceObjects;
+    SortedEvidence.Sort([](const FGuiyangRecoveryEvidenceObject& Left, const FGuiyangRecoveryEvidenceObject& Right)
+    {
+        return Left.Kind < Right.Kind;
+    });
+    TArray<TSharedPtr<FJsonValue>> EvidenceValues;
+    TArray<FString> EvidenceCanonical;
+    for (const FGuiyangRecoveryEvidenceObject& Object : SortedEvidence)
+    {
+        if (Object.Kind.IsEmpty() || Object.ObjectKey.IsEmpty() || Object.Sha256.Len() != 64 || Object.SizeBytes < 1)
+            return;
+        const TSharedRef<FJsonObject> Item = MakeShared<FJsonObject>();
+        Item->SetStringField(TEXT("kind"), Object.Kind);
+        Item->SetStringField(TEXT("object_key"), Object.ObjectKey);
+        Item->SetStringField(TEXT("sha256"), Object.Sha256.ToLower());
+        Item->SetNumberField(TEXT("size_bytes"), static_cast<double>(Object.SizeBytes));
+        EvidenceValues.Add(MakeShared<FJsonValueObject>(Item));
+        EvidenceCanonical.Add(FString::Printf(TEXT("%s,%s,%s,%lld"),
+            *Object.Kind, *Object.ObjectKey, *Object.Sha256.ToLower(), Object.SizeBytes));
+    }
+    Body->SetArrayField(TEXT("evidence_manifest"), EvidenceValues);
+    // 统一截断到整秒，确保 C++ JSON 时间和 .NET Unix 毫秒规范串完全一致。
+    const FDateTime GeneratedAt = FDateTime::FromUnixTimestamp(FDateTime::UtcNow().ToUnixTimestamp());
+    Body->SetStringField(TEXT("generated_at"), GeneratedAt.ToIso8601());
+    TArray<FMahjongFinalPlayerResult> SortedPlayers = Result.Players;
+    SortedPlayers.Sort([](const FMahjongFinalPlayerResult& Left, const FMahjongFinalPlayerResult& Right)
+    {
+        return Left.SeatIndex < Right.SeatIndex;
+    });
+    TArray<FString> PlayerCanonical;
+    for (const FMahjongFinalPlayerResult& Player : SortedPlayers)
+        PlayerCanonical.Add(FString::Printf(TEXT("%s,%d,%d,%d"),
+            *Player.PlayerId, Player.SeatIndex, Player.Rank, Player.TotalScore));
+    const TArray<FString> CanonicalParts = {
+        TEXT("final-result-v1"), Result.MatchId, Result.RoomId,
+        FString::FromInt(Result.CompletedRounds), FString::FromInt(SettlementVersion),
+        Config.ServerInstanceId, FString::Printf(TEXT("%lld"), Config.RoomEpoch),
+        Config.RuleSetVersion, Config.BuildVersion, WorkloadCredentialHash, FinalStateHash.ToLower(),
+        ActionLogHash.ToLower(), RandomCommitment.ToLower(), FString::Join(PlayerCanonical, TEXT(";")),
+        EvidenceId, FString::Join(EvidenceCanonical, TEXT(";")),
+        FString::Printf(TEXT("%lld"), GeneratedAt.ToUnixTimestamp() * 1000)
+    };
+    const FString Canonical = FString::Join(CanonicalParts, TEXT("|"));
+    const FString ServerSignature = GuiyangGameServerPrivate::HmacSha256Hex(
+        Config.SettlementSigningKey, Canonical);
+    if (ServerSignature.Len() != 64) return;
+    Body->SetStringField(TEXT("server_signature"), ServerSignature);
     // 必须先持久化再发送，确保进程在 HTTP 请求期间崩溃也不会丢失结算。
     if (!PersistPendingMatchResult(Body))
     {
@@ -377,8 +470,8 @@ void UGuiyangGameServerBridge::QueueFinalSettlement(
     }
     PendingMatchResultBody = GuiyangGameServerPrivate::SerializeJson(Body);
     PendingMatchId = Result.MatchId;
-    PendingResultSequence = ResultSequence;
-    SettlementResultSequence = ResultSequence;
+    PendingResultSequence = SettlementVersion;
+    SettlementResultSequence = SettlementVersion;
     SettlementStatus = TEXT("Submitted");
     SettlementSubmittedAtUtc = FDateTime::UtcNow();
     SettlementConfirmedAtUtc = FDateTime();
@@ -715,15 +808,26 @@ void UGuiyangGameServerBridge::SendPendingMatchResult()
     SettlementStatus = TEXT("Submitted");
     SettlementFailureReason.Reset();
     const TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = FHttpModule::Get().CreateRequest();
-    Request->SetURL(Config.LobbyInternalUrl + TEXT("/internal/matches/")
-        + PendingMatchId + TEXT("/result"));
+    Request->SetURL(Config.GameDataInternalUrl + TEXT("/internal/settlements/") + PendingMatchId);
     Request->SetVerb(TEXT("POST"));
     Request->SetHeader(TEXT("Content-Type"), TEXT("application/json"));
     Request->SetHeader(TEXT("Authorization"), TEXT("Bearer ") + ResultCredential);
     Request->SetHeader(TEXT("X-Request-Id"), FGuid::NewGuid().ToString(EGuidFormats::DigitsWithHyphensLower));
     // MatchId 与单调序号共同组成跨进程幂等键。
-    Request->SetHeader(TEXT("Idempotency-Key"),
-        FString::Printf(TEXT("%s:%lld"), *PendingMatchId, PendingResultSequence));
+    // 当前一次提交覆盖整场最终结果，RoundNo 等于已完成局数，SettlementVersion 是单独版本。
+    TSharedPtr<FJsonObject> PendingObject;
+    const TSharedRef<TJsonReader<>> PendingReader = TJsonReaderFactory<>::Create(PendingMatchResultBody);
+    double RoundNo = 0.0;
+    if (!FJsonSerializer::Deserialize(PendingReader, PendingObject) || !PendingObject.IsValid()
+        || !PendingObject->TryGetNumberField(TEXT("round_no"), RoundNo))
+    {
+        bMatchResultRequestInFlight = false;
+        SettlementStatus = TEXT("Failed");
+        SettlementFailureReason = TEXT("OutboxContractInvalid");
+        return;
+    }
+    Request->SetHeader(TEXT("Idempotency-Key"), FString::Printf(
+        TEXT("%s:%d:%lld"), *PendingMatchId, static_cast<int32>(RoundNo), PendingResultSequence));
     Request->SetTimeout(10.0f);
     Request->SetContentAsString(PendingMatchResultBody);
     Request->OnProcessRequestComplete().BindUObject(this, &ThisClass::HandleMatchResultResponse);
@@ -746,15 +850,14 @@ void UGuiyangGameServerBridge::HandleMatchResultResponse(
     TSharedPtr<FJsonObject> Body;
     const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(
         Response.IsValid() ? Response->GetContentAsString() : FString());
-    bool bAccepted = false;
     int64 AckSequence = 0;
     FString AckMatchId;
     // 仅当控制面回执的比赛和序号与当前待发送项完全一致时删除 Outbox。
     if (bSucceeded && Response.IsValid() && Response->GetResponseCode() >= 200
         && Response->GetResponseCode() < 300 && FJsonSerializer::Deserialize(Reader, Body)
-        && Body.IsValid() && Body->TryGetBoolField(TEXT("accepted"), bAccepted) && bAccepted
+        && Body.IsValid()
         && Body->TryGetStringField(TEXT("matchId"), AckMatchId)
-        && Body->TryGetNumberField(TEXT("resultSequence"), AckSequence)
+        && Body->TryGetNumberField(TEXT("settlementVersion"), AckSequence)
         && AckMatchId == PendingMatchId && AckSequence == PendingResultSequence)
     {
         UE_LOG(LogMahjongServer, Display,
@@ -799,7 +902,8 @@ bool UGuiyangGameServerBridge::PersistPendingMatchResult(const TSharedRef<FJsonO
     if (PlatformFile.FileExists(*Config.MatchResultOutboxPath)) return false;
 
     const TSharedRef<FJsonObject> Envelope = MakeShared<FJsonObject>();
-    Envelope->SetNumberField(TEXT("version"), 1);
+    // v2 保存完整强结算信封；Allocator 只原样恢复，不接触或重算 DS 签名。
+    Envelope->SetNumberField(TEXT("version"), 2);
     Envelope->SetStringField(TEXT("matchId"), Config.MatchId);
     Envelope->SetObjectField(TEXT("report"), Report);
     // 先写临时文件再原子移动，避免宕机留下半截 JSON。

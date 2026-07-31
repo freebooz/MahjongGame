@@ -61,6 +61,7 @@ bool UGuiyangAgonesLifecycleSubsystem::TryBuildLaunchConfig(
         || !ReadAnnotation(Response, TEXT("mahjong.freebooz/server-instance-id"), OutConfig.ServerInstanceId)
         || !ReadAnnotation(Response, TEXT("mahjong.freebooz/registration-credential"), OutConfig.RegistrationCredential)
         || !ReadAnnotation(Response, TEXT("mahjong.freebooz/lobby-internal-url"), OutConfig.LobbyInternalUrl)
+        || !ReadAnnotation(Response, TEXT("mahjong.freebooz/gamedata-internal-url"), OutConfig.GameDataInternalUrl)
         || !ReadAnnotation(Response, TEXT("mahjong.freebooz/build-version"), OutConfig.BuildVersion)
         || !ReadAnnotation(Response, TEXT("mahjong.freebooz/ruleset-version"), OutConfig.RuleSetVersion)
         || !ReadAnnotation(Response, TEXT("mahjong.freebooz/protocol-version"), OutConfig.ProtocolVersion))
@@ -98,6 +99,16 @@ bool UGuiyangAgonesLifecycleSubsystem::TryBuildLaunchConfig(
     OutConfig.Port = GamePort ? GamePort->Port : 0;
     OutConfig.JoinTicketSigningKey = SigningKey;
     OutConfig.MatchResultOutboxPath = MatchResultOutboxPath;
+    // Agones 多 Pod 共用恢复卷时，按实例 ID 派生文件名，避免固定文件名互相覆盖。
+    FString SharedOutboxDirectory = FPlatformMisc::GetEnvironmentVariable(
+        TEXT("MAHJONG_MATCH_RESULT_OUTBOX_DIRECTORY"));
+    SharedOutboxDirectory.TrimStartAndEndInline();
+    if (!SharedOutboxDirectory.IsEmpty())
+        OutConfig.MatchResultOutboxPath = FPaths::Combine(
+            SharedOutboxDirectory, OutConfig.ServerInstanceId + TEXT(".json"));
+    // Fleet 通过 Secret 环境变量注入结算密钥；Agones 注解属于可读元数据，绝不能承载密钥。
+    OutConfig.SettlementSigningKey = FPlatformMisc::GetEnvironmentVariable(TEXT("MAHJONG_SETTLEMENT_SIGNING_KEY"));
+    OutConfig.SettlementSigningKey.TrimStartAndEndInline();
     OutConfig.RecoveryDirectory =
         FPlatformMisc::GetEnvironmentVariable(TEXT("MAHJONG_RECOVERY_DIRECTORY")).TrimStartAndEnd();
     if (OutConfig.RecoveryDirectory.IsEmpty())
@@ -114,8 +125,11 @@ bool UGuiyangAgonesLifecycleSubsystem::TryBuildLaunchConfig(
         || OutConfig.JoinTicketSigningKey.Len() < 32
         || OutConfig.RegistrationCredential.Len() < 16
         || OutConfig.MatchResultOutboxPath.IsEmpty()
+        || OutConfig.SettlementSigningKey.Len() < 32
         || OutConfig.RuleSetVersion.IsEmpty()
         || OutConfig.ProtocolVersion.IsEmpty()
+        || (!OutConfig.GameDataInternalUrl.StartsWith(TEXT("http://"))
+            && !OutConfig.GameDataInternalUrl.StartsWith(TEXT("https://")))
         || OutConfig.RecoveryDirectory.IsEmpty()
         || FPaths::IsRelative(OutConfig.RecoveryDirectory))
     {

@@ -84,6 +84,9 @@ public sealed class GameServerProcessLauncher(
         startInfo.Environment["MAHJONG_JOIN_TICKET_SIGNING_KEY"] = spec.JoinTicketSigningKey;
         startInfo.Environment["MAHJONG_MATCH_RESULT_OUTBOX_PATH"] = spec.MatchResultOutboxPath;
         startInfo.Environment["MAHJONG_RECOVERY_DIRECTORY"] = recoveryDirectory;
+        startInfo.Environment["MAHJONG_GAMEDATA_INTERNAL_URL"] = spec.GameDataInternalUrl;
+        // 密钥通过子进程环境传递，避免进入进程参数、诊断日志与 Allocator 状态文件。
+        startInfo.Environment["MAHJONG_SETTLEMENT_SIGNING_KEY"] = spec.SettlementSigningKey;
         startInfo.Environment["MAHJONG_SNAPSHOT_EVERY_ACTIONS"] = "3";
         startInfo.Environment["MAHJONG_SNAPSHOT_MAX_INTERVAL_SECONDS"] = "10";
         startInfo.Environment["MAHJONG_COMPATIBLE_CLIENT_BUILDS"] = "1.0.0";

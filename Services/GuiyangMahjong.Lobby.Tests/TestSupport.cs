@@ -28,7 +28,8 @@ public sealed class LobbyWebApplicationFactory : WebApplicationFactory<Program>
                 ["Lobby:Allocator:Enabled"] = "false",
                 ["Lobby:Persistence:Mode"] = "InMemory",
                 ["Lobby:PasswordFailureLimit"] = "5",
-                ["Lobby:PasswordFailureWindowSeconds"] = "300"
+                ["Lobby:PasswordFailureWindowSeconds"] = "300",
+                ["Lobby:AllowLegacyClientVersionContext"] = "true"
             });
         });
     }
@@ -42,10 +43,20 @@ public sealed class LobbyWebApplicationFactory : WebApplicationFactory<Program>
         var client = CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
         var token = HmacPlayerTokenValidator.CreateSignedToken(
             SigningKey,
-            new PlayerIdentity(playerId, displayName, "Guest"),
+            new PlayerIdentity(
+                playerId,
+                displayName,
+                "Guest",
+                Guid.NewGuid().ToString("N"),
+                0,
+                0,
+                "1.0.0",
+                "1"),
             expiresAtUtc ?? DateTimeOffset.UtcNow.AddMinutes(10),
             issuedAtUtc);
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        client.DefaultRequestHeaders.Add("X-Client-Version", "1.0.0");
+        client.DefaultRequestHeaders.Add("X-Protocol-Version", "1");
         return client;
     }
 

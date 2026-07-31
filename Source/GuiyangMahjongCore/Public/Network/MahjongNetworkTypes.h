@@ -214,8 +214,10 @@ USTRUCT()
 struct GUIYANGMAHJONGCORE_API FMahjongSeatActionRecoveryState
 {
     GENERATED_BODY()
+    /** 候选动作所属座位以及该座位当前仍可提交的全部合法响应。 */
     UPROPERTY() int32 SeatIndex = INDEX_NONE;
     UPROPERTY() TArray<FMahjongAction> AvailableActions;
+    /** 响应窗口中是否已经提交过意图；存在时 SubmittedReaction 参与确定性裁决。 */
     UPROPERTY() bool bHasSubmittedReaction = false;
     UPROPERTY() FMahjongActionRequest SubmittedReaction;
 };
@@ -229,21 +231,27 @@ USTRUCT()
 struct GUIYANGMAHJONGCORE_API FMahjongTableRecoveryState
 {
     GENERATED_BODY()
+    /** 本局锁定规则、可复制公共状态、四家私有手牌和当前结算草案。 */
     UPROPERTY() FGuiyangRuleSnapshot LockedRules;
     UPROPERTY() FMahjongPublicTableState PublicState;
     UPROPERTY() TArray<FMahjongHand> Hands;
     UPROPERTY() FMahjongSettlementResult SettlementResult;
+    /** 响应窗口和每座位单调序号；用于恢复幂等与未完成动作竞争。 */
     UPROPERTY() TArray<FMahjongSeatActionRecoveryState> SeatActions;
     UPROPERTY() TArray<int32> LastClientSequences;
+    /** 当前累计分及尚未并入最终结算的杠、特殊鸡增量，均由 DS 权威拥有。 */
     UPROPERTY() TArray<int32> CurrentScores;
     UPROPERTY() TArray<int32> GangDeltas;
     UPROPERTY() TArray<int32> SpecialJiDeltas;
+    /** 最近弃牌、摸牌和首个特殊鸡位置，用于恢复后继续合法性判断。 */
     UPROPERTY() int32 LastDiscardSeat = INDEX_NONE;
     UPROPERTY() int32 FirstSpecialJiDiscardSequence = INDEX_NONE;
     UPROPERTY() FMahjongTile LastDrawnTile;
+    /** 抢杠窗口及待提交补杠上下文；窗口未结束前不能提前改变副露。 */
     UPROPERTY() bool bQiangGangWindow = false;
     UPROPERTY() int32 PendingBuGangSeat = INDEX_NONE;
     UPROPERTY() int32 PendingBuGangTileId = INDEX_NONE;
     UPROPERTY() FMahjongTile PendingBuGangTile;
+    /** 完整牌墙和消费游标；只在受限恢复存储中持久化。 */
     UPROPERTY() FMahjongDeckRecoveryState DeckState;
 };

@@ -31,6 +31,7 @@ services:
       AUTH_DB_PASSWORD: ${AUTH_DB_PASSWORD:?AUTH_DB_PASSWORD is required}
       LOBBY_DB_PASSWORD: ${LOBBY_DB_PASSWORD:?LOBBY_DB_PASSWORD is required}
       PLAYER_DATA_DB_PASSWORD: ${PLAYER_DATA_DB_PASSWORD:?PLAYER_DATA_DB_PASSWORD is required}
+      GAME_DATA_DB_PASSWORD: ${GAME_DATA_DB_PASSWORD:?GAME_DATA_DB_PASSWORD is required}
       ADMIN_DB_PASSWORD: ${ADMIN_DB_PASSWORD:?ADMIN_DB_PASSWORD is required}
       MONITOR_DB_PASSWORD: ${MONITOR_DB_PASSWORD:?MONITOR_DB_PASSWORD is required}
       AUDIT_DB_PASSWORD: ${AUDIT_DB_PASSWORD:?AUDIT_DB_PASSWORD is required}
@@ -41,6 +42,7 @@ services:
       - ../../Services/GuiyangMahjong.Lobby/Storage:/migration/lobby:ro
       - ../../Services/GuiyangMahjong.PlayerData/Storage:/migration/player-data:ro
       - ../../Services/GuiyangMahjong.Admin/Storage:/migration/admin:ro
+      - ../../Services/Apps/GuiyangMahjong.GameData/Storage:/migration/game-data:ro
     entrypoint: ["/bin/sh", "-ec"]
     command:
       - |
@@ -50,12 +52,14 @@ services:
         $$base -f /migration/lobby/schema.sql
         $$base -f /migration/player-data/schema.sql
         $$base -f /migration/admin/schema.sql
+        $$base -f /migration/game-data/schema.sql
         $$base -f /migration/least-privilege/002_grants.sql
         $$base \
           -v migration_password="$$MIGRATION_DB_PASSWORD" \
           -v auth_password="$$AUTH_DB_PASSWORD" \
           -v lobby_password="$$LOBBY_DB_PASSWORD" \
           -v player_data_password="$$PLAYER_DATA_DB_PASSWORD" \
+          -v game_data_password="$$GAME_DATA_DB_PASSWORD" \
           -v admin_password="$$ADMIN_DB_PASSWORD" \
           -v monitor_password="$$MONITOR_DB_PASSWORD" \
           -v audit_password="$$AUDIT_DB_PASSWORD" \
@@ -148,11 +152,14 @@ services:
       Allocator__StateFilePath: /var/lib/guiyang-mahjong/state/instances.json
       # Allocator 与 Lobby 通过 Compose 服务名通信，避免依赖 Docker Desktop 宿主机网关地址。
       Allocator__LobbyInternalUrl: http://lobby:8080
+      Allocator__GameDataInternalUrl: http://game-data:8080
       Allocator__ServiceToken: ${ALLOCATOR_SERVICE_TOKEN:?ALLOCATOR_SERVICE_TOKEN is required}
       Allocator__MonitoringReadOnlyToken: ${ADMIN_TOPOLOGY_ALLOCATOR_TOKEN:?ADMIN_TOPOLOGY_ALLOCATOR_TOKEN is required}
       Allocator__ManagementCommandToken: ${ALLOCATOR_MANAGEMENT_COMMAND_TOKEN:?ALLOCATOR_MANAGEMENT_COMMAND_TOKEN is required}
       Allocator__LobbyCallbackToken: ${LOBBY_INTERNAL_TOKEN:?LOBBY_INTERNAL_TOKEN is required}
       Allocator__JoinTicketSigningKey: ${JOIN_TICKET_SIGNING_KEY:?JOIN_TICKET_SIGNING_KEY is required}
+      Allocator__SettlementSigningKey: ${SETTLEMENT_SIGNING_KEY:?SETTLEMENT_SIGNING_KEY is required}
+      Allocator__GameDataRecoveryToken: ${GAMEDATA_RECOVERY_TOKEN:?GAMEDATA_RECOVERY_TOKEN is required}
       Allocator__RegionId: ${MAHJONG_REGION_ID:-local}
       Allocator__ClusterId: ${MAHJONG_CLUSTER_ID:-local-linux}
       Allocator__NodeId: ${MAHJONG_NODE_ID:-game-node}
@@ -208,6 +215,9 @@ services:
       Lobby__InternalServiceToken: ${LOBBY_INTERNAL_TOKEN:?LOBBY_INTERNAL_TOKEN is required}
       Lobby__MonitoringReadOnlyToken: ${ADMIN_TOPOLOGY_LOBBY_TOKEN:?ADMIN_TOPOLOGY_LOBBY_TOKEN is required}
       Lobby__ManagementCommandToken: ${LOBBY_MANAGEMENT_COMMAND_TOKEN:?LOBBY_MANAGEMENT_COMMAND_TOKEN is required}
+      Lobby__Settlement__Mode: ${LOBBY_SETTLEMENT_MODE:-GameData}
+      Lobby__Settlement__GameDataBaseUrl: http://game-data:8080
+      Lobby__Settlement__AuthorityToken: ${GAMEDATA_LOBBY_AUTHORITY_TOKEN:?GAMEDATA_LOBBY_AUTHORITY_TOKEN is required}
       Lobby__AccessRevocationTtlMinutes: ${LOBBY_ACCESS_REVOCATION_TTL_MINUTES:-120}
       Lobby__RegionId: ${MAHJONG_REGION_ID:-local}
       Lobby__ClusterId: ${MAHJONG_CLUSTER_ID:-local-linux}
@@ -220,6 +230,7 @@ services:
       Lobby__TopologyRegistration__SourceId: ${MAHJONG_LOBBY_ID:-lobby-local-1}
       Lobby__TopologyRegistration__Generation: ${MAHJONG_DEPLOYMENT_GENERATION:-1}
       Lobby__Allocator__Enabled: "true"
+      Lobby__AllowLegacyClientVersionContext: "false"
       Lobby__Allocator__BaseUrl: http://game-node:${ALLOCATOR_PORT:-18081}
       Lobby__Allocator__ServiceToken: ${ALLOCATOR_SERVICE_TOKEN:?ALLOCATOR_SERVICE_TOKEN is required}
       Lobby__Allocator__GameServerBuildVersion: ${MAHJONG_VERSION:-dev}
@@ -243,6 +254,46 @@ services:
     cpus: ${LOBBY_CPUS:-2.0}
     mem_limit: ${LOBBY_MEMORY:-1g}
     pids_limit: 512
+    read_only: true
+    tmpfs: ["/tmp:rw,noexec,nosuid,size=64m"]
+    security_opt: ["no-new-privileges:true"]
+    logging: *logging
+
+  game-data:
+    image: ${IMAGE_REGISTRY:-local}/guiyang-mahjong-game-data:${MAHJONG_VERSION:-dev}
+    build:
+      context: ../..
+      dockerfile: Services/Apps/GuiyangMahjong.GameData/Dockerfile
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      Observability__Enabled: ${OBSERVABILITY_ENABLED:-false}
+      Observability__OtlpEndpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://host.docker.internal:4317}
+      Observability__TraceSampleRatio: ${OTEL_TRACE_SAMPLE_RATIO:-0.1}
+      GameData__PersistenceMode: Postgres
+      GameData__ApplyDatabaseMigrations: "false"
+      GameData__PostgresConnectionString: Host=postgres;Port=5432;Database=mahjong;Username=mahjong_game_data;Password=${GAME_DATA_DB_PASSWORD};Options=-c role=mahjong_game_data_rw
+      GameData__LobbyBaseUrl: http://lobby:8080
+      GameData__LobbyAuthorityToken: ${GAMEDATA_LOBBY_AUTHORITY_TOKEN:?GAMEDATA_LOBBY_AUTHORITY_TOKEN is required}
+      GameData__MonitoringToken: ${GAMEDATA_MONITORING_TOKEN:?GAMEDATA_MONITORING_TOKEN is required}
+      GameData__SettlementSigningKey: ${SETTLEMENT_SIGNING_KEY:?SETTLEMENT_SIGNING_KEY is required}
+      GameData__AllocatorRecoveryToken: ${GAMEDATA_RECOVERY_TOKEN:?GAMEDATA_RECOVERY_TOKEN is required}
+      GameData__EvidenceStorage__Mode: FileSystem
+      GameData__EvidenceStorage__RootDirectory: /var/lib/guiyang-mahjong/recovery
+    volumes:
+      - ${MAHJONG_DATA_ROOT:-/var/lib/guiyang-mahjong}/allocator:/var/lib/guiyang-mahjong:ro
+    depends_on:
+      postgres-migration: {condition: service_completed_successfully}
+      lobby: {condition: service_healthy}
+    ports: ["127.0.0.1:${GAMEDATA_PORT:-18085}:8080"]
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "--show-error", "http://127.0.0.1:8080/health/ready"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+    cpus: ${GAMEDATA_CPUS:-1.0}
+    mem_limit: ${GAMEDATA_MEMORY:-512m}
+    pids_limit: 256
     read_only: true
     tmpfs: ["/tmp:rw,noexec,nosuid,size=64m"]
     security_opt: ["no-new-privileges:true"]

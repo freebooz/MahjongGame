@@ -73,8 +73,13 @@ spec:
                     secretKeyRef:
                       name: mahjong-secrets
                       key: Allocator__JoinTicketSigningKey
-                - name: MAHJONG_MATCH_RESULT_OUTBOX_PATH
-                  value: /tmp/guiyang-mahjong-match-result.json
+                - name: MAHJONG_SETTLEMENT_SIGNING_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: mahjong-secrets
+                      key: Allocator__SettlementSigningKey
+                - name: MAHJONG_MATCH_RESULT_OUTBOX_DIRECTORY
+                  value: /var/lib/guiyang-mahjong/outbox
                 - name: MAHJONG_RECOVERY_DIRECTORY
                   value: /var/lib/guiyang-mahjong/recovery
                 - name: MAHJONG_SNAPSHOT_EVERY_ACTIONS

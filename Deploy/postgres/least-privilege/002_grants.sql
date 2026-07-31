@@ -5,7 +5,8 @@ REVOKE CREATE ON SCHEMA public FROM PUBLIC;
 REVOKE ALL ON SCHEMA
     auth, session, player, integration,
     lobby, room, matchmaking,
-    player_data, admin_monitor
+    player_data, admin_monitor,
+    settlement, game_record, replay, leaderboard, game_data_integration
 FROM PUBLIC;
 GRANT USAGE ON SCHEMA public TO
     mahjong_lobby_rw, mahjong_monitor_ro;
@@ -16,6 +17,8 @@ GRANT USAGE ON SCHEMA auth, session, player, integration TO
     mahjong_auth_rw, mahjong_monitor_ro;
 GRANT USAGE ON SCHEMA player_data TO
     mahjong_player_data_rw, mahjong_monitor_ro;
+GRANT USAGE ON SCHEMA settlement, game_record, replay, leaderboard, game_data_integration TO
+    mahjong_game_data_rw, mahjong_monitor_ro;
 GRANT USAGE ON SCHEMA admin_monitor TO
     mahjong_admin_rw, mahjong_monitor_ro,
     mahjong_audit_append, mahjong_archive_dispatch;
@@ -28,6 +31,11 @@ ALTER SCHEMA lobby OWNER TO mahjong_migration;
 ALTER SCHEMA room OWNER TO mahjong_migration;
 ALTER SCHEMA matchmaking OWNER TO mahjong_migration;
 ALTER SCHEMA player_data OWNER TO mahjong_migration;
+ALTER SCHEMA settlement OWNER TO mahjong_migration;
+ALTER SCHEMA game_record OWNER TO mahjong_migration;
+ALTER SCHEMA replay OWNER TO mahjong_migration;
+ALTER SCHEMA leaderboard OWNER TO mahjong_migration;
+ALTER SCHEMA game_data_integration OWNER TO mahjong_migration;
 ALTER SCHEMA admin_monitor OWNER TO mahjong_migration;
 
 REVOKE ALL ON TABLE
@@ -37,6 +45,7 @@ FROM PUBLIC;
 REVOKE ALL ON ALL TABLES IN SCHEMA auth, session, player, integration FROM PUBLIC;
 REVOKE ALL ON ALL TABLES IN SCHEMA lobby, room, matchmaking FROM PUBLIC;
 REVOKE ALL ON ALL TABLES IN SCHEMA player_data, admin_monitor FROM PUBLIC;
+REVOKE ALL ON ALL TABLES IN SCHEMA settlement, game_record, replay, leaderboard, game_data_integration FROM PUBLIC;
 REVOKE ALL ON ALL SEQUENCES IN SCHEMA admin_monitor FROM PUBLIC;
 REVOKE ALL ON ALL FUNCTIONS IN SCHEMA admin_monitor FROM PUBLIC;
 
@@ -57,7 +66,8 @@ BEGIN
         WHERE schemaname IN (
             'auth', 'session', 'player', 'integration',
             'lobby', 'room', 'matchmaking',
-            'player_data', 'admin_monitor')
+            'player_data', 'admin_monitor',
+            'settlement', 'game_record', 'replay', 'leaderboard', 'game_data_integration')
     LOOP
         EXECUTE format('ALTER TABLE %s OWNER TO mahjong_migration', object_record.object_name);
     END LOOP;
@@ -96,6 +106,10 @@ GRANT SELECT ON TABLE player_room_history, player_connection_history
 TO mahjong_lobby_rw;
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA player_data
 TO mahjong_player_data_rw;
+-- 不可变触发器会拒绝权威历史 UPDATE/DELETE；运行身份仍需更新排行榜和 Outbox 调度状态。
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA
+    settlement, game_record, replay, leaderboard, game_data_integration
+TO mahjong_game_data_rw;
 
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE
     admin_monitor.action_requests,
@@ -123,6 +137,19 @@ GRANT SELECT ON ALL TABLES IN SCHEMA lobby, room, matchmaking
 TO mahjong_monitor_ro;
 GRANT SELECT ON ALL TABLES IN SCHEMA player_data, admin_monitor
 TO mahjong_monitor_ro;
+GRANT SELECT ON ALL TABLES IN SCHEMA settlement, game_record, replay, leaderboard, game_data_integration
+TO mahjong_monitor_ro;
+
+ALTER DEFAULT PRIVILEGES FOR ROLE mahjong_migration IN SCHEMA settlement
+    GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO mahjong_game_data_rw;
+ALTER DEFAULT PRIVILEGES FOR ROLE mahjong_migration IN SCHEMA game_record
+    GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO mahjong_game_data_rw;
+ALTER DEFAULT PRIVILEGES FOR ROLE mahjong_migration IN SCHEMA replay
+    GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO mahjong_game_data_rw;
+ALTER DEFAULT PRIVILEGES FOR ROLE mahjong_migration IN SCHEMA leaderboard
+    GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO mahjong_game_data_rw;
+ALTER DEFAULT PRIVILEGES FOR ROLE mahjong_migration IN SCHEMA game_data_integration
+    GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO mahjong_game_data_rw;
 
 -- 审计入库触发器以对象所有者执行，只允许由审计追加动作间接写入归档 Outbox。
 ALTER FUNCTION admin_monitor.enqueue_audit_archive() SECURITY DEFINER;

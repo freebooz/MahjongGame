@@ -11,6 +11,22 @@ namespace GuiyangMahjong.Architecture.Tests;
 /// </summary>
 public sealed class ProjectArchitectureTests
 {
+    /// <summary>阶段 7 GameData 必须保持模块目录与跨服务依赖边界，不得引用 Lobby、PlayerData 或 Admin 实现。</summary>
+    [Fact]
+    public void GameData_HasRequiredModules_AndNoBusinessImplementationReferences()
+    {
+        var root = Path.Combine(FindProjectRoot(), "Services", "Apps", "GuiyangMahjong.GameData");
+        foreach (var module in new[]
+                 { "Settlement", "GameRecords", "ReplayEvidence", "Leaderboards", "Administration", "Infrastructure" })
+            Assert.True(Directory.Exists(Path.Combine(root, module)), $"GameData 缺少职责模块目录：{module}");
+        var project = XDocument.Load(Path.Combine(root, "GuiyangMahjong.GameData.csproj"));
+        var references = project.Descendants("ProjectReference")
+            .Select(node => node.Attribute("Include")?.Value ?? string.Empty).ToArray();
+        Assert.DoesNotContain(references, value => value.Contains("GuiyangMahjong.Lobby", StringComparison.Ordinal));
+        Assert.DoesNotContain(references, value => value.Contains("GuiyangMahjong.PlayerData", StringComparison.Ordinal));
+        Assert.DoesNotContain(references, value => value.Contains("GuiyangMahjong.Admin", StringComparison.Ordinal));
+    }
+
     /// <summary>
     /// 参与依赖方向约束的业务服务名称；Observability 等横切基础设施不在此集合。
     /// </summary>

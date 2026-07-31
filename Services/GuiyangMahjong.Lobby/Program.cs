@@ -68,6 +68,11 @@ builder.Services
                     StringComparison.Ordinal)),
         "Lobby topology registration requires a dedicated 32+ character credential.")
     .Validate(options => options.TokenSigningKey.Length >= 32, "Lobby:TokenSigningKey 至少需要 32 个字符")
+    .Validate(options => options.Settlement.Mode is "Legacy" or "Shadow" or "GameData",
+        "Lobby:Settlement:Mode 只允许 Legacy、Shadow 或 GameData。")
+    .Validate(options => options.Settlement.Mode == "Legacy"
+                         || options.Settlement.AuthorityToken.Length >= 32,
+        "Shadow/GameData 模式必须配置用途隔离的 GameData AuthorityToken。")
     .Validate(options =>
         !builder.Environment.IsProduction()
         || !options.TokenSigningKey.StartsWith("development-only", StringComparison.OrdinalIgnoreCase),

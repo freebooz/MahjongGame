@@ -32,7 +32,8 @@ public sealed class AgonesGameServerProvider(IAgonesAllocationClient agones) : I
             request.RuleSetVersion,
             request.ProtocolVersion,
             request.RequestedCapacity,
-            request.FencingToken), cancellationToken);
+            request.FencingToken,
+            spec.GameDataInternalUrl), cancellationToken);
         return new GameServerProviderHandle(
             Mode.ToString(),
             allocation.Address,

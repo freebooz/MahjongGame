@@ -47,6 +47,11 @@ bool FMahjongAuthoritativeTurnTest::RunTest(const FString& Parameters)
     Play.TurnId = Initial.TurnId;
     Play.TargetTileId = FirstDealer.Hand.Tiles[0].UniqueId;
     Play.ClientSequence = 1;
+    FMahjongActionRequest StaleStatePlay = Play;
+    StaleStatePlay.ExpectedStateVersion = Initial.StateSequence + 1;
+    TestFalse(TEXT("客户端基于错误状态版本生成的动作必须拒绝"),
+        First->SubmitPlayTile(0, StaleStatePlay).bSuccess);
+    Play.ExpectedStateVersion = Initial.StateSequence;
     const FMahjongActionResult Played = First->SubmitPlayTile(0, Play);
     TestTrue(TEXT("庄家合法出牌必须成功"), Played.bSuccess);
     TestFalse(TEXT("完全相同的请求不得重放"), First->SubmitPlayTile(0, Play).bSuccess);
@@ -399,4 +404,3 @@ bool FMahjongQiangGangHuTest::RunTest(const FString& Parameters)
 
 
 #endif
-

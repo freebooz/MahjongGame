@@ -1,0 +1,74 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mahjong-game-data
+  namespace: guiyang-mahjong
+  labels: {app: mahjong-game-data}
+spec:
+  replicas: 2
+  selector: {matchLabels: {app: mahjong-game-data}}
+  template:
+    metadata: {labels: {app: mahjong-game-data}}
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1654
+        runAsGroup: 1654
+        fsGroup: 1654
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: game-data
+          image: ghcr.io/freebooz/guiyang-mahjong-game-data:REPLACE_WITH_GIT_SHA
+          ports: [{name: http, containerPort: 8080}]
+          envFrom:
+            - configMapRef: {name: mahjong-services}
+            - secretRef: {name: mahjong-secrets}
+          volumeMounts:
+            - {name: evidence, mountPath: /var/lib/guiyang-mahjong, readOnly: true}
+            - {name: tmp, mountPath: /tmp}
+          startupProbe:
+            httpGet: {path: /health/startup, port: http}
+            periodSeconds: 2
+            failureThreshold: 30
+          readinessProbe:
+            httpGet: {path: /health/ready, port: http}
+            periodSeconds: 5
+            timeoutSeconds: 2
+          livenessProbe:
+            httpGet: {path: /health/live, port: http}
+            periodSeconds: 15
+            timeoutSeconds: 2
+          resources:
+            requests: {cpu: 250m, memory: 256Mi}
+            limits: {cpu: "2", memory: 1Gi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+      volumes:
+        - name: evidence
+          persistentVolumeClaim: {claimName: mahjong-game-recovery}
+        - name: tmp
+          emptyDir: {sizeLimit: 64Mi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mahjong-game-data
+  namespace: guiyang-mahjong
+spec:
+  selector: {app: mahjong-game-data}
+  ports: [{name: http, port: 8080, targetPort: http}]
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: mahjong-game-data
+  namespace: guiyang-mahjong
+spec:
+  maxUnavailable: 1
+  selector: {matchLabels: {app: mahjong-game-data}}
+# GameData 只通过集群内 Service 接收 DS/Allocator 结算和管理读请求，不创建公网 Ingress。
+# 证据卷以只读方式挂载；生产迁移由独立 Job 和 mahjong_migration 身份执行。

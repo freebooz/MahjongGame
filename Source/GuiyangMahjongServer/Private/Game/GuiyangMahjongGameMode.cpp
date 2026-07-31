@@ -503,6 +503,12 @@ bool AGuiyangMahjongGameMode::InitializeManagedRoomAuthority(
         // 恢复后重新武装权威计时器；若崩溃点已进入 Settlement，则继续证据屏障和幂等结算流程。
         PublishTableSnapshots();
         FinalizeRoundIfNeeded();
+        FString CurrentEpochSnapshotError;
+        if (!PersistAuthoritativeSnapshot(false, CurrentEpochSnapshotError))
+        {
+            OutError = TEXT("恢复成功但新 Epoch 快照落盘失败：") + CurrentEpochSnapshotError;
+            return false;
+        }
     }
     UE_LOG(LogMahjongServer, Display,
         TEXT("Managed room initialized BackendRoomId=%s RoomCode=%s MatchId=%s RuleHash=%s"),
@@ -829,6 +835,7 @@ void AGuiyangMahjongGameMode::TryStartTable(const FMahjongRoomState& StartingRoo
     ArmedTimeoutTurnId = INDEX_NONE;
     ArmedTimeoutPhase = EMahjongTablePhase::WaitingForPlayers;
     PublishRoomState(PlayingState);
+    PublishTableSnapshots();
     FString SnapshotError;
     if (RuntimeRecoveryStore && !PersistAuthoritativeSnapshot(false, SnapshotError))
     {
@@ -836,7 +843,6 @@ void AGuiyangMahjongGameMode::TryStartTable(const FMahjongRoomState& StartingRoo
             TEXT("Post-deal authoritative snapshot failed Room=%s Reason=%s"),
             *ActiveRoomCode, *SnapshotError);
     }
-    PublishTableSnapshots();
     if (FParse::Param(FCommandLine::Get(), TEXT("MahjongEnableIntegrationHooks")))
     {
         UE_LOG(LogMahjongServer, Display,
@@ -1055,9 +1061,15 @@ void AGuiyangMahjongGameMode::RefreshActionTimeoutTimer()
     // Only the explicit full-match integration mode uses a fast timer.
     // Production turns use a hidden 15-second grace period followed by the
     // replicated 30-second visible countdown.
-    const float TimerDelay = IsFullMatchIntegrationEnabled()
+    float TimerDelay = IsFullMatchIntegrationEnabled()
         ? 0.05f
         : static_cast<float>(TotalTimeoutSeconds);
+    if (RecoveredActionTimeoutRemainingSeconds.IsSet())
+    {
+        TimerDelay = FMath::Clamp(
+            RecoveredActionTimeoutRemainingSeconds.GetValue(), 0.05f, TimerDelay);
+        RecoveredActionTimeoutRemainingSeconds.Reset();
+    }
     TableEngine->SetActionDeadlineForServer(GetWorld()->GetTimeSeconds() + TimerDelay,
         IsFullMatchIntegrationEnabled() ? 1 : VisibleTimeoutSeconds);
     FTimerDelegate Delegate;
@@ -1082,10 +1094,45 @@ void AGuiyangMahjongGameMode::HandleActionTimeout(const int32 ExpectedRoundId, c
             if (!TableEngine->GetAvailableActions(SeatIndex).IsEmpty()) TimedOutSeats.Add(SeatIndex);
         }
     }
+    const int32 StateVersionBefore = TableEngine->GetPublicState().StateSequence;
     const FMahjongActionResult Result = TableEngine->ResolveActionTimeout(ExpectedRoundId, ExpectedTurnId, ExpectedPhase);
     if (!Result.bSuccess) return;
     // 超时动作由服务器代打，只有超时发生前确实拥有可选动作的座位进入托管。
     for (const int32 TimedOutSeat : TimedOutSeats) SetSeatTrusteeState(TimedOutSeat, true);
+    if (RuntimeRecoveryStore && GameServerBridge)
+    {
+        FMahjongTableRecoveryState RecoveryState;
+        const FString StateHash = TableEngine->ExportRecoveryState(RecoveryState)
+            ? FGuiyangRuntimeRecoveryStore::CalculateTableStateHash(RecoveryState)
+            : FString();
+        for (const int32 TimedOutSeat : TimedOutSeats)
+        {
+            FGuiyangActionEvidenceRecord Record;
+            Record.MatchId = GameServerBridge->GetConfig().MatchId;
+            Record.RoomId = GameServerBridge->GetConfig().RoomId;
+            Record.RoomEpoch = GameServerBridge->GetConfig().RoomEpoch;
+            Record.StateVersionBefore = StateVersionBefore;
+            Record.StateVersionAfter = TableEngine->GetPublicState().StateSequence;
+            Record.StateHashAfter = StateHash;
+            const FMahjongSeatInfo* TimedOutPlayer = TableEngine->GetPublicState().Seats.FindByPredicate(
+                [TimedOutSeat](const FMahjongSeatInfo& Seat) { return Seat.SeatIndex == TimedOutSeat; });
+            Record.PlayerId = TimedOutPlayer ? TimedOutPlayer->PlayerId : FString::Printf(TEXT("seat:%d"), TimedOutSeat);
+            Record.SeatId = TimedOutSeat;
+            Record.ActionType = ExpectedPhase == EMahjongTablePhase::PlayerTurn
+                ? TEXT("TimeoutAutoPlay") : TEXT("TimeoutAutoPass");
+            Record.OccurredAtUtc = FDateTime::UtcNow().ToIso8601();
+            Record.Request.ClientActionId = FGuid::NewGuid().ToString(EGuidFormats::DigitsWithHyphensLower);
+            Record.Request.RoundId = ExpectedRoundId;
+            Record.Request.TurnId = ExpectedTurnId;
+            Record.Request.RoomEpoch = GameServerBridge->GetConfig().RoomEpoch;
+            Record.Request.Type = Result.Action.Type;
+            Record.NormalizedPayload = FGuiyangActionEvidence::NormalizeRequest(Record.Request);
+            Record.bReplayable = false;
+            FString EvidenceError;
+            if (!RuntimeRecoveryStore->AppendAction(Record, EvidenceError))
+                UE_LOG(LogMahjongServer, Error, TEXT("Timeout evidence append failed Reason=%s"), *EvidenceError);
+        }
+    }
     // 超时可能一次推进多个自动 Pass；立即写完整快照，避免把聚合自动动作误表示成单个玩家意图。
     FString SnapshotError;
     if (RuntimeRecoveryStore && !PersistAuthoritativeSnapshot(false, SnapshotError))
@@ -1333,12 +1380,54 @@ void AGuiyangMahjongGameMode::HandleReconnectStateConfirmed(
 
 void AGuiyangMahjongGameMode::PublishFinalSettlement(const FMahjongRoomState& RoomState)
 {
-    // 最终结果既发送四个客户端，也以可靠 Outbox 方式上报 Lobby 控制面。
+    // 最终结果既发送四个客户端，也以可靠 Outbox 方式上报 GameData；客户端永远不能提交该信封。
     if (RoomState.StateSequence == LastPublishedFinalRoomSequence) return;
     const FMahjongFinalSettlementResult Result = UGuiyangRoomManager::BuildFinalSettlement(RoomState);
     if (bManagedGameServer && GameServerBridge)
+    {
+        FString EvidenceError;
+        if (!PersistAuthoritativeSnapshot(true, EvidenceError))
+        {
+            bSettlementEvidenceReady = false;
+            UE_LOG(LogMahjongServer, Error,
+                TEXT("Final GameData snapshot barrier failed MatchId=%s Reason=%s"),
+                *Result.MatchId, *EvidenceError);
+            return;
+        }
+        FMahjongTableRecoveryState FinalState;
+        const FString FinalStateHash = TableEngine && TableEngine->ExportRecoveryState(FinalState)
+            ? FGuiyangRuntimeRecoveryStore::CalculateTableStateHash(FinalState)
+            : FString();
+        TArray<FGuiyangRecoveryEvidenceObject> EvidenceObjects;
+        if (!RuntimeRecoveryStore
+            || !RuntimeRecoveryStore->MaterializeFinalEvidence(EvidenceObjects, EvidenceError))
+        {
+            bSettlementEvidenceReady = false;
+            UE_LOG(LogMahjongServer, Error,
+                TEXT("Final GameData evidence materialization failed MatchId=%s Reason=%s"),
+                *Result.MatchId, *EvidenceError);
+            return;
+        }
+        FString CommitmentCanonical = TEXT("shuffle-commitments-v1");
+        for (const FGuiyangShuffleAuditProof& Proof : CompletedShuffleProofs)
+            CommitmentCanonical += FString::Printf(TEXT("|%d:%s"), Proof.RoundId, *Proof.SeedCommitment);
+        const FTCHARToUTF8 CommitmentUtf8(*CommitmentCanonical);
+        FSHA256Signature CommitmentSignature;
+        const FString RandomCommitment = FPlatformMisc::GetSHA256Signature(
+            CommitmentUtf8.Get(), static_cast<uint32>(CommitmentUtf8.Length()), CommitmentSignature)
+            ? CommitmentSignature.ToString().ToLower()
+            : FString();
         GameServerBridge->QueueFinalSettlement(
-            Result, RoomState.StateSequence, CompletedShuffleProofs, FairnessEventChainDigest);
+            Result,
+            1,
+            CompletedShuffleProofs,
+            FairnessEventChainDigest,
+            FinalStateHash,
+            RuntimeRecoveryStore->GetLastActionHash(),
+            RandomCommitment,
+            FGuid::NewGuid().ToString(EGuidFormats::DigitsWithHyphensLower),
+            EvidenceObjects);
+    }
     for (TActorIterator<AGuiyangMahjongPlayerController> It(GetWorld()); It; ++It)
         It->Client_ShowFinalSettlement(Result);
     if (IsFullMatchIntegrationEnabled())
@@ -1418,6 +1507,9 @@ bool AGuiyangMahjongGameMode::PersistAuthoritativeSnapshot(
     Snapshot.RoomEpoch = GameServerBridge->GetConfig().RoomEpoch;
     Snapshot.RuleSetVersion = GameServerBridge->GetConfig().RuleSetVersion;
     Snapshot.CreatedAtUtc = FDateTime::UtcNow().ToIso8601();
+    Snapshot.RemainingActionTimeoutSeconds = GetWorld()
+        ? FMath::Max(0.0f, GetWorldTimerManager().GetTimerRemaining(ActionTimeoutHandle))
+        : 0.0f;
     if (!RoomManager->GetRoomState(Snapshot.RoomCode, Snapshot.RoomState)
         || !TableEngine->ExportRecoveryState(Snapshot.TableState))
     {
@@ -1478,6 +1570,11 @@ bool AGuiyangMahjongGameMode::TryRecoverPriorEpoch(FString& OutError)
     int64 LastSequence = Snapshot.ActionSequence;
     for (const FGuiyangActionEvidenceRecord& Action : Actions)
     {
+        if (!Action.bReplayable)
+        {
+            OutError = TEXT("恢复点之后包含未被快照覆盖的聚合超时动作");
+            return false;
+        }
         if (Action.ActionSequence != LastSequence + 1
             || Action.PreviousHash != LastHash
             || Action.StateVersionBefore != RecoveredEngine->GetPublicState().StateSequence)
@@ -1512,6 +1609,7 @@ bool AGuiyangMahjongGameMode::TryRecoverPriorEpoch(FString& OutError)
         : TOptional<FGuiyangShuffleAuditProof>();
     CompletedShuffleProofs = Snapshot.CompletedShuffleProofs;
     FairnessEventChainDigest = Snapshot.FairnessEventChainDigest;
+    RecoveredActionTimeoutRemainingSeconds = Snapshot.RemainingActionTimeoutSeconds;
     RuntimeRecoveryStore->AdoptRecoveredChain(LastSequence, LastHash);
     LastSnapshotActionSequence = Snapshot.ActionSequence;
     for (const int32 SeatIndex : Snapshot.TrusteeSeats)
@@ -1524,12 +1622,6 @@ bool AGuiyangMahjongGameMode::TryRecoverPriorEpoch(FString& OutError)
         Trustee.ChangedAtUtc = FDateTime::UtcNow();
     }
     bRecoveredGameServer = true;
-    FString CurrentEpochSnapshotError;
-    if (!PersistAuthoritativeSnapshot(false, CurrentEpochSnapshotError))
-    {
-        OutError = TEXT("恢复成功但新 Epoch 快照落盘失败：") + CurrentEpochSnapshotError;
-        return false;
-    }
     UE_LOG(LogMahjongServer, Display,
         TEXT("GameServer recovery completed Match=%s PreviousEpoch=%lld CurrentEpoch=%lld ReplayedActions=%d"),
         *Snapshot.MatchId, Snapshot.RoomEpoch, GameServerBridge->GetConfig().RoomEpoch, Actions.Num());

@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.Json;
 using GuiyangMahjong.Lobby.Domain;
 using GuiyangMahjong.Lobby.Options;
+using GuiyangMahjong.Lobby.Services;
 using Microsoft.Extensions.Options;
 
 namespace GuiyangMahjong.Lobby.Security;
@@ -47,6 +48,23 @@ public sealed class HmacJoinTicketIssuer(
         {
             throw new InvalidOperationException("Join Ticket 只能为已分配座位的房间成员签发。");
         }
+        var allocatedProtocol = (room.Route?.ProtocolVersion ?? 0)
+            .ToString(System.Globalization.CultureInfo.InvariantCulture);
+        var legacyContext = player.ProtocolVersion == "0"
+                            && string.Equals(player.ClientBuild, "legacy", StringComparison.OrdinalIgnoreCase);
+        if ((!string.Equals(player.ProtocolVersion, allocatedProtocol, StringComparison.Ordinal)
+                || string.Equals(player.ClientBuild, "legacy", StringComparison.OrdinalIgnoreCase))
+            && !(legacyContext && options.Value.AllowLegacyClientVersionContext))
+        {
+            throw new LobbyOperationException(
+                LobbyErrorCode.VersionMismatch,
+                "客户端版本上下文与已分配服务器不兼容",
+                StatusCodes.Status426UpgradeRequired);
+        }
+        var effectiveClientBuild = legacyContext ? room.BuildVersion : player.ClientBuild;
+        var effectiveProtocolVersion = legacyContext
+            ? room.Route?.ProtocolVersion ?? 0
+            : int.Parse(player.ProtocolVersion, System.Globalization.CultureInfo.InvariantCulture);
         // ticketId 用于跨日志关联，nonce 用于一次性消费；两者不能互相替代。
         var payload = Base64Url(JsonSerializer.SerializeToUtf8Bytes(new
         {
@@ -61,8 +79,8 @@ public sealed class HmacJoinTicketIssuer(
             securityEpoch = player.SecurityEpoch,
             serverInstanceId,
             roomEpoch = room.RoomEpoch,
-            clientBuild = player.ClientBuild,
-            protocolVersion = int.Parse(player.ProtocolVersion, System.Globalization.CultureInfo.InvariantCulture),
+            clientBuild = effectiveClientBuild,
+            protocolVersion = effectiveProtocolVersion,
             ruleSetVersion = room.RuleSetVersion,
             issuedAtUnixSeconds = issuedAt.ToUnixTimeSeconds(),
             expiresAtUnixSeconds = expiresAt.ToUnixTimeSeconds(),

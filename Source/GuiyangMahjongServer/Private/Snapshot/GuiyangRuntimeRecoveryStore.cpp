@@ -41,6 +41,7 @@ bool FGuiyangRuntimeRecoveryStore::Initialize(
     MatchId = Config.MatchId;
     RoomId = Config.RoomId;
     CurrentRoomEpoch = Config.RoomEpoch;
+    RootDirectory = Config.RecoveryDirectory;
     MatchDirectory = FPaths::Combine(Config.RecoveryDirectory, MatchId);
     FPaths::NormalizeDirectoryName(MatchDirectory);
     if (!IFileManager::Get().MakeDirectory(*MatchDirectory, true))
@@ -105,6 +106,75 @@ FString FGuiyangRuntimeRecoveryStore::CalculateTableStateHash(
     FString TableJson;
     if (!FJsonObjectConverter::UStructToJsonObjectString(TableState, TableJson)) return FString();
     return Sha256Hex(TEXT("table-state-v1|") + TableJson);
+}
+
+bool FGuiyangRuntimeRecoveryStore::MaterializeFinalEvidence(
+    TArray<FGuiyangRecoveryEvidenceObject>& OutObjects,
+    FString& OutError) const
+{
+    OutObjects.Reset();
+    const TArray<TPair<FString, FString>> Sources = {
+        { TEXT("snapshot"), FPaths::Combine(
+            MatchDirectory, FString::Printf(TEXT("snapshot-%lld.json"), CurrentRoomEpoch)) },
+        { TEXT("actions"), FPaths::Combine(
+            MatchDirectory, FString::Printf(TEXT("actions-%lld.jsonl"), CurrentRoomEpoch)) }
+    };
+    for (const TPair<FString, FString>& Source : Sources)
+    {
+        TArray<uint8> Bytes;
+        if (!FFileHelper::LoadFileToArray(Bytes, *Source.Value) || Bytes.IsEmpty())
+        {
+            OutError = FString::Printf(TEXT("结算证据文件缺失或为空：%s"), *Source.Key);
+            OutObjects.Reset();
+            return false;
+        }
+        uint8 Digest[SHA256_DIGEST_LENGTH] = {};
+        SHA256(Bytes.GetData(), Bytes.Num(), Digest);
+        const FString Hash = BytesToHex(Digest, UE_ARRAY_COUNT(Digest)).ToLower();
+        const FString Extension = Source.Key == TEXT("actions") ? TEXT("jsonl") : TEXT("json");
+        const FString ObjectKey = FString::Printf(
+            TEXT("matches/%s/epochs/%lld/%s/%s.%s"),
+            *MatchId, CurrentRoomEpoch, *Hash, *Source.Key, *Extension);
+        const FString Target = FPaths::Combine(RootDirectory, ObjectKey);
+        const FString Parent = FPaths::GetPath(Target);
+        if (!IFileManager::Get().MakeDirectory(*Parent, true))
+        {
+            OutError = TEXT("无法创建内容寻址证据目录");
+            OutObjects.Reset();
+            return false;
+        }
+        if (IFileManager::Get().FileExists(*Target))
+        {
+            TArray<uint8> Existing;
+            if (!FFileHelper::LoadFileToArray(Existing, *Target) || Existing != Bytes)
+            {
+                OutError = TEXT("内容寻址证据键已存在但内容不一致");
+                OutObjects.Reset();
+                return false;
+            }
+        }
+        else
+        {
+            const FString Temporary = Target + TEXT(".tmp");
+            if (!FFileHelper::SaveArrayToFile(Bytes, *Temporary)
+                || !IFileManager::Get().Move(*Target, *Temporary, false, true, false, true))
+            {
+                IFileManager::Get().Delete(*Temporary, false, true, true);
+                OutError = TEXT("内容寻址证据原子写入失败");
+                OutObjects.Reset();
+                return false;
+            }
+        }
+        FGuiyangRecoveryEvidenceObject Object;
+        Object.Kind = Source.Key;
+        Object.ObjectKey = ObjectKey;
+        Object.AbsolutePath = Target;
+        Object.Sha256 = Hash;
+        Object.SizeBytes = Bytes.Num();
+        OutObjects.Add(MoveTemp(Object));
+    }
+    OutError.Reset();
+    return true;
 }
 
 bool FGuiyangRuntimeRecoveryStore::SaveSnapshot(
