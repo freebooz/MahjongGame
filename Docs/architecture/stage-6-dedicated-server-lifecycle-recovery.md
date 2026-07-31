@@ -177,4 +177,4 @@ Compose 使用 `/var/lib/guiyang-mahjong/recovery`，位于现有 Allocator 持�
 | UE Automation Tests | 阻断 | 同一安装缺少 RunUAT.bat、UnrealEditor-Cmd.exe，新增测试尚未真实运行。 |
 | `git diff --check` | 通过 | 当前未提交差异无空白错误。 |
 
-结论：源代码、配置和非 UE 自动化基线已经完成；由于 UE 5.8 工具链不完整，阶段 6 暂不能判定为最终验收通过。补齐引擎后必须先构建 `GuiyangMahjongClient` 与 `GuiyangMahjongServer`，再执行上述四个 GameServer 自动化测试和既有牌桌/网络测试；全部通过后方可进入生产部署验收。
+结论：源代码、配置和非 UE 自动化基线已经完成；2026-07-31再次检查确认Epic Launcher仅登记UE 5.8插件而没有引擎主体，详细证据与恢复命令见`ue58-toolchain-recovery-validation-20260731.md`。阶段6仍不能判定为最终验收通过。补齐引擎后必须先构建`GuiyangMahjongClient`与`GuiyangMahjongServer`，再执行上述GameServer自动化测试和既有牌桌/网络测试；全部通过后方可进入生产部署验收。
