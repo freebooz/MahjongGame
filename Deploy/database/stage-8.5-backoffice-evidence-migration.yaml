@@ -1,0 +1,14 @@
+stage: "8.5"
+owner: "Admin/TrustSafety"
+source: {schema: "player_data", table: "evidence_events", writer: "PlayerData legacy"}
+target: {schema: "admin_monitor", table: "player_evidence", writer: "Admin projection ingestion"}
+cutover:
+  - "停止PlayerData举报和支付写流量"
+  - "等待projection_outbox非Completed记录清零"
+  - "执行幂等迁移与逐字段核对"
+  - "部署PlayerData直接转发适配器并保持Dispatcher关闭"
+rollback:
+  - "先停止新直达摄取流量"
+  - "恢复旧PlayerData镜像"
+  - "执行stage-8.5-backoffice-evidence-rollback.sql"
+  - "保留Admin审计证据并核对重复事件"

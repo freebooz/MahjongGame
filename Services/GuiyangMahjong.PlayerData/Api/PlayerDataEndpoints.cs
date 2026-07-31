@@ -177,7 +177,7 @@ public static class PlayerDataEndpoints
             HttpContext context,
             RecordEvidenceRequest request,
             IOptions<PlayerDataOptions> options,
-            IPlayerDataStore store,
+            ILegacyAdminEvidenceClient evidenceClient,
             TimeProvider timeProvider,
             CancellationToken cancellationToken) =>
         {
@@ -195,10 +195,7 @@ public static class PlayerDataEndpoints
                 Guid.Parse(request.EventId).ToString())
                 throw PlayerDataOperationException.Invalid(
                     "Idempotency-Key must match eventId.");
-            var result = await store.RecordEvidenceAsync(
-                request,
-                now,
-                cancellationToken);
+            var result = await evidenceClient.IngestAsync(request, cancellationToken);
             return result.Duplicate
                 ? Results.Ok(result)
                 : Results.Json(

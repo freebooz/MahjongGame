@@ -94,6 +94,21 @@ CREATE INDEX IF NOT EXISTS ix_player_data_evidence_player
     ON player_data.evidence_events(
         player_id, evidence_type, occurred_at_utc DESC);
 
+-- 阶段8.5后举报和支付证据由Admin/TrustSafety专用读模型直接摄取，遗留代码不得写回旧表。
+CREATE OR REPLACE FUNCTION player_data.reject_migrated_backoffice_evidence_write()
+RETURNS TRIGGER LANGUAGE plpgsql AS $$
+BEGIN
+    IF NEW.evidence_type IN ('Report', 'PaymentOrder') THEN
+        RAISE EXCEPTION 'Report and PaymentOrder evidence are owned by Admin/TrustSafety after stage 8.5';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+DROP TRIGGER IF EXISTS trg_reject_migrated_backoffice_evidence_write ON player_data.evidence_events;
+CREATE TRIGGER trg_reject_migrated_backoffice_evidence_write
+BEFORE INSERT OR UPDATE ON player_data.evidence_events
+FOR EACH ROW EXECUTE FUNCTION player_data.reject_migrated_backoffice_evidence_write();
+
 -- 阶段8.2切换后Replay由GameData独占；数据库门禁防止遗留代码绕过兼容适配器继续写旧表。
 CREATE OR REPLACE FUNCTION player_data.reject_replay_evidence_write()
 RETURNS TRIGGER LANGUAGE plpgsql AS $$

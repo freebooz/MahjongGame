@@ -51,7 +51,6 @@ builder.Services
             && options.EconomySourceToken.Length >= 32
             && options.EconomyAdminToken.Length >= 32
             && options.EconomyMonitoringToken.Length >= 32
-            && options.ProjectionEnabled
             && options.AdminEvidenceIngestionToken.Length >= 32),
         "Production PlayerData requires PostgreSQL and all dedicated credentials.")
     .Validate(options =>
@@ -90,6 +89,8 @@ builder.Services.ConfigureHttpJsonOptions(options =>
         new JsonStringEnumConverter()));
 builder.Services.AddHttpClient(nameof(HttpLegacyCommunityChatClient),
     client => client.Timeout = TimeSpan.FromSeconds(8));
+builder.Services.AddHttpClient(nameof(HttpLegacyAdminEvidenceClient),
+    client => client.Timeout = TimeSpan.FromSeconds(8));
 builder.Services.AddHttpClient(
     nameof(ProjectionDispatcher),
     client => client.Timeout = TimeSpan.FromSeconds(5));
@@ -109,6 +110,7 @@ builder.Services.AddSingleton<IPlayerDataStore>(provider =>
         : new InMemoryPlayerDataStore();
 });
 builder.Services.AddSingleton<ILegacyCommunityChatClient, HttpLegacyCommunityChatClient>();
+builder.Services.AddSingleton<ILegacyAdminEvidenceClient, HttpLegacyAdminEvidenceClient>();
 builder.Services.AddSingleton<ILegacyReplayEvidenceClient, HttpLegacyReplayEvidenceClient>();
 builder.Services.AddSingleton<ILegacyEconomyClient, HttpLegacyEconomyClient>();
 builder.Services.AddSingleton<ProjectionDispatcher>();

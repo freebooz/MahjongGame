@@ -11,6 +11,23 @@ namespace GuiyangMahjong.Architecture.Tests;
 /// </summary>
 public sealed class ProjectArchitectureTests
 {
+    /// <summary>阶段 8.5 保证剩余证据只写 Admin/TrustSafety 读模型，PlayerData 旧入口不再落库。</summary>
+    [Fact]
+    public void BackofficeEvidenceHasSingleWriter_AndLegacyEndpointsOnlyForward()
+    {
+        var root = FindProjectRoot();
+        var endpoints = File.ReadAllText(Path.Combine(root, "Services", "GuiyangMahjong.PlayerData",
+            "Api", "PlayerDataEndpoints.cs"));
+        Assert.Contains("ILegacyAdminEvidenceClient", endpoints, StringComparison.Ordinal);
+        Assert.DoesNotContain("store.RecordEvidenceAsync", endpoints, StringComparison.Ordinal);
+        var schema = File.ReadAllText(Path.Combine(root, "Services", "GuiyangMahjong.PlayerData",
+            "Storage", "schema.sql"));
+        Assert.Contains("reject_migrated_backoffice_evidence_write", schema, StringComparison.Ordinal);
+        var compose = File.ReadAllText(Path.Combine(root, "Deploy", "linux", "compose.yaml"));
+        Assert.Contains("PlayerData__ProjectionEnabled: \"false\"", compose, StringComparison.Ordinal);
+        var grants = File.ReadAllText(Path.Combine(root, "Deploy", "postgres", "least-privilege", "002_grants.sql"));
+        Assert.DoesNotContain("player_evidence\nTO mahjong_player_data_rw", grants, StringComparison.Ordinal);
+    }
     /// <summary>阶段 8.4 保证聊天授权由 Community 承担，PlayerData 仅保留无策略逻辑的兼容转发。</summary>
     [Fact]
     public void CommunityOwnsChatAuthorization_AndPlayerDataNoLongerQueriesIdentity()

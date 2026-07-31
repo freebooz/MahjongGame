@@ -65,6 +65,8 @@ services:
         $$base -f /migration/economy-stage/Stage8_3_MigrateFromPlayerData.sql
         # Replay源表和目标表均存在后执行幂等复制；脚本核对成功才提交旧写关闭门禁。
         $$base -f /migration/stage-sql/stage-8.2-replay-evidence-migration.sql
+        # 阶段8.5将其余历史证据核对到Admin专用读模型；失败会终止整个迁移作业。
+        $$base -f /migration/stage-sql/stage-8.5-backoffice-evidence-migration.sql
         $$base -f /migration/configuration/schema.sql
         $$base -f /migration/workers/schema.sql
         $$base -f /migration/least-privilege/002_grants.sql
@@ -529,7 +531,8 @@ services:
       PlayerData__EconomySourceToken: ${ECONOMY_SOURCE_TOKEN:?ECONOMY_SOURCE_TOKEN is required}
       PlayerData__EconomyAdminToken: ${ECONOMY_ADMIN_TOKEN:?ECONOMY_ADMIN_TOKEN is required}
       PlayerData__EconomyMonitoringToken: ${ECONOMY_MONITORING_TOKEN:?ECONOMY_MONITORING_TOKEN is required}
-      PlayerData__ProjectionEnabled: "true"
+      # 阶段8.5新证据不再进入PlayerData Outbox；旧积压应在切换工单中清零后关闭Dispatcher。
+      PlayerData__ProjectionEnabled: "false"
       PlayerData__ProjectionPollMilliseconds: ${PLAYER_DATA_PROJECTION_POLL_MS:-1000}
       PlayerData__ProjectionMaxAttempts: ${PLAYER_DATA_PROJECTION_MAX_ATTEMPTS:-10}
     depends_on:
