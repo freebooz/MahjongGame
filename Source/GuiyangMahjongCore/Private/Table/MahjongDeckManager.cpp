@@ -67,7 +67,8 @@ void UMahjongDeckManager::ShuffleDeck(const int32 Seed)
     }
     ClockwiseDrawStartIndex = 0;
     ClockwiseDrawOffset = 0;
-    UE_LOG(LogMahjongCore, Log, TEXT("服务端洗牌完成，随机种子=%d"), Seed);
+    // 生产日志不得包含种子或牌序；争议复核材料由公平性审计链在本局结束后披露。
+    UE_LOG(LogMahjongCore, Log, TEXT("服务端洗牌完成，牌数=%d"), Deck.Num());
 }
 
 void UMahjongDeckManager::ConfigureWallBreak(const int32 DealerSeat, const int32 DiceTotal)

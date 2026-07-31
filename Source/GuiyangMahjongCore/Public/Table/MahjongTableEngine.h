@@ -30,6 +30,12 @@ public:
     TArray<FMahjongAction> GetAvailableActions(int32 SeatIndex) const;
     const FGuiyangRuleSnapshot& GetLockedRuleSnapshot() const { return LockedRules; }
     bool GetSettlementResult(FMahjongSettlementResult& OutResult) const;
+    /**
+     * 返回本局完整牌墙的服务端审计只读视图。
+     *
+     * 调用方只能计算摘要或在受控争议调查中复核；牌局结束前不得复制到网络快照、日志或管理接口。
+     */
+    const TArray<FMahjongTile>* GetDeckOrderForServerAudit() const;
     /** Seat indices increase from dealer to right-hand player: counter-clockwise around the table. */
     static int32 GetNextTurnSeatCounterClockwise(int32 SeatIndex);
     static int32 GetCounterClockwiseSeatDistance(int32 FromSeat, int32 ToSeat);

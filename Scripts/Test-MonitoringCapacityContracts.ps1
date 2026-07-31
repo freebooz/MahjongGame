@@ -37,10 +37,11 @@ $requiredPatterns = @(
 )
 $contractFiles = @(
     (Join-Path $projectRoot "Services/GuiyangMahjong.Admin/Options/AdminOptions.cs"),
-    (Join-Path $projectRoot "Services/GuiyangMahjong.Admin/Api/AdminEndpoints.cs"),
+    (Join-Path $projectRoot "Services/GuiyangMahjong.Admin/Api/AdminEndpoints.Monitoring.cs"),
     (Join-Path $projectRoot "Services/GuiyangMahjong.Admin/Services/MonitoringClients.cs"),
+    (Join-Path $projectRoot "Services/GuiyangMahjong.Admin/Services/AdminRealtimeEventHub.cs"),
     (Join-Path $projectRoot "Services/GuiyangMahjong.Admin/Domain/PaginationModels.cs"),
-    (Join-Path $projectRoot "Services/GuiyangMahjong.Admin/ClientApp/src/app/admin-console.ts")
+    (Join-Path $projectRoot "Services/GuiyangMahjong.Admin/ClientApp/src/app/admin-console/admin-console-realtime.ts")
 )
 $combined = ($contractFiles | ForEach-Object {
     Get-Content -Raw -LiteralPath $_

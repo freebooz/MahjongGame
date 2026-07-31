@@ -319,6 +319,120 @@ public sealed class ProjectArchitectureTests
     }
 
     /// <summary>
+    /// 验证阶段 2 Contracts/BuildingBlocks 的单向依赖图。
+    /// Contracts 禁止数据库和业务实现依赖，BuildingBlocks 禁止反向依赖生产服务或 UE，
+    /// Persistence 是唯一允许引用 Npgsql 的新基础项目。
+    /// </summary>
+    [Fact]
+    public void ContractsAndBuildingBlocks_RespectDependencyDirection()
+    {
+        var servicesRoot = Path.Combine(FindProjectRoot(), "Services");
+        var contractsRoot = Path.Combine(servicesRoot, "Contracts");
+        var buildingBlocksRoot = Path.Combine(
+            servicesRoot,
+            "BuildingBlocks");
+        var failures = new List<string>();
+        var projects = Directory
+            .EnumerateFiles(
+                contractsRoot,
+                "*.csproj",
+                SearchOption.AllDirectories)
+            .Concat(Directory.EnumerateFiles(
+                buildingBlocksRoot,
+                "*.csproj",
+                SearchOption.AllDirectories))
+            .Where(path =>
+                !path.Contains(
+                    "GuiyangMahjong.BuildingBlocks.Tests",
+                    StringComparison.Ordinal))
+            .ToArray();
+
+        foreach (var projectPath in projects)
+        {
+            var projectName =
+                Path.GetFileNameWithoutExtension(projectPath);
+            var projectDirectory =
+                Path.GetDirectoryName(projectPath)
+                ?? throw new InvalidDataException(
+                    $"项目目录无效：{projectPath}");
+            var document = XDocument.Load(projectPath);
+            var references = document
+                .Descendants("ProjectReference")
+                .Select(reference =>
+                {
+                    var include =
+                        reference.Attribute("Include")?.Value
+                        ?? string.Empty;
+                    return Path.GetFileNameWithoutExtension(
+                        Path.GetFullPath(
+                            Path.Combine(projectDirectory, include)));
+                })
+                .ToArray();
+            var packages = document
+                .Descendants("PackageReference")
+                .Select(reference =>
+                    reference.Attribute("Include")?.Value
+                    ?? string.Empty)
+                .ToArray();
+
+            if (references.Any(reference =>
+                    BusinessServiceNames.Contains(
+                        reference,
+                        StringComparer.Ordinal)
+                    || reference is "GuiyangMahjong.EdgeGateway"))
+            {
+                failures.Add(
+                    $"{projectName} 反向依赖业务服务："
+                    + string.Join(",", references));
+            }
+
+            if (projectName.StartsWith(
+                    "GuiyangMahjong.Contracts.",
+                    StringComparison.Ordinal))
+            {
+                if (references.Any(reference =>
+                        !reference.Equals(
+                            "GuiyangMahjong.Contracts.Common",
+                            StringComparison.Ordinal)))
+                    failures.Add(
+                        $"{projectName} 包含非法契约引用："
+                        + string.Join(",", references));
+                if (packages.Any(package =>
+                        package.Contains(
+                            "EntityFramework",
+                            StringComparison.OrdinalIgnoreCase)
+                        || package.Equals(
+                            "Npgsql",
+                            StringComparison.OrdinalIgnoreCase)))
+                    failures.Add(
+                        $"{projectName} 引用了持久化包。");
+            }
+
+            if (projectName.Equals(
+                    "GuiyangMahjong.BuildingBlocks.Domain",
+                    StringComparison.Ordinal)
+                && document.Descendants("FrameworkReference").Any())
+                failures.Add("Domain BuildingBlock 引用了 ASP.NET Core。");
+
+            if (!projectName.Equals(
+                    "GuiyangMahjong.BuildingBlocks.Persistence",
+                    StringComparison.Ordinal)
+                && packages.Any(package =>
+                    package.Equals(
+                        "Npgsql",
+                        StringComparison.OrdinalIgnoreCase)
+                    || package.Contains(
+                        "EntityFramework",
+                        StringComparison.OrdinalIgnoreCase)))
+                failures.Add(
+                    $"{projectName} 越界引用持久化包。");
+        }
+
+        Assert.Equal(10, projects.Length);
+        Assert.Empty(failures);
+    }
+
+    /// <summary>
     /// 检查测试工程和源码不再使用程序集别名；兼容性必须通过 Contracts
     /// 中的机器契约验证，而不是共享被测服务内部类型。
     /// </summary>

@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <!-- HTTP Header 适配使用共享框架，核心记录和状态仍与具体业务无关。 -->
+    <Description>API 幂等键、请求指纹、状态与存储边界。</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <ProjectReference Include="..\..\Contracts\GuiyangMahjong.Contracts.Common\GuiyangMahjong.Contracts.Common.csproj" />
+  </ItemGroup>
+</Project>

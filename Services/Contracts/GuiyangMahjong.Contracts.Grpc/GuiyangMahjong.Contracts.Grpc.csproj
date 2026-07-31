@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <!-- 本阶段只发布版本化 proto 源，不生成或托管 gRPC 服务。 -->
+    <Description>贵阳麻将平台通用 gRPC 元数据与错误契约。</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\GuiyangMahjong.Contracts.Common\GuiyangMahjong.Contracts.Common.csproj" />
+    <None Include="Protos\platform_context_v1.proto"
+          CopyToOutputDirectory="PreserveNewest"
+          Pack="true"
+          PackagePath="protos" />
+  </ItemGroup>
+</Project>

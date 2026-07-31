@@ -74,9 +74,16 @@ private:
     int32 LastPublishedSettlementSequence = INDEX_NONE;
     int32 LastFinalizedSettlementSequence = INDEX_NONE;
     int32 LastPublishedFinalRoomSequence = INDEX_NONE;
-    /** 服务端洗牌代次和最近种子，确保每局发牌前使用新的牌序。 */
-    uint32 ShuffleGeneration = 0;
-    int32 LastShuffleSeed = 0;
+    /**
+     * 当前局和已结束局的公平性证明。
+     *
+     * PendingShuffleProof 在局内含敏感披露材料，只能存于服务端内存；CompletedShuffleProofs
+     * 仅在对应单局结算落盘后追加，最终随权威结算进入内部审计存储。
+     */
+    TOptional<FGuiyangShuffleAuditProof> PendingShuffleProof;
+    TArray<FGuiyangShuffleAuditProof> CompletedShuffleProofs;
+    /** 每局披露记录形成的链式摘要，用于发现删除、插入和重排。 */
+    FString FairnessEventChainDigest;
     /** 当前活动房间码及托管模式固定房间码。 */
     FString ActiveRoomCode;
     FString ManagedRoomCode;

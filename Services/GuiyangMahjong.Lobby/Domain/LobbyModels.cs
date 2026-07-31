@@ -126,15 +126,35 @@ public sealed record MatchPlayerResult(
     int TotalScore);
 
 /// <summary>
+/// Dedicated Server 在单局结束后披露的洗牌公平性证明。
+/// 开局前只允许服务端本地保存 SeedCommitment；本结构随最终结算进入内部持久审计，不得向未结束牌局暴露。
+/// </summary>
+public sealed record ShuffleAuditProof(
+    string Algorithm,
+    int RoundId,
+    string SeedHex,
+    string ServerNonceHex,
+    string SeedCommitment,
+    string DeckOrderDigest,
+    string RuleId,
+    int RuleVersion,
+    string RuleHash,
+    DateTimeOffset CreatedAtUtc,
+    DateTimeOffset RevealedAtUtc);
+
+/// <summary>
 /// Dedicated Server 提交的整场结果。
 /// ResultSequence 对同一比赛单调递增，Players 必须覆盖房间参与者且不能由普通运营修改。
+/// ShuffleProofs 和 EventChainDigest 共同证明每局承诺、披露及顺序未被静默替换。
 /// </summary>
 public sealed record MatchResultReport(
     string RoomId,
     string ServerInstanceId,
     long ResultSequence,
     int CompletedRounds,
-    MatchPlayerResult[] Players);
+    MatchPlayerResult[] Players,
+    ShuffleAuditProof[]? ShuffleProofs = null,
+    string? EventChainDigest = null);
 
 /// <summary>结果接收回执；Duplicate 表示同序号同载荷的幂等重放，Accepted=false 不代表已结算。</summary>
 public sealed record MatchResultAck(

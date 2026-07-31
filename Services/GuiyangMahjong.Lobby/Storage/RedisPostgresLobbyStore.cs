@@ -711,6 +711,8 @@ public sealed class RedisPostgresLobbyStore : ILobbyStore
         && left.ServerInstanceId == right.ServerInstanceId
         && left.ResultSequence == right.ResultSequence
         && left.CompletedRounds == right.CompletedRounds
-        && left.Players.SequenceEqual(right.Players);
+        && left.Players.SequenceEqual(right.Players)
+        && string.Equals(left.EventChainDigest, right.EventChainDigest, StringComparison.Ordinal)
+        && (left.ShuffleProofs ?? []).SequenceEqual(right.ShuffleProofs ?? []);
 
 }

@@ -4,8 +4,7 @@ param(
     [string]$ClientExecutable,
     [ValidateRange(1, 4)]
     [int]$ClientCount = 4,
-    [string]$AuthBaseUrl = 'http://127.0.0.1:18082',
-    [string]$LobbyBaseUrl = 'http://127.0.0.1:18080',
+    [string]$ApiBaseUrl = 'http://127.0.0.1:18085',
     [string]$SessionRoot = '',
     [ValidateRange(10, 120)]
     [int]$ConnectTimeoutSeconds = 60,
@@ -37,9 +36,17 @@ if (!$SessionRoot.StartsWith($allowedRoot, [StringComparison]::OrdinalIgnoreCase
 New-Item -ItemType Directory -Path $SessionRoot -Force | Out-Null
 
 function New-RequestHeaders([string]$AccessToken, [switch]$Idempotent) {
+    $requestId = [guid]::NewGuid().ToString()
     $headers = @{
-        Authorization = "Bearer $AccessToken"
-        'X-Request-Id' = [guid]::NewGuid().ToString()
+        'X-Request-Id' = $requestId
+        'X-Correlation-Id' = $requestId
+        'X-Client-Version' = '1.0.0'
+        'X-Protocol-Version' = '1'
+        'X-Platform' = 'Windows'
+        'X-Channel' = 'development'
+    }
+    if (![string]::IsNullOrWhiteSpace($AccessToken)) {
+        $headers.Authorization = "Bearer $AccessToken"
     }
     if ($Idempotent) {
         $headers['Idempotency-Key'] = [guid]::NewGuid().ToString()
@@ -61,7 +68,8 @@ $processes = @()
 try {
     for ($index = 0; $index -lt $ClientCount; ++$index) {
         $number = $index + 1
-        $session = Invoke-JsonPost -Uri "$AuthBaseUrl/v1/auth/guest" -Body @{
+        $session = Invoke-JsonPost -Uri "$ApiBaseUrl/api/v1/auth/guest" `
+            -Headers (New-RequestHeaders -AccessToken '') -Body @{
             installationId = "four-client-$([guid]::NewGuid())"
             displayName = "联机验收$number"
         }
@@ -74,7 +82,7 @@ try {
     }
 
     $owner = $players[0]
-    $created = Invoke-JsonPost -Uri "$LobbyBaseUrl/v1/rooms" `
+    $created = Invoke-JsonPost -Uri "$ApiBaseUrl/api/v1/rooms" `
         -Headers (New-RequestHeaders -AccessToken $owner.AccessToken -Idempotent) `
         -Body @{
             roundCount = 4
@@ -93,7 +101,7 @@ try {
     do {
         try {
             $owner.Route = Invoke-RestMethod -Method Get `
-                -Uri "$LobbyBaseUrl/v1/rooms/$roomCode/route" `
+                -Uri "$ApiBaseUrl/api/v1/rooms/$roomCode/route" `
                 -Headers (New-RequestHeaders -AccessToken $owner.AccessToken)
         } catch {
             if ([DateTimeOffset]::Now -ge $routeDeadline) { throw }
@@ -103,7 +111,7 @@ try {
 
     for ($index = 1; $index -lt $players.Count; ++$index) {
         $player = $players[$index]
-        $player.Route = Invoke-JsonPost -Uri "$LobbyBaseUrl/v1/rooms/$roomCode/join" `
+        $player.Route = Invoke-JsonPost -Uri "$ApiBaseUrl/api/v1/rooms/$roomCode/join" `
             -Headers (New-RequestHeaders -AccessToken $player.AccessToken -Idempotent) `
             -Body @{ password = $null; clientProtocolVersion = 1 }
     }

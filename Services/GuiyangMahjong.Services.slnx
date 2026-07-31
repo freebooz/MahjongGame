@@ -13,4 +13,19 @@
   <Project Path="GuiyangMahjong.Observability/GuiyangMahjong.Observability.csproj" />
   <Project Path="GuiyangMahjong.PlayerData/GuiyangMahjong.PlayerData.csproj" />
   <Project Path="GuiyangMahjong.PlayerData.Tests/GuiyangMahjong.PlayerData.Tests.csproj" />
+  <Project Path="Apps/GuiyangMahjong.EdgeGateway/GuiyangMahjong.EdgeGateway.csproj" />
+  <Project Path="Apps/GuiyangMahjong.EdgeGateway.Tests/GuiyangMahjong.EdgeGateway.Tests.csproj" />
+  <!-- 阶段 2 共享契约：只能描述跨边界数据，禁止引用业务服务和持久化实现。 -->
+  <Project Path="Contracts/GuiyangMahjong.Contracts.Common/GuiyangMahjong.Contracts.Common.csproj" />
+  <Project Path="Contracts/GuiyangMahjong.Contracts.Api/GuiyangMahjong.Contracts.Api.csproj" />
+  <Project Path="Contracts/GuiyangMahjong.Contracts.Grpc/GuiyangMahjong.Contracts.Grpc.csproj" />
+  <Project Path="Contracts/GuiyangMahjong.Contracts.Events/GuiyangMahjong.Contracts.Events.csproj" />
+  <!-- 阶段 2 基础构件：按 Domain → 专用构件 → Persistence 的方向组织。 -->
+  <Project Path="BuildingBlocks/GuiyangMahjong.BuildingBlocks.Domain/GuiyangMahjong.BuildingBlocks.Domain.csproj" />
+  <Project Path="BuildingBlocks/GuiyangMahjong.BuildingBlocks.Persistence/GuiyangMahjong.BuildingBlocks.Persistence.csproj" />
+  <Project Path="BuildingBlocks/GuiyangMahjong.BuildingBlocks.Messaging/GuiyangMahjong.BuildingBlocks.Messaging.csproj" />
+  <Project Path="BuildingBlocks/GuiyangMahjong.BuildingBlocks.Idempotency/GuiyangMahjong.BuildingBlocks.Idempotency.csproj" />
+  <Project Path="BuildingBlocks/GuiyangMahjong.BuildingBlocks.Security/GuiyangMahjong.BuildingBlocks.Security.csproj" />
+  <Project Path="BuildingBlocks/GuiyangMahjong.BuildingBlocks.Observability/GuiyangMahjong.BuildingBlocks.Observability.csproj" />
+  <Project Path="BuildingBlocks/GuiyangMahjong.BuildingBlocks.Tests/GuiyangMahjong.BuildingBlocks.Tests.csproj" />
 </Solution>

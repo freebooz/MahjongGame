@@ -22,6 +22,12 @@ int32 UMahjongTableEngine::GetCounterClockwiseSeatDistance(const int32 FromSeat,
     return (ToSeat - FromSeat + 4) % 4;
 }
 
+const TArray<FMahjongTile>* UMahjongTableEngine::GetDeckOrderForServerAudit() const
+{
+    // 返回只读指针可避免复制完整牌墙；所有权仍归本局 DeckManager，调用方不得跨局缓存该地址。
+    return DeckManager ? &DeckManager->GetDeckForServerTest() : nullptr;
+}
+
 bool UMahjongTableEngine::StartRound(const FGuiyangRuleSnapshot& RuleSnapshot, const TArray<FMahjongSeatInfo>& Seats,
     const int32 DealerSeat, const int32 ShuffleSeed, FString& OutError)
 {

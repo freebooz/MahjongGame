@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <!-- 消息构件只表达发布、Outbox 和 Inbox 语义，不绑定正式消息中间件。 -->
+    <Description>事件发布及 Outbox/Inbox 模型与接口。</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\Contracts\GuiyangMahjong.Contracts.Common\GuiyangMahjong.Contracts.Common.csproj" />
+    <ProjectReference Include="..\..\Contracts\GuiyangMahjong.Contracts.Events\GuiyangMahjong.Contracts.Events.csproj" />
+  </ItemGroup>
+</Project>

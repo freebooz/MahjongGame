@@ -191,7 +191,7 @@ public sealed class LobbyApiTests(LobbyWebApplicationFactory factory)
         room = room with { Route = room.Route! with { RoomId = room.RoomId } };
         Assert.Equal(CreateRoomStatus.Created,
             (await store.TryCreateRoomAsync(room, CancellationToken.None)).Status);
-        var report = new MatchResultReport(
+        var report = TestShuffleFairness.CreateReport(
             room.RoomId, room.Route.ServerInstanceId, 7, 4,
             [new MatchPlayerResult("result-api-owner", 0, 1, 12)]);
         using var client = factory.CreateClient();
@@ -243,7 +243,7 @@ public sealed class LobbyApiTests(LobbyWebApplicationFactory factory)
         };
         Assert.Equal(CreateRoomStatus.Created,
             (await store.TryCreateRoomAsync(room, CancellationToken.None)).Status);
-        var report = new MatchResultReport(
+        var report = TestShuffleFairness.CreateReport(
             room.RoomId, instanceId, 11, 4,
             [new MatchPlayerResult("recovery-owner", 0, 1, 20)]);
         using var client = factory.CreateClient();

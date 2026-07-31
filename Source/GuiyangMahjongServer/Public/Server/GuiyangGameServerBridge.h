@@ -5,6 +5,7 @@
 #include "Interfaces/IHttpRequest.h"
 #include "Interfaces/IHttpResponse.h"
 #include "Server/GuiyangServerTicketVerifier.h"
+#include "Server/GuiyangFairShuffle.h"
 #include "TimerManager.h"
 #include "UObject/Object.h"
 #include "GuiyangGameServerBridge.generated.h"
@@ -62,7 +63,21 @@ public:
     bool ValidateAndConsumeJoinTicket(const FString& Ticket, const FString& PlayerId,
         FGuiyangJoinTicketClaims& OutClaims, FString& OutError);
     /** 将最终结算写入可靠 Outbox，随后异步上报 Lobby。 */
-    void QueueFinalSettlement(const FMahjongFinalSettlementResult& Result, int64 ResultSequence);
+    void QueueFinalSettlement(
+        const FMahjongFinalSettlementResult& Result,
+        int64 ResultSequence,
+        const TArray<FGuiyangShuffleAuditProof>& ShuffleProofs,
+        const FString& EventChainDigest);
+    /**
+     * 追加本地公平性审计事件。
+     *
+     * Commitment 阶段严禁写入种子、nonce 或牌序摘要；Reveal 阶段只能在单局结算后调用。
+     * 返回 false 表示可靠落盘失败，开局调用方必须停止发牌。
+     */
+    bool AppendShuffleAuditRecord(
+        const FGuiyangShuffleAuditProof& Proof,
+        bool bReveal,
+        const FString& EventChainDigest) const;
     /** 返回初始化后锁定的启动配置。 */
     const FGuiyangGameServerLaunchConfig& GetConfig() const { return Config; }
 

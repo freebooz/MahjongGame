@@ -32,4 +32,4 @@ USER 10001:10001
 EXPOSE 7777/udp
 
 ENTRYPOINT ["/bin/sh", "/opt/guiyang-mahjong/GuiyangMahjongServer.sh"]
-CMD ["/Game/Maps/MahjongRoomMap?game=/Script/GuiyangMahjongServer.GuiyangMahjongGameMode?listen", "-server", "-log", "-unattended", "-port=7777", "-MahjongOrchestrator=Agones"]
+CMD ["/Game/Maps/MahjongRoomMap?game=/Script/GuiyangMahjongServer.GuiyangMahjongGameMode?listen", "-server", "-log", "-unattended", "-NullRHI", "-nosound", "-port=7777", "-MahjongOrchestrator=Agones"]

@@ -1,4 +1,5 @@
 #include "MahjongCoreTestSupport.h"
+#include "Server/GuiyangFairShuffle.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
 
@@ -112,6 +113,84 @@ bool FMahjongRuleSnapshotTest::RunTest(const FString& Parameters)
     FGuiyangRuleSnapshot Tampered = First;
     Tampered.Config.bEnableQiDui = !Tampered.Config.bEnableQiDui;
     TestFalse(TEXT("被修改的规则快照必须校验失败"), UGuiyangRuleSnapshotLibrary::VerifySnapshot(Tampered));
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+    FMahjongFairShuffleProofTest,
+    "GuiyangMahjong.Server.Fairness.CommitmentAndTamperDetection",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMahjongFairShuffleProofTest::RunTest(const FString& Parameters)
+{
+    const FString RoomId = TEXT("11111111-2222-3333-4444-555555555555");
+    const FGuiyangRuleSnapshot Rules =
+        UGuiyangRuleSnapshotLibrary::CreateSnapshot(FMahjongRuleConfig());
+    int32 Seed = 0;
+    FGuiyangShuffleAuditProof Proof;
+    FString Error;
+    TestTrue(TEXT("CSPRNG 必须生成可用洗牌材料"),
+        FGuiyangFairShuffle::Generate(RoomId, 1, Rules, Seed, Proof, Error));
+    TestEqual(TEXT("种子必须使用固定 8 位十六进制"), Proof.SeedHex.Len(), 8);
+    TestEqual(TEXT("nonce 必须提供 256 位防穷举随机量"), Proof.ServerNonceHex.Len(), 64);
+    TestEqual(TEXT("承诺必须是 SHA-256"), Proof.SeedCommitment.Len(), 64);
+
+    UMahjongDeckManager* Deck = NewObject<UMahjongDeckManager>();
+    Deck->InitializeDeck(Rules.Config);
+    Deck->ShuffleDeck(Seed);
+    Proof.DeckOrderDigest =
+        FGuiyangFairShuffle::CalculateDeckOrderDigest(Deck->GetDeckForServerTest());
+    Proof.RevealedAtUtc = Proof.CreatedAtUtc + FTimespan::FromSeconds(1);
+    TestTrue(TEXT("未篡改证明必须通过复核"),
+        FGuiyangFairShuffle::Verify(
+            RoomId, Rules, Deck->GetDeckForServerTest(), Proof));
+
+    FGuiyangShuffleAuditProof Tampered = Proof;
+    Tampered.RuleVersion += 1;
+    TestFalse(TEXT("修改规则版本必须使证明失效"),
+        FGuiyangFairShuffle::Verify(
+            RoomId, Rules, Deck->GetDeckForServerTest(), Tampered));
+    TestNotEqual(TEXT("更换房间必须产生不同承诺"),
+        Proof.SeedCommitment,
+        FGuiyangFairShuffle::CalculateCommitment(
+            TEXT("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"), Proof));
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+    FMahjongSecureRandomSmokeTest,
+    "GuiyangMahjong.Server.Fairness.SecureRandomStatisticalSmoke",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMahjongSecureRandomSmokeTest::RunTest(const FString& Parameters)
+{
+    const FString RoomId = TEXT("11111111-2222-3333-4444-555555555555");
+    const FGuiyangRuleSnapshot Rules =
+        UGuiyangRuleSnapshotLibrary::CreateSnapshot(FMahjongRuleConfig());
+    constexpr int32 SampleCount = 1024;
+    int32 HighBitCount = 0;
+    TSet<FString> UniqueSeeds;
+    for (int32 Sample = 0; Sample < SampleCount; ++Sample)
+    {
+        int32 Seed = 0;
+        FGuiyangShuffleAuditProof Proof;
+        FString Error;
+        if (!FGuiyangFairShuffle::Generate(
+            RoomId, Sample + 1, Rules, Seed, Proof, Error))
+        {
+            AddError(FString::Printf(TEXT("安全随机样本生成失败：%s"), *Error));
+            return false;
+        }
+        UniqueSeeds.Add(Proof.SeedHex);
+        if ((static_cast<uint32>(Seed) & 0x80000000u) != 0)
+        {
+            ++HighBitCount;
+        }
+    }
+
+    // 该测试只用于发现固定值、严重偏置或熵源失效，不替代正式 NIST/Dieharder 离线检验。
+    TestTrue(TEXT("32 位种子样本不得出现可疑的大量碰撞"),
+        UniqueSeeds.Num() >= SampleCount - 4);
+    TestTrue(TEXT("最高位分布应处于宽松的六西格玛冒烟范围"),
+        HighBitCount >= 400 && HighBitCount <= 624);
     return true;
 }
 

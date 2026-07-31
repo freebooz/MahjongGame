@@ -105,14 +105,24 @@ void UGuiyangAgonesLifecycleSubsystem::Initialize(FSubsystemCollectionBase& Coll
 
     bActive = true;
     Agones->ConnectedDelegate.AddUniqueDynamic(this, &ThisClass::HandleConnected);
+    UE_LOG(LogMahjongServer, Display, TEXT("Agones lifecycle adapter initialized; waiting for server world"));
+}
+
+void UGuiyangAgonesLifecycleSubsystem::StartAfterWorldReady()
+{
+    if (!bActive || bConnectionStarted || !Agones)
+    {
+        return;
+    }
+    bConnectionStarted = true;
     FGameServerDelegate WatchDelegate;
     WatchDelegate.BindDynamic(this, &ThisClass::HandleGameServerUpdated);
     Agones->WatchGameServer(WatchDelegate);
-    // SDK 子系统存在于所有独立服务器进程中，但只在明确选择 Agones 后启动健康上报；
-    // 否则本地 Allocator 服务器会不断访问本来就不存在的 Sidecar。
+    // 地图和监听端口就绪后才启动健康上报与 Connect；Connect 每 5 秒读取 GameServer，
+    // 可覆盖 Sidecar 晚启动。首次成功读取后官方插件调用 Ready，再广播 Connected。
     Agones->HealthPing(Agones->HealthRateSeconds);
     Agones->Connect();
-    UE_LOG(LogMahjongServer, Display, TEXT("Agones lifecycle connection started"));
+    UE_LOG(LogMahjongServer, Display, TEXT("Agones health/watch/connect lifecycle started"));
 }
 
 void UGuiyangAgonesLifecycleSubsystem::Deinitialize()
@@ -125,6 +135,7 @@ void UGuiyangAgonesLifecycleSubsystem::Deinitialize()
     RequestShutdown();
     Agones = nullptr;
     bActive = false;
+    bConnectionStarted = false;
     bReady = false;
     AllocationConfig.Reset();
     AllocationReady.Clear();

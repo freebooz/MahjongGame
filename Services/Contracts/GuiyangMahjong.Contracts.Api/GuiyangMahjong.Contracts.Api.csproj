@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <!-- API 契约保持传输层中立，业务服务可适配为 Problem Details 或旧响应模型。 -->
+    <Description>贵阳麻将平台统一 API 错误与调用上下文契约。</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\GuiyangMahjong.Contracts.Common\GuiyangMahjong.Contracts.Common.csproj" />
+  </ItemGroup>
+</Project>

@@ -9,9 +9,9 @@
 #include "Room/GuiyangRoomManager.h"
 #include "Runtime/Launch/Resources/Version.h"
 #include "Server/GuiyangAgonesLifecycleSubsystem.h"
+#include "Server/GuiyangFairShuffle.h"
 #include "Server/GuiyangGameServerBridge.h"
 #include "Table/MahjongTableEngine.h"
-#include "HAL/PlatformTime.h"
 #include "EngineUtils.h"
 #include "Misc/SecureHash.h"
 #include "Misc/CommandLine.h"
@@ -125,6 +125,18 @@ void AGuiyangMahjongGameMode::BeginPlay()
 {
     Super::BeginPlay();
     bManagedWorldReady = true;
+    if (bAgonesGameServer)
+    {
+        if (UGameInstance* GameInstance = GetGameInstance())
+        {
+            if (UGuiyangAgonesLifecycleSubsystem* Lifecycle =
+                GameInstance->GetSubsystem<UGuiyangAgonesLifecycleSubsystem>())
+            {
+                // Server 专用地图和监听对象已加载，至此才允许 Sidecar 将实例标记为 Ready。
+                Lifecycle->StartAfterWorldReady();
+            }
+        }
+    }
     TryInitializeManagedBridgeAfterListen();
 }
 
@@ -425,6 +437,10 @@ bool AGuiyangMahjongGameMode::InitializeManagedRoomAuthority(
         return false;
     }
     ManagedRoomCode = Definition.RoomCode;
+    // 每个托管进程只承载一场比赛；Bootstrap 成功时建立全新的公平性审计链。
+    PendingShuffleProof.Reset();
+    CompletedShuffleProofs.Reset();
+    FairnessEventChainDigest.Reset();
     PublishRoomState(State);
     UE_LOG(LogMahjongServer, Display,
         TEXT("Managed room initialized BackendRoomId=%s RoomCode=%s MatchId=%s RuleHash=%s"),
@@ -689,35 +705,52 @@ void AGuiyangMahjongGameMode::PublishRoomState(const FMahjongRoomState& State)
 
 void AGuiyangMahjongGameMode::TryStartTable(const FMahjongRoomState& StartingRoomState)
 {
-    // 房间生命周期进入 Starting 后，使用规则快照和服务器种子创建权威牌桌。
+    // 房间生命周期进入 Starting 后，使用冻结规则和 CSPRNG 种子创建权威牌桌。
     if (!RoomManager || (TableEngine && TableEngine->GetPublicState().Phase != EMahjongTablePhase::Settlement)) return;
     GetWorldTimerManager().ClearTimer(NextRoundAutoStartHandle);
     UMahjongTableEngine* RoundEngine = TableEngine ? TableEngine.Get() : NewObject<UMahjongTableEngine>(this);
     FString Error;
-    // 只在权威服务端、且紧邻 StartRound 发牌前生成洗牌种子。组合系统
-    // GUID、UTC 时间、进程周期、房间号和单调代次，避免快速连续开局或
-    // 新分配的 Dedicated Server 重复同一牌序。
-    ++ShuffleGeneration;
-    uint32 SeedBits = GetTypeHash(FGuid::NewGuid());
-    SeedBits = HashCombineFast(SeedBits, GetTypeHash(FDateTime::UtcNow().GetTicks()));
-    SeedBits = HashCombineFast(SeedBits, GetTypeHash(FPlatformTime::Cycles64()));
-    SeedBits = HashCombineFast(SeedBits, GetTypeHash(StartingRoomState.RoomInfo.RoomId));
-    SeedBits = HashCombineFast(SeedBits, ShuffleGeneration);
-    int32 Seed = static_cast<int32>(SeedBits);
-    if (Seed == LastShuffleSeed)
+    const int32 RoundId = CompletedShuffleProofs.Num() + 1;
+    int32 Seed = 0;
+    FGuiyangShuffleAuditProof Proof;
+    if (!FGuiyangFairShuffle::Generate(
+        StartingRoomState.RoomInfo.RoomId, RoundId,
+        StartingRoomState.RuleSnapshot, Seed, Proof, Error))
     {
-        Seed = static_cast<int32>(SeedBits + 0x9E3779B9u + ShuffleGeneration);
+        UE_LOG(LogMahjongServer, Error,
+            TEXT("Secure shuffle material generation failed Room=%s Round=%d Reason=%s"),
+            *StartingRoomState.RoomInfo.RoomId, RoundId, *Error);
+        return;
     }
-    LastShuffleSeed = Seed;
+    // 托管服必须在发牌前可靠落盘承诺；落盘失败时拒绝开局，不能形成“先看牌后选承诺”的空间。
+    if (bManagedGameServer
+        && (!GameServerBridge || !GameServerBridge->AppendShuffleAuditRecord(
+            Proof, false, FString())))
+    {
+        UE_LOG(LogMahjongServer, Error,
+            TEXT("Pre-deal shuffle commitment persistence failed Room=%s Round=%d"),
+            *StartingRoomState.RoomInfo.RoomId, RoundId);
+        return;
+    }
     UE_LOG(LogMahjongServer, Display,
-        TEXT("Authoritative pre-deal shuffle: room=%s generation=%u seed=%d tiles=108 honors=0"),
-        *StartingRoomState.RoomInfo.RoomId, ShuffleGeneration, Seed);
+        TEXT("Authoritative pre-deal shuffle committed Room=%s Round=%d Commitment=%s"),
+        *StartingRoomState.RoomInfo.RoomId, RoundId, *Proof.SeedCommitment);
     if (!RoundEngine->StartRound(StartingRoomState.RuleSnapshot, StartingRoomState.Seats,
         StartingRoomState.RoomInfo.DealerSeat, Seed, Error))
     {
         if (!TableEngine) RoundEngine = nullptr;
         return;
     }
+    const TArray<FMahjongTile>* Deck = RoundEngine->GetDeckOrderForServerAudit();
+    if (!Deck || Deck->IsEmpty())
+    {
+        UE_LOG(LogMahjongServer, Error,
+            TEXT("Post-shuffle deck audit snapshot unavailable Room=%s Round=%d"),
+            *StartingRoomState.RoomInfo.RoomId, RoundId);
+        return;
+    }
+    Proof.DeckOrderDigest = FGuiyangFairShuffle::CalculateDeckOrderDigest(*Deck);
+    PendingShuffleProof = MoveTemp(Proof);
     FMahjongRoomState PlayingState;
     EMahjongRoomError RoomError;
     if (!RoomManager->BeginPlaying(StartingRoomState.RoomInfo.RoomId, PlayingState, RoomError))
@@ -922,6 +955,35 @@ void AGuiyangMahjongGameMode::FinalizeRoundIfNeeded()
 
     FMahjongSettlementResult Settlement;
     if (!TableEngine->GetSettlementResult(Settlement)) return;
+    if (PendingShuffleProof.IsSet())
+    {
+        const TArray<FMahjongTile>* Deck = TableEngine->GetDeckOrderForServerAudit();
+        FGuiyangShuffleAuditProof Proof = PendingShuffleProof.GetValue();
+        Proof.RevealedAtUtc = FDateTime::UtcNow();
+        if (!Deck || !FGuiyangFairShuffle::Verify(
+            ActiveRoomCode, TableEngine->GetLockedRuleSnapshot(), *Deck, Proof))
+        {
+            UE_LOG(LogMahjongServer, Error,
+                TEXT("Shuffle fairness proof verification failed Room=%s Round=%d"),
+                *ActiveRoomCode, Proof.RoundId);
+            return;
+        }
+        const FString NextEventChainDigest = FGuiyangFairShuffle::CalculateEventChainDigest(
+            FairnessEventChainDigest, ActiveRoomCode, Proof);
+        // Reveal 只能在牌桌进入 Settlement 后写入；失败时保留 Pending，等待下一次安全重试。
+        if (bManagedGameServer
+            && (!GameServerBridge || !GameServerBridge->AppendShuffleAuditRecord(
+                Proof, true, NextEventChainDigest)))
+        {
+            UE_LOG(LogMahjongServer, Error,
+                TEXT("Post-round shuffle proof persistence failed Room=%s Round=%d"),
+                *ActiveRoomCode, Proof.RoundId);
+            return;
+        }
+        CompletedShuffleProofs.Add(MoveTemp(Proof));
+        FairnessEventChainDigest = NextEventChainDigest;
+        PendingShuffleProof.Reset();
+    }
     FMahjongRoomState State;
     EMahjongRoomError Error;
     if (!RoomManager->FinishRound(ActiveRoomCode, Settlement, State, Error)) return;
@@ -1069,7 +1131,8 @@ void AGuiyangMahjongGameMode::PublishFinalSettlement(const FMahjongRoomState& Ro
     if (RoomState.StateSequence == LastPublishedFinalRoomSequence) return;
     const FMahjongFinalSettlementResult Result = UGuiyangRoomManager::BuildFinalSettlement(RoomState);
     if (bManagedGameServer && GameServerBridge)
-        GameServerBridge->QueueFinalSettlement(Result, RoomState.StateSequence);
+        GameServerBridge->QueueFinalSettlement(
+            Result, RoomState.StateSequence, CompletedShuffleProofs, FairnessEventChainDigest);
     for (TActorIterator<AGuiyangMahjongPlayerController> It(GetWorld()); It; ++It)
         It->Client_ShowFinalSettlement(Result);
     if (IsFullMatchIntegrationEnabled())

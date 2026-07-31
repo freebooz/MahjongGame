@@ -35,6 +35,11 @@ public:
 
     /** 当前是否已经启用 Agones 适配器。 */
     bool IsActive() const { return bActive; }
+    /**
+     * 在专用地图和监听 NetDriver 完成初始化后启动 Health、Watch 和 Sidecar 连接。
+     * 插件 Connect 内置 5 秒重试，因此 Sidecar 晚于游戏进程就绪时不会立即退出。
+     */
+    void StartAfterWorldReady();
     /** GameServer 是否已经完成分配并向 Agones 标记 Ready。 */
     bool IsReady() const { return bReady; }
     /** 向 Agones PlayerTracking 报告玩家加入/离开。 */
@@ -63,6 +68,8 @@ private:
     TOptional<FGuiyangGameServerLaunchConfig> AllocationConfig;
     /** 生命周期状态位，防止重复 Ready 或重复 Shutdown。 */
     bool bActive = false;
+    /** 防止地图重载或重复 BeginPlay 对 Sidecar 建立多组健康定时器和 Watch。 */
+    bool bConnectionStarted = false;
     bool bReady = false;
     bool bShutdownRequested = false;
 };

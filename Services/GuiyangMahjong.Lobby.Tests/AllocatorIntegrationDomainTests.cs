@@ -297,7 +297,7 @@ public sealed class AllocatorIntegrationDomainTests
         await fixture.Service.RecordGameServerHeartbeatAsync(
             Guid.NewGuid().ToString(), fixture.Allocator.ServerInstanceId,
             NewHeartbeat(room.RoomId, "Settling"), CancellationToken.None);
-        var report = new MatchResultReport(
+        var report = TestShuffleFairness.CreateReport(
             room.RoomId,
             fixture.Allocator.ServerInstanceId,
             42,
@@ -357,7 +357,7 @@ public sealed class AllocatorIntegrationDomainTests
         await fixture.Service.RecordGameServerHeartbeatAsync(
             Guid.NewGuid().ToString(), fixture.Allocator.ServerInstanceId,
             NewHeartbeat(room.RoomId, "Settling"), CancellationToken.None);
-        var report = new MatchResultReport(
+        var report = TestShuffleFairness.CreateReport(
             room.RoomId, fixture.Allocator.ServerInstanceId, 88, 4,
             [new MatchPlayerResult(owner.PlayerId, 0, 1, 20)]);
         fixture.Allocator.DrainFailuresRemaining = 1;

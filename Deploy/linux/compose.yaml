@@ -90,7 +90,7 @@ services:
       dockerfile: Services/GuiyangMahjong.Auth/Dockerfile
     environment:
       ASPNETCORE_ENVIRONMENT: Production
-      # 五个控制面服务使用同一 Collector；默认关闭，部署可观测性栈后显式开启。
+      # 控制面服务使用同一 Collector；默认关闭，部署可观测性栈后显式开启。
       Observability__Enabled: ${OBSERVABILITY_ENABLED:-false}
       Observability__OtlpEndpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://host.docker.internal:4317}
       Observability__TraceSampleRatio: ${OTEL_TRACE_SAMPLE_RATIO:-0.1}
@@ -105,7 +105,8 @@ services:
       postgres-migration: {condition: service_completed_successfully}
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    ports: ["${AUTH_PORT:-18082}:8080"]
+    # 旧服务仅绑定 loopback，保留紧急回滚入口但不再直接暴露到公网网卡。
+    ports: ["127.0.0.1:${AUTH_PORT:-18082}:8080"]
     healthcheck:
       test: ["CMD", "curl", "--fail", "--silent", "--show-error", "http://127.0.0.1:8080/health/ready"]
       interval: 5s
@@ -221,7 +222,7 @@ services:
       redis: {condition: service_healthy}
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    ports: ["${LOBBY_PORT:-18080}:8080"]
+    ports: ["127.0.0.1:${LOBBY_PORT:-18080}:8080"]
     healthcheck:
       test: ["CMD", "curl", "--fail", "--silent", "--show-error", "http://127.0.0.1:8080/health/ready"]
       interval: 5s
@@ -265,7 +266,7 @@ services:
       auth: {condition: service_healthy}
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    ports: ["${PLAYER_DATA_PORT:-18084}:8080"]
+    ports: ["127.0.0.1:${PLAYER_DATA_PORT:-18084}:8080"]
     healthcheck:
       test: ["CMD", "curl", "--fail", "--silent", "--show-error", "http://127.0.0.1:8080/health/ready"]
       interval: 5s
@@ -274,6 +275,67 @@ services:
     restart: unless-stopped
     cpus: ${PLAYER_DATA_CPUS:-1.0}
     mem_limit: ${PLAYER_DATA_MEMORY:-512m}
+    pids_limit: 256
+    read_only: true
+    tmpfs: ["/tmp:rw,noexec,nosuid,size=64m"]
+    security_opt: ["no-new-privileges:true"]
+    logging: *logging
+
+  edge-gateway:
+    image: ${IMAGE_REGISTRY:-local}/guiyang-mahjong-edge-gateway:${MAHJONG_VERSION:-dev}
+    build:
+      context: ../..
+      dockerfile: Services/Apps/GuiyangMahjong.EdgeGateway/Dockerfile
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      Observability__Enabled: ${OBSERVABILITY_ENABLED:-false}
+      Observability__OtlpEndpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://host.docker.internal:4317}
+      Observability__TraceSampleRatio: ${OTEL_TRACE_SAMPLE_RATIO:-0.1}
+      # 玩家 Access Token 在网关和下游各验证一次；密钥只通过环境注入，不写入镜像或日志。
+      EdgeGateway__PlayerTokens__LegacySigningKey: ${PLAYER_TOKEN_SIGNING_KEY:?PLAYER_TOKEN_SIGNING_KEY is required}
+      EdgeGateway__PlayerTokens__JwtSigningKey: ${PLAYER_TOKEN_SIGNING_KEY:?PLAYER_TOKEN_SIGNING_KEY is required}
+      EdgeGateway__PlayerTokens__JwtIssuer: ${PLAYER_JWT_ISSUER:-}
+      EdgeGateway__PlayerTokens__JwtAudience: ${PLAYER_JWT_AUDIENCE:-}
+      EdgeGateway__MaximumRequestBodyBytes: ${EDGE_MAXIMUM_REQUEST_BODY_BYTES:-1048576}
+      EdgeGateway__RouteTimeoutMilliseconds: ${EDGE_ROUTE_TIMEOUT_MILLISECONDS:-10000}
+      EdgeGateway__ClientContract__MinimumClientVersion: ${EDGE_MINIMUM_CLIENT_VERSION:-1.0.0}
+      EdgeGateway__ClientContract__SupportedProtocolVersions__0: ${EDGE_PROTOCOL_VERSION:-1}
+      EdgeGateway__ClientContract__AllowedChannels__0: default
+      EdgeGateway__ClientContract__AllowedChannels__1: development
+      EdgeGateway__ClientContract__AllowedChannels__2: appstore
+      EdgeGateway__ClientContract__AllowedChannels__3: googleplay
+      EdgeGateway__DistributedRateLimit__Enabled: "true"
+      EdgeGateway__DistributedRateLimit__ConnectionString: redis:6379,abortConnect=false
+      EdgeGateway__DistributedRateLimit__KeyPrefix: guiyang:edge:ratelimit:v1
+      EdgeGateway__DistributedRateLimit__PermitLimit: ${EDGE_DISTRIBUTED_PERMIT_LIMIT:-1000}
+      EdgeGateway__DistributedRateLimit__WindowSeconds: ${EDGE_RATE_LIMIT_WINDOW_SECONDS:-60}
+      EdgeGateway__DistributedRateLimit__FailClosed: "true"
+      # 容器直接接收玩家连接；如前置 Ingress/LB，必须显式覆盖可信代理 IP/CIDR。
+      EdgeGateway__TrustedProxies__0: 127.0.0.1
+      EdgeGateway__TrustedProxies__1: ::1
+      # 框架层放行后由网关输出统一 JSON；生产域名通过 EDGE_ALLOWED_HOSTS 注入。
+      AllowedHosts: "*"
+      EdgeGateway__AllowedHosts: "${EDGE_ALLOWED_HOSTS:-localhost;127.0.0.1}"
+      ReverseProxy__Clusters__auth__Destinations__primary__Address: http://auth:8080
+      ReverseProxy__Clusters__lobby__Destinations__primary__Address: http://lobby:8080
+      ReverseProxy__Clusters__player-data__Destinations__primary__Address: http://player-data:8080
+    depends_on:
+      auth: {condition: service_healthy}
+      lobby: {condition: service_healthy}
+      player-data: {condition: service_healthy}
+      redis: {condition: service_healthy}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    # EdgeGateway 是唯一玩家 HTTP 公网入口；Dedicated Server UDP 仍由 game-node 直接发布。
+    ports: ["${EDGE_GATEWAY_PORT:-18085}:8080"]
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "--show-error", "http://127.0.0.1:8080/health/ready"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+    cpus: ${EDGE_GATEWAY_CPUS:-1.0}
+    mem_limit: ${EDGE_GATEWAY_MEMORY:-512m}
     pids_limit: 256
     read_only: true
     tmpfs: ["/tmp:rw,noexec,nosuid,size=64m"]

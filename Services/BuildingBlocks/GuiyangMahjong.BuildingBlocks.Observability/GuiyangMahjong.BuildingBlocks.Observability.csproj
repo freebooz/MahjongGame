@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <!-- 只补充跨传输调用上下文；现有主机级 OpenTelemetry 继续复用 GuiyangMahjong.Observability。 -->
+    <Description>Request/Correlation/Trace/Deadline 传播基础构件。</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\Contracts\GuiyangMahjong.Contracts.Common\GuiyangMahjong.Contracts.Common.csproj" />
+    <ProjectReference Include="..\GuiyangMahjong.BuildingBlocks.Security\GuiyangMahjong.BuildingBlocks.Security.csproj" />
+  </ItemGroup>
+</Project>

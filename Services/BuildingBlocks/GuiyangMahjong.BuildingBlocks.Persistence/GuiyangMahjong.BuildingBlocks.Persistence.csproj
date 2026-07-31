@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <!-- PostgreSQL 是实现细节，只能存在于 Persistence，不得泄漏到 Contracts。 -->
+    <Description>PostgreSQL Outbox、Inbox、幂等记录和强类型 ID 映射。</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Npgsql" />
+    <ProjectReference Include="..\..\Contracts\GuiyangMahjong.Contracts.Common\GuiyangMahjong.Contracts.Common.csproj" />
+    <ProjectReference Include="..\..\Contracts\GuiyangMahjong.Contracts.Events\GuiyangMahjong.Contracts.Events.csproj" />
+    <ProjectReference Include="..\GuiyangMahjong.BuildingBlocks.Domain\GuiyangMahjong.BuildingBlocks.Domain.csproj" />
+    <ProjectReference Include="..\GuiyangMahjong.BuildingBlocks.Idempotency\GuiyangMahjong.BuildingBlocks.Idempotency.csproj" />
+    <ProjectReference Include="..\GuiyangMahjong.BuildingBlocks.Messaging\GuiyangMahjong.BuildingBlocks.Messaging.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- SQL 模板进入构建和发布产物，便于迁移身份审查后显式执行。 -->
+    <None Include="Migrations\*.sql"
+          CopyToOutputDirectory="PreserveNewest"
+          CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

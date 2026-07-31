@@ -201,13 +201,67 @@ bool UGuiyangGameServerBridge::ValidateAndConsumeJoinTicket(const FString& Ticke
         Ticket, PlayerId, FDateTime::UtcNow().ToUnixTimestamp(), OutClaims, OutError);
 }
 
+bool UGuiyangGameServerBridge::AppendShuffleAuditRecord(
+    const FGuiyangShuffleAuditProof& Proof,
+    const bool bReveal,
+    const FString& EventChainDigest) const
+{
+    if (Config.MatchResultOutboxPath.IsEmpty() || Proof.RoundId < 1
+        || Proof.SeedCommitment.Len() != 64)
+    {
+        return false;
+    }
+
+    const TSharedRef<FJsonObject> Record = MakeShared<FJsonObject>();
+    Record->SetStringField(TEXT("schema"), TEXT("mahjong-fairness-audit-v1"));
+    Record->SetStringField(TEXT("eventType"), bReveal ? TEXT("Reveal") : TEXT("Commitment"));
+    Record->SetStringField(TEXT("roomId"), Config.RoomId);
+    Record->SetStringField(TEXT("matchId"), Config.MatchId);
+    Record->SetStringField(TEXT("serverInstanceId"), Config.ServerInstanceId);
+    Record->SetNumberField(TEXT("roundId"), Proof.RoundId);
+    Record->SetStringField(TEXT("algorithm"), Proof.Algorithm);
+    Record->SetStringField(TEXT("ruleId"), Proof.RuleId);
+    Record->SetNumberField(TEXT("ruleVersion"), Proof.RuleVersion);
+    Record->SetStringField(TEXT("ruleHash"), Proof.RuleHash);
+    Record->SetStringField(TEXT("seedCommitment"), Proof.SeedCommitment);
+    Record->SetStringField(TEXT("createdAtUtc"), Proof.CreatedAtUtc.ToIso8601());
+    if (bReveal)
+    {
+        // 只有结算后的 Reveal 事件才能包含可复现种子；开局 Commitment 分支故意没有这些字段。
+        Record->SetStringField(TEXT("seedHex"), Proof.SeedHex);
+        Record->SetStringField(TEXT("serverNonceHex"), Proof.ServerNonceHex);
+        Record->SetStringField(TEXT("deckOrderDigest"), Proof.DeckOrderDigest);
+        Record->SetStringField(TEXT("revealedAtUtc"), Proof.RevealedAtUtc.ToIso8601());
+        Record->SetStringField(TEXT("eventChainDigest"), EventChainDigest);
+    }
+
+    const FString AuditDirectory = FPaths::GetPath(Config.MatchResultOutboxPath);
+    const FString AuditPath = FPaths::Combine(
+        AuditDirectory, Config.MatchId + TEXT(".fairness.jsonl"));
+    if (!FPlatformFileManager::Get().GetPlatformFile().CreateDirectoryTree(*AuditDirectory))
+    {
+        return false;
+    }
+    // 单行追加使进程崩溃后的恢复工具可以忽略最后一个不完整行，同时保留此前已刷盘的承诺。
+    return FFileHelper::SaveStringToFile(
+        GuiyangGameServerPrivate::SerializeJson(Record) + LINE_TERMINATOR,
+        *AuditPath,
+        FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM,
+        &IFileManager::Get(),
+        FILEWRITE_Append);
+}
+
 void UGuiyangGameServerBridge::QueueFinalSettlement(
-    const FMahjongFinalSettlementResult& Result, const int64 ResultSequence)
+    const FMahjongFinalSettlementResult& Result,
+    const int64 ResultSequence,
+    const TArray<FGuiyangShuffleAuditProof>& ShuffleProofs,
+    const FString& EventChainDigest)
 {
     if (!bRegistered || bShuttingDown || ResultCredential.Len() < 32
         || Result.MatchId != Config.MatchId || Result.RoomId != Config.RoomId
         || ResultSequence < 1 || Result.CompletedRounds < 1 || Result.CompletedRounds > 16
-        || Result.Players.IsEmpty() || Result.Players.Num() > 4)
+        || Result.Players.IsEmpty() || Result.Players.Num() > 4
+        || ShuffleProofs.Num() != Result.CompletedRounds || EventChainDigest.Len() != 64)
     {
         UE_LOG(LogMahjongServer, Error,
             TEXT("Final settlement report rejected locally InstanceId=%s MatchId=%s Sequence=%lld"),
@@ -252,6 +306,35 @@ void UGuiyangGameServerBridge::QueueFinalSettlement(
         Players.Add(MakeShared<FJsonValueObject>(PlayerObject));
     }
     Body->SetArrayField(TEXT("players"), Players);
+    TArray<TSharedPtr<FJsonValue>> ProofValues;
+    for (const FGuiyangShuffleAuditProof& Proof : ShuffleProofs)
+    {
+        if (Proof.RoundId != ProofValues.Num() + 1 || Proof.SeedHex.Len() != 8
+            || Proof.ServerNonceHex.Len() != 64 || Proof.SeedCommitment.Len() != 64
+            || Proof.DeckOrderDigest.Len() != 64 || Proof.RuleVersion < 1
+            || Proof.RevealedAtUtc < Proof.CreatedAtUtc)
+        {
+            UE_LOG(LogMahjongServer, Error,
+                TEXT("Final settlement fairness proof rejected InstanceId=%s RoundId=%d"),
+                *Config.ServerInstanceId, Proof.RoundId);
+            return;
+        }
+        const TSharedRef<FJsonObject> ProofObject = MakeShared<FJsonObject>();
+        ProofObject->SetStringField(TEXT("algorithm"), Proof.Algorithm);
+        ProofObject->SetNumberField(TEXT("roundId"), Proof.RoundId);
+        ProofObject->SetStringField(TEXT("seedHex"), Proof.SeedHex);
+        ProofObject->SetStringField(TEXT("serverNonceHex"), Proof.ServerNonceHex);
+        ProofObject->SetStringField(TEXT("seedCommitment"), Proof.SeedCommitment);
+        ProofObject->SetStringField(TEXT("deckOrderDigest"), Proof.DeckOrderDigest);
+        ProofObject->SetStringField(TEXT("ruleId"), Proof.RuleId);
+        ProofObject->SetNumberField(TEXT("ruleVersion"), Proof.RuleVersion);
+        ProofObject->SetStringField(TEXT("ruleHash"), Proof.RuleHash);
+        ProofObject->SetStringField(TEXT("createdAtUtc"), Proof.CreatedAtUtc.ToIso8601());
+        ProofObject->SetStringField(TEXT("revealedAtUtc"), Proof.RevealedAtUtc.ToIso8601());
+        ProofValues.Add(MakeShared<FJsonValueObject>(ProofObject));
+    }
+    Body->SetArrayField(TEXT("shuffleProofs"), ProofValues);
+    Body->SetStringField(TEXT("eventChainDigest"), EventChainDigest);
     // 必须先持久化再发送，确保进程在 HTTP 请求期间崩溃也不会丢失结算。
     if (!PersistPendingMatchResult(Body))
     {

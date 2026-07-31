@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+package guiyang.mahjong.platform.v1;
+
+option csharp_namespace = "GuiyangMahjong.Contracts.Grpc.V1";
+
+// 跨服务调用上下文；不得放入访问令牌、Join Ticket、数据库口令或私有手牌。
+message CallContext {
+  string request_id = 1;
+  string correlation_id = 2;
+  string trace_id = 3;
+  string caller_service = 4;
+  string client_version = 5;
+  string protocol_version = 6;
+  string service_version = 7;
+  // UTC Unix 毫秒；0 表示调用方没有声明截止时间。
+  int64 deadline_unix_ms = 8;
+}
+
+// 与统一 API 错误码对应的传输中立错误详情。
+message ErrorDetail {
+  string code = 1;
+  string message = 2;
+  string request_id = 3;
+  string correlation_id = 4;
+  string trace_id = 5;
+}
+
+// 通用命令确认只表达接收结果，不代表麻将业务结算或资产变更。
+message CommandAcknowledgement {
+  bool accepted = 1;
+  ErrorDetail error = 2;
+}

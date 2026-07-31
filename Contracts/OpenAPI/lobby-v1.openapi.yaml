@@ -533,7 +533,8 @@ components:
         reason: { type: string, minLength: 1, maxLength: 200 }
     MatchResultReport:
       type: object
-      required: [roomId, serverInstanceId, resultSequence, completedRounds, players]
+      required:
+        [roomId, serverInstanceId, resultSequence, completedRounds, players, shuffleProofs, eventChainDigest]
       properties:
         roomId: { type: string, minLength: 1, maxLength: 80 }
         serverInstanceId: { type: string, format: uuid }
@@ -551,6 +552,35 @@ components:
               seatIndex: { type: integer, minimum: 0, maximum: 3 }
               rank: { type: integer, minimum: 1, maximum: 4 }
               totalScore: { type: integer }
+        shuffleProofs:
+          type: array
+          minItems: 1
+          maxItems: 16
+          description: 单局结束后披露的洗牌证明；必须按 roundId 连续升序排列。
+          items: { $ref: '#/components/schemas/ShuffleAuditProof' }
+        eventChainDigest:
+          type: string
+          pattern: '^[0-9a-f]{64}$'
+          description: 按 fair-audit-chain-v1 规范链接全部单局披露记录的 SHA-256。
+    ShuffleAuditProof:
+      type: object
+      required:
+        [algorithm, roundId, seedHex, serverNonceHex, seedCommitment, deckOrderDigest,
+         ruleId, ruleVersion, ruleHash, createdAtUtc, revealedAtUtc]
+      properties:
+        algorithm:
+          type: string
+          enum: [UE-FRandomStream-FisherYates-v1]
+        roundId: { type: integer, minimum: 1, maximum: 16 }
+        seedHex: { type: string, pattern: '^[0-9a-f]{8}$' }
+        serverNonceHex: { type: string, pattern: '^[0-9a-f]{64}$' }
+        seedCommitment: { type: string, pattern: '^[0-9a-f]{64}$' }
+        deckOrderDigest: { type: string, pattern: '^[0-9a-f]{64}$' }
+        ruleId: { type: string, minLength: 1, maxLength: 80 }
+        ruleVersion: { type: integer, minimum: 1 }
+        ruleHash: { type: string, pattern: '^[0-9a-f]{40}$' }
+        createdAtUtc: { type: string, format: date-time }
+        revealedAtUtc: { type: string, format: date-time }
     MatchResultAck:
       type: object
       required: [requestId, matchId, resultSequence, accepted, duplicate]
