@@ -76,8 +76,10 @@ bool FGuiyangTableSnapshotRoundTripTest::RunTest(const FString& Parameters)
     DeterministicAction.TurnId = Original->GetPublicState().TurnId;
     DeterministicAction.Type = EMahjongActionType::Play;
     DeterministicAction.TargetTileId = DealerState.Hand.Tiles[0].UniqueId;
-    TestTrue(TEXT("原实例应接受确定性动作"), Original->SubmitTurnAction(0, DeterministicAction).bSuccess);
-    TestTrue(TEXT("恢复实例应接受相同确定性动作"), Restored->SubmitTurnAction(0, DeterministicAction).bSuccess);
+    // Play 在权威牌桌中有独立入口；测试必须走与 GameMode 完全相同的分派路径，
+    // 否则会把“不支持的回合动作”误判为快照恢复不确定。
+    TestTrue(TEXT("原实例应接受确定性动作"), Original->SubmitPlayTile(0, DeterministicAction).bSuccess);
+    TestTrue(TEXT("恢复实例应接受相同确定性动作"), Restored->SubmitPlayTile(0, DeterministicAction).bSuccess);
     FMahjongTableRecoveryState OriginalAfterAction;
     FMahjongTableRecoveryState RestoredAfterAction;
     TestTrue(TEXT("原实例动作后状态应导出"), Original->ExportRecoveryState(OriginalAfterAction));

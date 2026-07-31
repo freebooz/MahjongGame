@@ -124,10 +124,16 @@ bool UGuiyangRoomManager::AdmitManagedPlayer(const FString& RoomCode, const FStr
         }
         FRoomRecord* ExistingRecord = Rooms.Find(RoomCode);
         FMahjongSeatInfo* ExistingSeat = ExistingRecord ? FindSeat(ExistingRecord->PublicState, PlayerId) : nullptr;
-        if (!ExistingRecord || !ExistingRecord->bManagedAuthority || !ExistingSeat
-            || (ExpectedSeatIndex != INDEX_NONE && ExistingSeat->SeatIndex != ExpectedSeatIndex))
+        if (!ExistingRecord || !ExistingRecord->bManagedAuthority || !ExistingSeat)
         {
             OutError = EMahjongRoomError::NotInRoom;
+            return false;
+        }
+        if (ExpectedSeatIndex != INDEX_NONE && ExistingSeat->SeatIndex != ExpectedSeatIndex)
+        {
+            // 玩家已绑定当前房间但 Ticket 座位不一致，这是请求约束被破坏，
+            // 不能伪装成“不在房间”，以免调用方误走新入座流程。
+            OutError = EMahjongRoomError::InvalidRequest;
             return false;
         }
         ExistingSeat->bOnline = true;

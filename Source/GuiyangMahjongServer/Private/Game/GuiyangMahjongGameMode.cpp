@@ -589,9 +589,8 @@ void AGuiyangMahjongGameMode::HandleAuthenticateSession(AGuiyangMahjongPlayerCon
         return;
     }
 
-    // Managed connections were counted immediately after their signed join ticket was accepted.
-    // A non-managed Agones server learns the stable player id only after this profile RPC, so
-    // register it here exactly once and retain the controller binding for Logout.
+    // 托管连接在签名 Join Ticket 通过后已计数；非托管 Agones 实例只有在本资料 RPC
+    // 才能获得稳定玩家 ID，因此此处仅注册一次并保留 Controller 绑定供 Logout 对称清理。
     if (!AuthorizedPlayerIdsByController.Contains(Controller))
     {
         AuthorizedPlayerIdsByController.Add(Controller, CleanPlayerId);
@@ -619,7 +618,8 @@ void AGuiyangMahjongGameMode::HandleAuthenticateSession(AGuiyangMahjongPlayerCon
             return;
         }
         FMahjongRoomState AdmittedState;
-        EMahjongRoomError AdmitError;
+        // Claims 缺失时下方短路不会调用房间管理器，预设稳定错误避免读取未初始化枚举。
+        EMahjongRoomError AdmitError = EMahjongRoomError::InvalidRequest;
         const FGuiyangJoinTicketClaims* Claims = AuthorizedClaimsByController.Find(Controller);
         if (!Claims || !RoomManager->AdmitManagedPlayer(ManagedRoomCode, CleanPlayerId, CleanDisplayName,
             AdmittedState, AdmitError, Claims->SeatId))

@@ -2,6 +2,7 @@
 
 
 #include "Dom/JsonObject.h"
+#include "HAL/PlatformMisc.h"
 #include "Runtime/Launch/Resources/Version.h"
 #include "Room/GuiyangManagedRoomDefinition.h"
 #include "Room/GuiyangRoomManager.h"
@@ -42,9 +43,18 @@ bool FGuiyangAgonesActivationTest::RunTest(const FString& Parameters)
         { TEXT("mahjong.freebooz/lobby-internal-url"), TEXT("http://mahjong-lobby:8080") },
         { TEXT("mahjong.freebooz/gamedata-internal-url"), TEXT("http://mahjong-gamedata:8080") },
         { TEXT("mahjong.freebooz/build-version"), TEXT("test-build") },
+        { TEXT("mahjong.freebooz/ruleset-version"), TEXT("guiyang-zhuoji-v1") },
+        { TEXT("mahjong.freebooz/protocol-version"), TEXT("1") },
         { TEXT("mahjong.freebooz/room-epoch"), TEXT("1") },
         { TEXT("mahjong.freebooz/fencing-token"), TEXT("1") }
     };
+    // 结算签名密钥在生产中只能由 Secret 注入；自动化测试使用进程内固定替身，
+    // 并在用例结束后恢复原值，避免污染后续配置边界测试。
+    const FString PreviousSettlementKey =
+        FPlatformMisc::GetEnvironmentVariable(TEXT("MAHJONG_SETTLEMENT_SIGNING_KEY"));
+    FPlatformMisc::SetEnvironmentVar(
+        TEXT("MAHJONG_SETTLEMENT_SIGNING_KEY"),
+        TEXT("test-only-settlement-signing-key-long-enough"));
     FGuiyangGameServerLaunchConfig Config;
     FString Error;
     TestTrue(TEXT("Allocated metadata should produce a managed launch config"),
@@ -66,6 +76,9 @@ bool FGuiyangAgonesActivationTest::RunTest(const FString& Parameters)
             TEXT("/tmp/mahjong-result.json"),
             Config,
             Error));
+    FPlatformMisc::SetEnvironmentVar(
+        TEXT("MAHJONG_SETTLEMENT_SIGNING_KEY"),
+        *PreviousSettlementKey);
     return true;
 }
 
@@ -129,6 +142,12 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FGuiyangManagedLaunchConfigTest,
 
 bool FGuiyangManagedLaunchConfigTest::RunTest(const FString& Parameters)
 {
+    // TryParse 与生产启动保持同一 Secret 读取路径；测试仅临时注入非敏感替身。
+    const FString PreviousSettlementKey =
+        FPlatformMisc::GetEnvironmentVariable(TEXT("MAHJONG_SETTLEMENT_SIGNING_KEY"));
+    FPlatformMisc::SetEnvironmentVar(
+        TEXT("MAHJONG_SETTLEMENT_SIGNING_KEY"),
+        TEXT("test-only-settlement-signing-key-long-enough"));
     const FString CommandLine = FString::Printf(
         TEXT("-MahjongManagedGameServer -RoomId=%s -MatchId=%s -ServerInstanceId=%s -Port=19000 ")
         TEXT("-LobbyInternalUrl=http://127.0.0.1:18080 ")
@@ -152,6 +171,9 @@ bool FGuiyangManagedLaunchConfigTest::RunTest(const FString& Parameters)
         *CommandLine, FString(), TEXT("registration-credential-which-is-long-enough"),
         FString::Printf(TEXT("C:/mahjong-outbox/%s.json"), GuiyangManagedGameServerTests::InstanceId),
         Invalid, Error));
+    FPlatformMisc::SetEnvironmentVar(
+        TEXT("MAHJONG_SETTLEMENT_SIGNING_KEY"),
+        *PreviousSettlementKey);
     return true;
 }
 

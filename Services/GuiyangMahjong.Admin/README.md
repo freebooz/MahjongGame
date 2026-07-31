@@ -4,7 +4,7 @@ Independent player, room, and Dedicated Server monitoring application with a
 controlled, audited management workflow.
 
 The complete player-management security design and phased delivery boundary are
-documented in `../../Docs/PLAYER_MONITORING_ADMIN_DESIGN.md`.
+documented in `../../Docs/architecture/stage-10-admin-trust-safety-monitoring.md`.
 
 ## Angular 22 client
 

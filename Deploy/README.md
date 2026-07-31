@@ -136,10 +136,16 @@ sudo ./Deploy/linux/deploy.sh restore --backup-file /path/to/backup.tar.gz --con
 
 ## 架构与验收资料
 
+<<<<<<< HEAD
 - [当前系统与模块清单](../Docs/architecture/current-system-inventory.md)
 - [当前主业务流程](../Docs/architecture/current-main-flows.md)
 - [统一 Allocation Service](../Docs/architecture/stage-5-allocation-service.md)
 - [Dedicated Server 生命周期与恢复](../Docs/architecture/stage-6-dedicated-server-lifecycle-recovery.md)
+=======
+- [现行平台架构文档索引](../Docs/README.md)
+- [Allocation Service 与 Agones 边界](../Docs/architecture/stage-5-allocation-service.md)
+- [配置、灰度与多版本治理](../Docs/architecture/stage-11-configuration-release-governance.md)
+>>>>>>> ff4853bbd5831cc9697d440b00feb887168a2425
 - [告警运行手册](../Docs/RUNBOOKS/OBSERVABILITY_ALERTS.md)
 - [多集群与 SLO 治理运行手册](../Docs/RUNBOOKS/SLO_MULTI_CLUSTER_GOVERNANCE.md)
 
