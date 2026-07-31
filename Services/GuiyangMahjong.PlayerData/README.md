@@ -3,6 +3,13 @@
 PlayerData is the authoritative player wallet/reward ledger and the sanitized
 evidence ingress for the administration application.
 
+Stage 8 has frozen this service boundary. Player profiles are owned by
+`Identity/Players` in `player.player_profiles`, and online sessions are owned by
+`Identity/Sessions` in `session.auth_refresh_sessions`. PlayerData has no profile
+or session write API and must not add one. New PlayerData features are prohibited;
+the remaining capabilities will move through the separately accepted Stage
+8.2-8.6 cutovers.
+
 It provides separate least-privilege credentials for:
 
 - reward, payment, report, and replay source ingestion;

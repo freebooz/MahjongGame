@@ -706,6 +706,73 @@ public sealed class ProjectArchitectureTests
     }
 
     /// <summary>
+    /// 阶段 8.1 冻结玩家资料和在线会话的数据所有权：长期资料只能由 Identity/Players
+    /// 持久化，会话只能由 Identity/Sessions 持久化。PlayerData 不得因兼容需求重新创建
+    /// 同名表或写入口，否则会形成两个权威来源并使后续下线无法完成。
+    /// </summary>
+    [Fact]
+    public void PlayerData_DoesNotOwnPlayerProfilesOrSessions()
+    {
+        var root = FindProjectRoot();
+        var identitySchema = File.ReadAllText(Path.Combine(
+            root,
+            "Services",
+            "GuiyangMahjong.Auth",
+            "Storage",
+            "schema.sql"));
+        var playerDataRoot = Path.Combine(
+            root,
+            "Services",
+            "GuiyangMahjong.PlayerData");
+        var playerDataSchema = File.ReadAllText(Path.Combine(
+            playerDataRoot,
+            "Storage",
+            "schema.sql"));
+        var playerDataEndpoints = File.ReadAllText(Path.Combine(
+            playerDataRoot,
+            "Api",
+            "PlayerDataEndpoints.cs"));
+
+        // Identity 已存在真实权威表；先验证目标存在，避免仅检查“旧服务没有”造成伪通过。
+        Assert.Contains(
+            "CREATE TABLE IF NOT EXISTS player.player_profiles",
+            identitySchema,
+            StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(
+            "CREATE TABLE IF NOT EXISTS session.auth_refresh_sessions",
+            identitySchema,
+            StringComparison.OrdinalIgnoreCase);
+
+        // PlayerData 的数据库与 HTTP 边界都不得重新暴露资料或会话写能力。
+        foreach (var forbiddenTable in new[]
+                 {
+                     "player_data.player_profiles",
+                     "player_data.player_profile",
+                     "player_data.sessions",
+                     "player_data.player_sessions"
+                 })
+        {
+            Assert.DoesNotContain(
+                forbiddenTable,
+                playerDataSchema,
+                StringComparison.OrdinalIgnoreCase);
+        }
+        foreach (var forbiddenRoute in new[]
+                 {
+                     "/profiles",
+                     "/profile",
+                     "/sessions",
+                     "/session"
+                 })
+        {
+            Assert.DoesNotContain(
+                forbiddenRoute,
+                playerDataEndpoints,
+                StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    /// <summary>
     /// 从测试输出逐级查找同时含 `.git`、`.uproject` 和 Services 的项目根。
     /// 找不到时抛出异常，避免架构测试误读其他目录后给出伪通过。
     /// </summary>
