@@ -11,6 +11,23 @@ namespace GuiyangMahjong.Architecture.Tests;
 /// </summary>
 public sealed class ProjectArchitectureTests
 {
+    /// <summary>阶段 8.3 保证 Economy 是资产唯一实现边界，且旧 PlayerData API 只依赖兼容客户端。</summary>
+    [Fact]
+    public void EconomyOwnsWalletWrites_AndPlayerDataUsesAdapterOnly()
+    {
+        var root = FindProjectRoot();
+        var economyProject = File.ReadAllText(Path.Combine(root, "Services", "Apps",
+            "GuiyangMahjong.Economy", "GuiyangMahjong.Economy.csproj"));
+        Assert.DoesNotContain("GuiyangMahjong.PlayerData", economyProject, StringComparison.Ordinal);
+        Assert.DoesNotContain("GuiyangMahjong.Admin", economyProject, StringComparison.Ordinal);
+        var endpoints = File.ReadAllText(Path.Combine(root, "Services", "GuiyangMahjong.PlayerData",
+            "Api", "PlayerDataEndpoints.cs"));
+        Assert.Contains("ILegacyEconomyClient", endpoints, StringComparison.Ordinal);
+        Assert.DoesNotContain("store.RecordRewardClaimAsync", endpoints, StringComparison.Ordinal);
+        Assert.DoesNotContain("store.ApplyWalletOperationAsync", endpoints, StringComparison.Ordinal);
+        var schema = File.ReadAllText(Path.Combine(root, "Services", "GuiyangMahjong.PlayerData", "Storage", "schema.sql"));
+        Assert.Contains("reject_legacy_economy_write", schema, StringComparison.Ordinal);
+    }
     /// <summary>阶段 7 GameData 必须保持模块目录与跨服务依赖边界，不得引用 Lobby、PlayerData 或 Admin 实现。</summary>
     [Fact]
     public void GameData_HasRequiredModules_AndNoBusinessImplementationReferences()

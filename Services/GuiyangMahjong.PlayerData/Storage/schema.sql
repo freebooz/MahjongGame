@@ -51,6 +51,23 @@ CREATE TABLE IF NOT EXISTS player_data.wallet_transactions (
 CREATE INDEX IF NOT EXISTS ix_wallet_transactions_player
     ON player_data.wallet_transactions(player_id, completed_at_utc DESC);
 
+-- 阶段 8.3 完成切换后，旧表只允许读取和迁移核对；数据库门禁防止遗留代码形成长期双写。
+CREATE OR REPLACE FUNCTION player_data.reject_legacy_economy_write()
+RETURNS TRIGGER LANGUAGE plpgsql AS $$
+BEGIN
+    RAISE EXCEPTION 'Asset and reward writes are owned by Economy after stage 8.3';
+END;
+$$;
+DROP TRIGGER IF EXISTS trg_reject_legacy_wallet_balance_write ON player_data.wallet_balances;
+CREATE TRIGGER trg_reject_legacy_wallet_balance_write BEFORE INSERT OR UPDATE OR DELETE
+ON player_data.wallet_balances FOR EACH STATEMENT EXECUTE FUNCTION player_data.reject_legacy_economy_write();
+DROP TRIGGER IF EXISTS trg_reject_legacy_reward_write ON player_data.reward_grants;
+CREATE TRIGGER trg_reject_legacy_reward_write BEFORE INSERT OR UPDATE OR DELETE
+ON player_data.reward_grants FOR EACH STATEMENT EXECUTE FUNCTION player_data.reject_legacy_economy_write();
+DROP TRIGGER IF EXISTS trg_reject_legacy_wallet_transaction_write ON player_data.wallet_transactions;
+CREATE TRIGGER trg_reject_legacy_wallet_transaction_write BEFORE INSERT OR UPDATE OR DELETE
+ON player_data.wallet_transactions FOR EACH STATEMENT EXECUTE FUNCTION player_data.reject_legacy_economy_write();
+
 CREATE TABLE IF NOT EXISTS player_data.evidence_events (
     event_id UUID PRIMARY KEY,
     player_id VARCHAR(128) NOT NULL,

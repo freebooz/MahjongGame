@@ -48,6 +48,9 @@ builder.Services
             && options.MonitoringToken.Length >= 32
             && options.AuthMonitoringToken.Length >= 32
             && options.GameDataLegacyReplayToken.Length >= 32
+            && options.EconomySourceToken.Length >= 32
+            && options.EconomyAdminToken.Length >= 32
+            && options.EconomyMonitoringToken.Length >= 32
             && options.ProjectionEnabled
             && options.AdminEvidenceIngestionToken.Length >= 32),
         "Production PlayerData requires PostgreSQL and all dedicated credentials.")
@@ -61,6 +64,7 @@ builder.Services
             options.AuthMonitoringToken,
             options.AdminEvidenceIngestionToken,
             options.GameDataLegacyReplayToken
+            ,options.EconomySourceToken, options.EconomyAdminToken, options.EconomyMonitoringToken
         }
         .Where(value => !string.IsNullOrEmpty(value))
         .Distinct(StringComparer.Ordinal)
@@ -75,6 +79,7 @@ builder.Services
             options.AuthMonitoringToken,
             options.AdminEvidenceIngestionToken,
             options.GameDataLegacyReplayToken
+            ,options.EconomySourceToken, options.EconomyAdminToken, options.EconomyMonitoringToken
         }.Count(value => !string.IsNullOrEmpty(value)),
         "PlayerData credentials must all be distinct.")
     .ValidateOnStart();
@@ -92,6 +97,7 @@ builder.Services.AddHttpClient(
 builder.Services.AddHttpClient(
     nameof(HttpLegacyReplayEvidenceClient),
     client => client.Timeout = TimeSpan.FromSeconds(5));
+builder.Services.AddHttpClient(nameof(HttpLegacyEconomyClient), client => client.Timeout = TimeSpan.FromSeconds(8));
 builder.Services.AddSingleton<IPlayerDataStore>(provider =>
 {
     var options = provider
@@ -105,6 +111,7 @@ builder.Services.AddSingleton<IPlayerDataStore>(provider =>
 });
 builder.Services.AddSingleton<IChatPolicyClient, HttpChatPolicyClient>();
 builder.Services.AddSingleton<ILegacyReplayEvidenceClient, HttpLegacyReplayEvidenceClient>();
+builder.Services.AddSingleton<ILegacyEconomyClient, HttpLegacyEconomyClient>();
 builder.Services.AddSingleton<ProjectionDispatcher>();
 builder.Services.AddHostedService<PlayerDataStoreInitializer>();
 builder.Services.AddHostedService<ProjectionDispatcherService>();

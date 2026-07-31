@@ -94,7 +94,7 @@ data:
   Admin__ReplayArchive__AccessTtlSeconds: "300"
   Admin__ReplayArchive__MaxObjectMegabytes: "64"
   Admin__Wallet__Enabled: "true"
-  Admin__Wallet__BaseUrl: http://mahjong-player-data:8080
+  Admin__Wallet__BaseUrl: http://mahjong-economy:8080
   Admin__Configuration__Enabled: "true"
   Admin__Configuration__BaseUrl: http://mahjong-configuration:8080
   Admin__Configuration__TimeoutSeconds: "5"
@@ -108,9 +108,13 @@ data:
   PlayerData__AuthBaseUrl: http://mahjong-auth:8080
   PlayerData__AdminProjectionBaseUrl: http://mahjong-admin:8080
   PlayerData__GameDataBaseUrl: http://mahjong-game-data:8080
+  # 兼容期旧资产入口仅转发；权威写入和余额查询由 Economy 提供。
+  PlayerData__EconomyBaseUrl: http://mahjong-economy:8080
   PlayerData__ProjectionEnabled: "true"
   PlayerData__ProjectionPollMilliseconds: "1000"
   PlayerData__ProjectionMaxAttempts: "10"
+  Economy__PersistenceMode: Postgres
+  Economy__ApplyDatabaseMigrations: "false"
   Lobby__AccessRevocationTtlMinutes: "120"
   Allocator__Backend: Agones
   Allocator__StartupTimeoutSeconds: "30"

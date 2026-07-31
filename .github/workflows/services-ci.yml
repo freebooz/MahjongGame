@@ -223,6 +223,9 @@ jobs:
           - name: game-data
             dockerfile: Services/Apps/GuiyangMahjong.GameData/Dockerfile
             target: ""
+          - name: economy
+            dockerfile: Services/Apps/GuiyangMahjong.Economy/Dockerfile
+            target: ""
           - name: workers
             dockerfile: Services/Apps/GuiyangMahjong.Workers/Dockerfile
             target: ""

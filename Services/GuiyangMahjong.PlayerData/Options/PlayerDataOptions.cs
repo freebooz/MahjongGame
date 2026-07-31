@@ -29,6 +29,11 @@ public sealed class PlayerDataOptions
     [Required, Url] public string GameDataBaseUrl { get; init; } = "http://127.0.0.1:18085";
     /// <summary>仅授权写入 GameData 旧回放索引的用途隔离凭据。</summary>
     public string GameDataLegacyReplayToken { get; init; } = string.Empty;
+    /// <summary>阶段 8.3 Economy 权威入口；旧 PlayerData URL 仅在兼容期转发。</summary>
+    [Required, Url] public string EconomyBaseUrl { get; init; } = "http://127.0.0.1:18086";
+    public string EconomySourceToken { get; init; } = string.Empty;
+    public string EconomyAdminToken { get; init; } = string.Empty;
+    public string EconomyMonitoringToken { get; init; } = string.Empty;
     public bool ProjectionEnabled { get; init; }
     [Range(100, 60000)] public int ProjectionPollMilliseconds { get; init; } =
         1000;

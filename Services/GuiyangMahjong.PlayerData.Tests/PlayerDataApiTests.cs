@@ -48,6 +48,10 @@ public sealed class PlayerDataWebApplicationFactory
             services.AddSingleton<TestLegacyReplayEvidenceClient>();
             services.AddSingleton<ILegacyReplayEvidenceClient>(provider =>
                 provider.GetRequiredService<TestLegacyReplayEvidenceClient>());
+            services.RemoveAll<ILegacyEconomyClient>();
+            services.AddSingleton<TestLegacyEconomyClient>();
+            services.AddSingleton<ILegacyEconomyClient>(provider =>
+                provider.GetRequiredService<TestLegacyEconomyClient>());
         });
     }
 }
@@ -342,4 +346,20 @@ public sealed class TestLegacyReplayEvidenceClient : ILegacyReplayEvidenceClient
         Requests.Add(request);
         return Task.FromResult(new EvidenceRecordResult(request.EventId, false));
     }
+}
+
+/// <summary>Economy 兼容适配测试替身；使用独立内存存储证明旧入口未写入 PlayerData 正式存储实例。</summary>
+public sealed class TestLegacyEconomyClient : ILegacyEconomyClient
+{
+    private readonly GuiyangMahjong.PlayerData.Storage.InMemoryPlayerDataStore isolatedStore = new();
+
+    public Task<EvidenceRecordResult> ClaimRewardAsync(RewardClaimRequest request, string idempotencyKey,
+        CancellationToken cancellationToken) => isolatedStore.RecordRewardClaimAsync(request, DateTimeOffset.UtcNow, cancellationToken);
+
+    public Task<WalletOperationResult> ApplyWalletOperationAsync(AdminWalletOperationRequest request,
+        string idempotencyKey, CancellationToken cancellationToken) => isolatedStore.ApplyWalletOperationAsync(
+            idempotencyKey, request, DateTimeOffset.UtcNow, cancellationToken);
+
+    public Task<IReadOnlyList<WalletBalance>> ListBalancesAsync(string playerId,
+        CancellationToken cancellationToken) => isolatedStore.ListBalancesAsync(playerId, cancellationToken);
 }

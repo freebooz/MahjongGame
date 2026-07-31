@@ -38,7 +38,7 @@ public static class PlayerDataEndpoints
             HttpContext context,
             RewardClaimRequest request,
             IOptions<PlayerDataOptions> options,
-            IPlayerDataStore store,
+            ILegacyEconomyClient economyClient,
             TimeProvider timeProvider,
             CancellationToken cancellationToken) =>
         {
@@ -53,10 +53,7 @@ public static class PlayerDataEndpoints
                 Guid.Parse(request.EventId).ToString())
                 throw PlayerDataOperationException.Invalid(
                     "Idempotency-Key must match eventId.");
-            var result = await store.RecordRewardClaimAsync(
-                request,
-                now,
-                cancellationToken);
+            var result = await economyClient.ClaimRewardAsync(request, idempotencyKey, cancellationToken);
             return result.Duplicate
                 ? Results.Ok(result)
                 : Results.Json(
@@ -97,7 +94,7 @@ public static class PlayerDataEndpoints
             HttpContext context,
             AdminWalletOperationRequest request,
             IOptions<PlayerDataOptions> options,
-            IPlayerDataStore store,
+            ILegacyEconomyClient economyClient,
             TimeProvider timeProvider,
             CancellationToken cancellationToken) =>
         {
@@ -108,11 +105,7 @@ public static class PlayerDataEndpoints
                 PlayerDataValidation.RequireIdempotencyKey(context);
             var now = timeProvider.GetUtcNow();
             PlayerDataValidation.ValidateWalletOperation(request, now);
-            return Results.Ok(await store.ApplyWalletOperationAsync(
-                commandId,
-                request,
-                now,
-                cancellationToken));
+            return Results.Ok(await economyClient.ApplyWalletOperationAsync(request, commandId, cancellationToken));
         }).WithMetadata(new RequestSizeLimitAttribute(12 * 1024));
 
         app.MapGet(
@@ -140,7 +133,7 @@ public static class PlayerDataEndpoints
                 string playerId,
                 HttpContext context,
                 IOptions<PlayerDataOptions> options,
-                IPlayerDataStore store,
+                ILegacyEconomyClient economyClient,
                 CancellationToken cancellationToken) =>
             {
                 RequireCredential(
@@ -149,9 +142,7 @@ public static class PlayerDataEndpoints
                 PlayerDataValidation.ValidateIdentifier(
                     playerId,
                     "playerId");
-                return Results.Ok(await store.ListBalancesAsync(
-                    playerId,
-                    cancellationToken));
+                return Results.Ok(await economyClient.ListBalancesAsync(playerId, cancellationToken));
             });
 
         app.MapPost("/internal/chat/messages/authorize", async (

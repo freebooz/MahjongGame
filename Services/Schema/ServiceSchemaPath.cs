@@ -49,7 +49,7 @@ internal static class ServiceSchemaPath
         }
 
         var serviceName = assemblyName[assemblyPrefix.Length..];
-        if (serviceName is not ("Auth" or "Lobby" or "PlayerData" or "Admin"))
+        if (serviceName is not ("Auth" or "Lobby" or "PlayerData" or "Admin" or "GameData" or "Configuration" or "Workers" or "Economy"))
         {
             throw new InvalidOperationException(
                 $"Schema 服务未进入中央白名单：{serviceName}");

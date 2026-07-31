@@ -301,3 +301,19 @@ ALTER DEFAULT PRIVILEGES FOR ROLE mahjong_migration IN SCHEMA player
     GRANT SELECT ON TABLES TO mahjong_monitor_ro;
 ALTER DEFAULT PRIVILEGES FOR ROLE mahjong_migration IN SCHEMA integration
     GRANT SELECT ON TABLES TO mahjong_monitor_ro;
+
+-- 阶段 8.3 Economy 独占资产与奖励表；PlayerData 和 Admin 均不获得这些 Schema 的写权限。
+REVOKE ALL ON SCHEMA inventory, reward, economy_integration FROM PUBLIC;
+GRANT USAGE ON SCHEMA inventory, reward, economy_integration TO mahjong_economy_rw, mahjong_monitor_ro;
+ALTER SCHEMA inventory OWNER TO mahjong_migration;
+ALTER SCHEMA reward OWNER TO mahjong_migration;
+ALTER SCHEMA economy_integration OWNER TO mahjong_migration;
+REVOKE ALL ON ALL TABLES IN SCHEMA inventory, reward, economy_integration FROM PUBLIC;
+GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA inventory, reward, economy_integration TO mahjong_economy_rw;
+GRANT SELECT ON ALL TABLES IN SCHEMA inventory, reward, economy_integration TO mahjong_monitor_ro;
+ALTER DEFAULT PRIVILEGES FOR ROLE mahjong_migration IN SCHEMA inventory
+    GRANT SELECT, INSERT, UPDATE ON TABLES TO mahjong_economy_rw;
+ALTER DEFAULT PRIVILEGES FOR ROLE mahjong_migration IN SCHEMA reward
+    GRANT SELECT, INSERT, UPDATE ON TABLES TO mahjong_economy_rw;
+ALTER DEFAULT PRIVILEGES FOR ROLE mahjong_migration IN SCHEMA economy_integration
+    GRANT SELECT, INSERT, UPDATE ON TABLES TO mahjong_economy_rw;
