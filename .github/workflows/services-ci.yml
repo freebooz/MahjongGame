@@ -20,12 +20,16 @@ on:
       - "Deploy/linux/**"
       - "Deploy/postgres/**"
       - "Deploy/observability/**"
+      - "Deploy/kubernetes/**"
+      - "Deploy/Agones/**"
+      - "Deploy/helm/**"
       - "Scripts/Test-ObservabilityContracts.ps1"
       - "Scripts/Test-MonitoringCapacityContracts.ps1"
       - "Scripts/Test-InvestigationHistoryContracts.ps1"
       - "Scripts/Test-SloReleaseGate.ps1"
       - "Scripts/Test-GovernanceContracts.ps1"
       - "Scripts/Test-ProjectStructureGovernance.ps1"
+      - "Scripts/Test-ReleaseGovernance.ps1"
       - "Scripts/lib/**"
       - "Docs/RUNBOOKS/SLO_MULTI_CLUSTER_GOVERNANCE.md"
       - "Scripts/Load/**"
@@ -51,12 +55,16 @@ on:
       - "Deploy/linux/**"
       - "Deploy/postgres/**"
       - "Deploy/observability/**"
+      - "Deploy/kubernetes/**"
+      - "Deploy/Agones/**"
+      - "Deploy/helm/**"
       - "Scripts/Test-ObservabilityContracts.ps1"
       - "Scripts/Test-MonitoringCapacityContracts.ps1"
       - "Scripts/Test-InvestigationHistoryContracts.ps1"
       - "Scripts/Test-SloReleaseGate.ps1"
       - "Scripts/Test-GovernanceContracts.ps1"
       - "Scripts/Test-ProjectStructureGovernance.ps1"
+      - "Scripts/Test-ReleaseGovernance.ps1"
       - "Scripts/lib/**"
       - "Docs/RUNBOOKS/SLO_MULTI_CLUSTER_GOVERNANCE.md"
       - "Scripts/Load/**"
@@ -68,6 +76,30 @@ permissions:
   contents: read
 
 jobs:
+  angular-admin:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: Services/GuiyangMahjong.Admin/ClientApp
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: Services/GuiyangMahjong.Admin/ClientApp/package-lock.json
+      - name: Install locked Angular dependencies
+        run: npm ci
+      - name: TypeScript and security lint
+        run: npm run lint
+      - name: Angular unit tests
+        run: npm run test -- --watch=false
+      - name: Angular production build
+        run: npm run build
+      - name: Dependency vulnerability gate
+        run: npm audit --audit-level=high
+
   build-and-test:
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -133,14 +165,20 @@ jobs:
         working-directory: .
         shell: pwsh
         run: ./Scripts/Test-GovernanceContracts.ps1
+      - name: Configuration, canary, and version governance gate
+        working-directory: .
+        shell: pwsh
+        run: ./Scripts/Test-ReleaseGovernance.ps1
       - name: Auth and Lobby external persistence tests
         run: |
           dotnet test GuiyangMahjong.Auth.Tests/GuiyangMahjong.Auth.Tests.csproj --configuration Release --no-build --filter "Category=ExternalPersistence" --logger "trx;LogFileName=auth-external-persistence.trx"
           dotnet test GuiyangMahjong.Lobby.Tests/GuiyangMahjong.Lobby.Tests.csproj --configuration Release --no-build --filter "Category=ExternalPersistence" --logger "trx;LogFileName=lobby-external-persistence.trx"
+          dotnet test Apps/GuiyangMahjong.Configuration.Tests/GuiyangMahjong.Configuration.Tests.csproj --configuration Release --no-build --filter "Category=ExternalPersistence" --logger "trx;LogFileName=configuration-external-persistence.trx"
         env:
           AUTH_TEST_POSTGRES: Host=127.0.0.1;Port=5432;Database=guiyang_ci;Username=postgres;Password=postgres
           LOBBY_TEST_POSTGRES: Host=127.0.0.1;Port=5432;Database=guiyang_ci;Username=postgres;Password=postgres
           LOBBY_TEST_REDIS: 127.0.0.1:6379,abortConnect=false
+          CONFIGURATION_TEST_POSTGRES: Host=127.0.0.1;Port=5432;Database=guiyang_ci;Username=postgres;Password=postgres
       - name: PostgreSQL least-privilege enforcement
         working-directory: .
         shell: bash
@@ -176,7 +214,19 @@ jobs:
           - name: admin
             dockerfile: Services/GuiyangMahjong.Admin/Dockerfile
             target: ""
-          # Services CI 没有 UE LinuxServer 制品，只验证 Allocator 编译阶段；
+          - name: configuration
+            dockerfile: Services/Apps/GuiyangMahjong.Configuration/Dockerfile
+            target: ""
+          - name: edge-gateway
+            dockerfile: Services/Apps/GuiyangMahjong.EdgeGateway/Dockerfile
+            target: ""
+          - name: game-data
+            dockerfile: Services/Apps/GuiyangMahjong.GameData/Dockerfile
+            target: ""
+          - name: workers
+            dockerfile: Services/Apps/GuiyangMahjong.Workers/Dockerfile
+            target: ""
+          # Services CI 没有 UE LinuxServer 制品，只验证 Allocator 编译阶段。
           # 最终 game-node 由携带真实 Artifacts/LinuxServer 的发布链构建。
           - name: allocator-build
             dockerfile: Services/GuiyangMahjong.Allocator/Dockerfile
@@ -199,12 +249,29 @@ jobs:
             arguments+=(--target "${MATRIX_TARGET}")
           fi
           docker build "${arguments[@]}" .
+      - name: Generate image SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          image: local/guiyang-mahjong-${{ matrix.name }}:ci
+          artifact-name: sbom-${{ matrix.name }}.spdx.json
+          output-file: sbom-${{ matrix.name }}.spdx.json
+      - name: Scan image vulnerabilities
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: local/guiyang-mahjong-${{ matrix.name }}:ci
+          format: sarif
+          output: trivy-${{ matrix.name }}.sarif
+          severity: CRITICAL,HIGH
+          exit-code: "1"
 
   linux-deployment-files:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.18.4
       - name: Validate Linux deployment files
         run: |
           bash -n Deploy/linux/deploy.sh
@@ -214,4 +281,6 @@ jobs:
           bash -n Scripts/Linux/test-deployment-rollback.sh
           bash -n Scripts/Linux/test-postgres-least-privilege.sh
           docker compose --env-file Deploy/linux/.env.example -f Deploy/linux/compose.yaml config --quiet
+          helm lint Deploy/helm/guiyang-mahjong
+          helm template mahjong Deploy/helm/guiyang-mahjong > /tmp/mahjong-rendered.yaml
           GRAFANA_ADMIN_PASSWORD=ci-observability-password-00000001 LOKI_QUERY_TOKEN=ci-loki-query-token-00000000000001 docker compose -f Deploy/observability/compose.yaml config --quiet

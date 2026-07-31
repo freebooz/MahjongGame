@@ -1,0 +1,64 @@
+name: Signed Canary Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      image:
+        description: Immutable image reference including digest
+        required: true
+      release_track:
+        description: stable or canary
+        required: true
+        default: canary
+      config_version:
+        description: Approved immutable configuration version
+        required: true
+      action:
+        description: deploy or rollback-new-allocations
+        required: true
+        default: deploy
+
+permissions:
+  contents: read
+  id-token: write
+  packages: write
+
+jobs:
+  verify-and-sign:
+    runs-on: ubuntu-latest
+    environment: production-release
+    steps:
+      - uses: actions/checkout@v4
+      - uses: sigstore/cosign-installer@v3.8.2
+      - uses: azure/setup-helm@v4
+        with: {version: v3.18.4}
+      - name: Reject mutable release input
+        shell: bash
+        env:
+          RELEASE_IMAGE: ${{ inputs.image }}
+          RELEASE_TRACK: ${{ inputs.release_track }}
+          RELEASE_ACTION: ${{ inputs.action }}
+        run: |
+          [[ "${RELEASE_IMAGE}" == *@sha256:* ]]
+          [[ "${RELEASE_TRACK}" == "stable" || "${RELEASE_TRACK}" == "canary" ]]
+          [[ "${RELEASE_ACTION}" == "deploy" || "${RELEASE_ACTION}" == "rollback-new-allocations" ]]
+          helm lint Deploy/helm/guiyang-mahjong
+      - name: Sign approved immutable image
+        if: inputs.action == 'deploy'
+        env:
+          RELEASE_IMAGE: ${{ inputs.image }}
+        run: cosign sign --yes "${RELEASE_IMAGE}"
+      - name: Record deployment approval artifact
+        env:
+          RELEASE_IMAGE: ${{ inputs.image }}
+          RELEASE_TRACK: ${{ inputs.release_track }}
+          CONFIG_VERSION: ${{ inputs.config_version }}
+          RELEASE_ACTION: ${{ inputs.action }}
+        run: |
+          printf 'image=%s\ntrack=%s\nconfig_version=%s\naction=%s\nrun_id=%s\n' \
+            "${RELEASE_IMAGE}" "${RELEASE_TRACK}" "${CONFIG_VERSION}" "${RELEASE_ACTION}" "${GITHUB_RUN_ID}" > release-approval.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: signed-release-approval
+          path: release-approval.txt
+# production-release Environment 必须配置人工审批；回滚动作只停止新分配并恢复旧 Fleet 流量。

@@ -48,6 +48,27 @@ public sealed class EdgeGatewayOptions
     /// <summary>Redis 分布式限流配置；仅保存可丢失的短期计数。</summary>
     [Required]
     public DistributedRateLimitOptions DistributedRateLimit { get; init; } = new();
+
+    /// <summary>配置中心拉取与 Last Known Good 行为；签名密钥和读取凭据只能由 Secret 注入。</summary>
+    [Required]
+    public DynamicConfigurationOptions DynamicConfiguration { get; init; } = new();
+}
+
+/// <summary>EdgeGateway 动态兼容策略客户端配置；禁用时完全沿用静态安全基线。</summary>
+public sealed class DynamicConfigurationOptions
+{
+    /// <summary>是否启用配置中心轮询；默认关闭以保持现有部署行为兼容。</summary>
+    public bool Enabled { get; init; }
+    /// <summary>Configuration Service 内网地址，不得配置为玩家公网入口。</summary>
+    public string BaseUrl { get; init; } = "http://configuration:8080";
+    /// <summary>用途隔离的只读服务凭据，禁止写入日志或普通动态配置。</summary>
+    public string ReadToken { get; init; } = string.Empty;
+    /// <summary>验证不可变配置版本的 HMAC 密钥；当前增量阶段由部署 Secret 注入。</summary>
+    public string SigningKey { get; init; } = string.Empty;
+    /// <summary>本地最后有效配置文件；容器生产环境应挂载仅本服务可写的持久卷。</summary>
+    public string LastKnownGoodPath { get; init; } = "data/configuration/edge-lkg.json";
+    /// <summary>拉取间隔秒数；失败时继续使用 LKG，不清空当前策略。</summary>
+    [Range(5, 3600)] public int PollSeconds { get; init; } = 30;
 }
 
 /// <summary>UE 客户端版本、协议、平台和渠道白名单。</summary>
@@ -56,6 +77,12 @@ public sealed class ClientContractOptions
     /// <summary>允许访问网关的最低语义版本。</summary>
     [Required]
     public string MinimumClientVersion { get; init; } = "1.0.0";
+
+    /// <summary>建议升级版本；低于该版本但不低于最低版本时只返回提示响应头，不阻断请求。</summary>
+    [Required] public string RecommendedClientVersion { get; init; } = "1.0.0";
+
+    /// <summary>显式阻断版本列表；安全撤回优先于普通最低版本比较。</summary>
+    public string[] BlockedVersions { get; init; } = [];
 
     /// <summary>网关接受的 API/游戏控制面协议版本。</summary>
     [MinLength(1)]

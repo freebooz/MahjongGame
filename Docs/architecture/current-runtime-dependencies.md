@@ -146,4 +146,7 @@ OTel Collector 对敏感属性执行删除/脱敏处理。Prometheus 加载普�
 | 完整牌局/重连 | `Scripts/RunFullMatchIntegration.ps1`、`Scripts/RunReconnectIntegration.ps1` |
 
 本次阶段 0 的实际执行结果在 `current-risk-register.md` 的“验证结果”章节统一记录。
+# 阶段 11 增量：配置发布依赖
+
+Configuration 依赖 PostgreSQL 和 OpenTelemetry；发布事件经自有 Outbox 由 Workers 发送至 NATS JetStream。EdgeGateway 可选依赖 Configuration 内网 API，并在上游不可用时使用持久化 Last Known Good。Admin BFF 可选依赖 Configuration 管理 API。Dedicated Server UDP/UE 网络不经过 Configuration 或 EdgeGateway。
 

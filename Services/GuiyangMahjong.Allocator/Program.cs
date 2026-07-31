@@ -37,6 +37,12 @@ builder.Services
                              && !string.IsNullOrWhiteSpace(options.Agones.FleetName)
                              && Uri.TryCreate(options.Agones.ApiServer, UriKind.Absolute, out _)),
         "Allocator Agones namespace, fleet, and API server are required in Agones mode.")
+    .Validate(options => !options.Agones.DynamicFleetConfiguration.Enabled
+                         || (options.Backend == AllocatorBackendMode.Agones
+                             && options.Agones.DynamicFleetConfiguration.ReadToken.Length >= 32
+                             && options.Agones.DynamicFleetConfiguration.SigningKey.Length >= 32
+                             && Uri.TryCreate(options.Agones.DynamicFleetConfiguration.BaseUrl, UriKind.Absolute, out _)),
+        "Allocator dynamic Fleet routing requires Agones mode, a valid Configuration URL, and dedicated 32+ character credentials.")
     .Validate(options => string.IsNullOrEmpty(options.MonitoringReadOnlyToken)
                          || options.MonitoringReadOnlyToken.Length >= 32,
         "Allocator:MonitoringReadOnlyToken must be empty or contain at least 32 characters.")
@@ -71,6 +77,15 @@ builder.Services
 
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddHttpClient();
+builder.Services.AddHttpClient("configuration-fleet", (provider, client) =>
+{
+    var config = provider.GetRequiredService<IOptions<AllocatorOptions>>().Value.Agones.DynamicFleetConfiguration;
+    client.BaseAddress = new Uri(config.BaseUrl.TrimEnd('/') + "/", UriKind.Absolute);
+    client.Timeout = TimeSpan.FromSeconds(Math.Min(config.PollSeconds, 30));
+});
+builder.Services.AddSingleton<AgonesFleetConfigurationState>();
+builder.Services.AddSingleton<IAgonesFleetRouteResolver>(provider => provider.GetRequiredService<AgonesFleetConfigurationState>());
+builder.Services.AddHostedService<AgonesFleetConfigurationPoller>();
 builder.Services.AddSingleton<PortLeasePool>();
 builder.Services.AddSingleton<InstanceCredentialService>();
 builder.Services.AddSingleton<GameServerProcessLauncher>();

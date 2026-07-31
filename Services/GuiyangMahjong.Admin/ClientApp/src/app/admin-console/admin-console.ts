@@ -10,6 +10,7 @@ import {
   submitAction,submitApproval,updateActionParameterFields
 } from "./admin-console-management";
 import {connectRealtime} from "./admin-console-realtime";
+import {disposeConfigurationGovernance,initializeConfigurationGovernance} from './configuration-governance';
 
 /**
  * 完成首轮数据加载后选择实时推送或兼容轮询通道。
@@ -52,6 +53,7 @@ export function initializeAdminConsole(){
   byId("actionSubmit").onclick=submitAction;
   byId("actionType").onchange=updateActionParameterFields;
   byId("approvalSubmit").onclick=submitApproval;
+  initializeConfigurationGovernance();
   void bootstrapMonitoring();
 }
 
@@ -60,6 +62,7 @@ export function disposeAdminConsole(){
   if(state.timer)clearInterval(state.timer);
   state.timer=null;
   state.eventAbort?.abort();state.eventAbort=null;
+  disposeConfigurationGovernance();
 }
 
 

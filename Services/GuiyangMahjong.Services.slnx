@@ -18,6 +18,9 @@
   <!-- 阶段 7：最终结算、战绩、回放证据和基础排行榜的独立部署单元及测试。 -->
   <Project Path="Apps/GuiyangMahjong.GameData/GuiyangMahjong.GameData.csproj" />
   <Project Path="Apps/GuiyangMahjong.GameData.Tests/GuiyangMahjong.GameData.Tests.csproj" />
+  <!-- 阶段 11：不可变动态配置、灰度求值、签名发布与回滚的独立数据所有者。 -->
+  <Project Path="Apps/GuiyangMahjong.Configuration/GuiyangMahjong.Configuration.csproj" />
+  <Project Path="Apps/GuiyangMahjong.Configuration.Tests/GuiyangMahjong.Configuration.Tests.csproj" />
   <!-- 阶段 9：可靠事件发布、幂等投影、维护与消息积压监控部署单元。 -->
   <Project Path="Apps/GuiyangMahjong.Workers/GuiyangMahjong.Workers.csproj" />
   <Project Path="Apps/GuiyangMahjong.Workers.Tests/GuiyangMahjong.Workers.Tests.csproj" />

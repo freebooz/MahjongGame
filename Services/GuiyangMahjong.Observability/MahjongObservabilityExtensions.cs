@@ -107,7 +107,9 @@ public static class MahjongObservabilityExtensions
                     .AddMeter(MahjongTelemetry.MeterName)
                     .AddMeter("GuiyangMahjong.Admin.Monitoring")
                     .AddMeter("GuiyangMahjong.Messaging")
-                    .AddMeter("GuiyangMahjong.Workers")
+                     .AddMeter("GuiyangMahjong.Workers")
+                     .AddMeter("GuiyangMahjong.Configuration")
+                     .AddMeter("GuiyangMahjong.Allocator.Configuration")
                     .AddAspNetCoreInstrumentation()
                     .AddHttpClientInstrumentation();
                 if (settings.RuntimeMetricsEnabled)

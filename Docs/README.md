@@ -21,3 +21,6 @@ MCP 操作日志和截图报告不在工作树长期保存；需要追溯时使�
 
 服务专属说明保存在对应 `Services/GuiyangMahjong.*/README.md`，机器契约及版本规则保存在
 `Contracts`。文档若不再描述当前行为，应直接更新核心文档；不得新增按阶段编号的状态报告。
+# 阶段 11 配置与多版本治理
+
+- [配置中心、灰度发布与多版本治理](architecture/stage-11-configuration-release-governance.md)

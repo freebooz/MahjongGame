@@ -16,6 +16,12 @@ psql "$admin_url" -v ON_ERROR_STOP=1 \
 psql "$admin_url" -v ON_ERROR_STOP=1 \
   -f "$root_dir/Services/GuiyangMahjong.Admin/Storage/schema.sql"
 psql "$admin_url" -v ON_ERROR_STOP=1 \
+  -f "$root_dir/Services/Apps/GuiyangMahjong.GameData/Storage/schema.sql"
+psql "$admin_url" -v ON_ERROR_STOP=1 \
+  -f "$root_dir/Services/Apps/GuiyangMahjong.Workers/Storage/schema.sql"
+psql "$admin_url" -v ON_ERROR_STOP=1 \
+  -f "$root_dir/Services/Apps/GuiyangMahjong.Configuration/Storage/schema.sql"
+psql "$admin_url" -v ON_ERROR_STOP=1 \
   -f "$root_dir/Deploy/postgres/least-privilege/002_grants.sql"
 
 # CI 密码仅存在于临时数据库，不对应任何环境；同时验证生产密码注入脚本可执行。
@@ -24,6 +30,9 @@ psql "$admin_url" -v ON_ERROR_STOP=1 \
   -v auth_password=ci-auth-password-only \
   -v lobby_password=ci-lobby-password-only \
   -v player_data_password=ci-player-password-only \
+  -v game_data_password=ci-game-data-password-only \
+  -v configuration_password=ci-configuration-password-only \
+  -v workers_password=ci-workers-password-only \
   -v admin_password=ci-admin-password-only \
   -v monitor_password=ci-monitor-password-only \
   -v audit_password=ci-audit-password-only \
@@ -37,6 +46,23 @@ port_number="${PGPORT:-5432}"
 PGPASSWORD=ci-auth-password-only psql \
   "host=$host_name port=$port_number dbname=$database_name user=mahjong_auth options='-c role=mahjong_auth_rw'" \
   -v ON_ERROR_STOP=1 -c 'SELECT count(*) FROM auth_identities' >/dev/null
+
+# Configuration 运行身份可以读写自身草稿，但不能执行 DDL 或读取 Settlement 权威表。
+PGPASSWORD=ci-configuration-password-only psql \
+  "host=$host_name port=$port_number dbname=$database_name user=mahjong_configuration options='-c role=mahjong_configuration_rw'" \
+  -v ON_ERROR_STOP=1 -c 'SELECT count(*) FROM configuration.config_drafts' >/dev/null
+if PGPASSWORD=ci-configuration-password-only psql \
+  "host=$host_name port=$port_number dbname=$database_name user=mahjong_configuration options='-c role=mahjong_configuration_rw'" \
+  -v ON_ERROR_STOP=1 -c 'CREATE TABLE configuration.forbidden_ddl(id integer)' >/dev/null 2>&1; then
+  echo "Configuration 运行身份意外获得 DDL" >&2
+  exit 1
+fi
+if PGPASSWORD=ci-configuration-password-only psql \
+  "host=$host_name port=$port_number dbname=$database_name user=mahjong_configuration options='-c role=mahjong_configuration_rw'" \
+  -v ON_ERROR_STOP=1 -c 'SELECT count(*) FROM settlement.final_results' >/dev/null 2>&1; then
+  echo "Configuration 运行身份意外读取 Settlement" >&2
+  exit 1
+fi
 
 # 越权查询和 DDL 必须由 PostgreSQL 以 insufficient_privilege 拒绝。
 if PGPASSWORD=ci-auth-password-only psql \

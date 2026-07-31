@@ -3,6 +3,7 @@ using System.Security.Claims;
 using System.Text;
 using System.Threading.RateLimiting;
 using GuiyangMahjong.EdgeGateway.Health;
+using GuiyangMahjong.EdgeGateway.Configuration;
 using GuiyangMahjong.EdgeGateway.Middleware;
 using GuiyangMahjong.EdgeGateway.Options;
 using GuiyangMahjong.EdgeGateway.RateLimiting;
@@ -48,7 +49,7 @@ builder.Services
     .Validate(
         options => Version.TryParse(
             options.ClientContract.MinimumClientVersion,
-            out _),
+            out _) && Version.TryParse(options.ClientContract.RecommendedClientVersion, out _),
         "EdgeGateway minimum client version must be a valid System.Version.")
     .Validate(
         options => options.PlayerTokens.LegacySigningKey.Length >= 32,
@@ -68,6 +69,11 @@ builder.Services
                    || (options.DistributedRateLimit.Enabled
                        && options.DistributedRateLimit.FailClosed),
         "Production EdgeGateway must enable fail-closed Redis rate limiting.")
+    .Validate(options => !options.DynamicConfiguration.Enabled
+                         || (Uri.TryCreate(options.DynamicConfiguration.BaseUrl, UriKind.Absolute, out _)
+                             && options.DynamicConfiguration.ReadToken.Length >= 32
+                             && options.DynamicConfiguration.SigningKey.Length >= 32),
+        "Enabled dynamic configuration requires an absolute internal URL and isolated 32+ character secrets.")
     .Validate(
         options => options.TrustedProxies.All(
                        value => IPAddress.TryParse(value, out _))
@@ -85,6 +91,11 @@ builder.WebHost.ConfigureKestrel(options =>
         configurationSnapshot.MaximumRequestBodyBytes;
 });
 
+builder.Services
+    .AddHttpClient("configuration", client =>
+        client.BaseAddress = new Uri(configurationSnapshot.DynamicConfiguration.BaseUrl));
+builder.Services.AddSingleton<GatewayConfigurationState>();
+builder.Services.AddHostedService<GatewayConfigurationPoller>();
 builder.Services
     .AddOptions<ForwardedHeadersOptions>()
     .Configure<IOptions<EdgeGatewayOptions>>(

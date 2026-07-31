@@ -21,6 +21,7 @@ public static class PlatformEventTypes
     public const string MatchFinished = "match.finished";
     public const string SettlementCommitted = "settlement.committed";
     public const string RoomTerminated = "room.terminated";
+    public const string ConfigurationPublished = "configuration.published";
 }
 
 /// <summary>身份凭据验证成功事实；不包含 Token、设备原始指纹或 IP。</summary>
@@ -201,5 +202,20 @@ public sealed record RoomTerminated(
     : IVersionedEventPayload
 {
     public static string EventType => PlatformEventTypes.RoomTerminated;
+    public static int SchemaVersion => 1;
+}
+
+/// <summary>
+/// 不可变动态配置版本已经提交的事实；事件只携带版本、摘要和作用域，服务仍需通过受控 API 拉取并验签正文。
+/// </summary>
+public sealed record ConfigurationPublished(
+    [property: JsonPropertyName("config_key")] string ConfigKey,
+    [property: JsonPropertyName("config_version")] long ConfigVersion,
+    [property: JsonPropertyName("payload_hash")] string PayloadHash,
+    [property: JsonPropertyName("published_at")] DateTimeOffset PublishedAt,
+    [property: JsonPropertyName("rollback_of_version")] long? RollbackOfVersion)
+    : IVersionedEventPayload
+{
+    public static string EventType => PlatformEventTypes.ConfigurationPublished;
     public static int SchemaVersion => 1;
 }

@@ -30,7 +30,8 @@ public static class PlatformEventSubjects
             [PlatformEventTypes.MatchStarted] = "match.started.v1",
             [PlatformEventTypes.MatchFinished] = "match.finished.v1",
             [PlatformEventTypes.SettlementCommitted] = "settlement.committed.v1",
-            [PlatformEventTypes.RoomTerminated] = "room.terminated.v1"
+            [PlatformEventTypes.RoomTerminated] = "room.terminated.v1",
+            [PlatformEventTypes.ConfigurationPublished] = "configuration.published.v1"
         };
 
     /// <summary>返回所有允许进入平台 Stream 的业务 Subject，不包含 DLQ。</summary>

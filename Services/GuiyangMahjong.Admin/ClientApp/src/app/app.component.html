@@ -42,6 +42,28 @@
       </div>
     </section>
 
+    <section id="configurationPanel" class="panel" hidden aria-label="配置治理">
+      <div class="panel-heading">
+        <div><p class="eyebrow">SIGNED CONFIGURATION</p><h2>配置草稿、审批与灰度发布</h2></div>
+        <small id="configurationSource">来源：Configuration Service · 尚未加载 · 陈旧阈值：60 秒</small>
+      </div>
+      <div class="filters">
+        <input id="configurationTicket" type="text" maxlength="128" placeholder="关联工单">
+        <input id="configurationReason" type="text" maxlength="80" placeholder="原因代码">
+        <button id="configurationCreate">创建草稿</button>
+      </div>
+      <textarea id="configurationPayload" rows="12" aria-label="平台配置 JSON">{
+  "client":{"minimumVersion":"1.0.0","recommendedVersion":"1.0.0","blockedVersions":[],"supportedProtocolVersions":["1"]},
+  "apiProtocolVersion":1,"featureFlags":{},"rollouts":[],
+  "fleetRoutes":[{"routeId":"stable-cn-southwest","fleet":"guiyang-mahjong","serverBuild":"replace-build","serverImageDigest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","ruleSetVersion":"guiyang-zhuoji-v1","ruleSetPackageHash":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","protocolVersion":"1","region":"cn-southwest","cell":"cell-a","canaryGroup":"stable","experimentId":null,"stopNewAllocations":false}],
+  "roomTemplates":[],"riskPolicyVersion":"risk-v1"
+}</textarea>
+      <p id="configurationMessage" class="notice">写请求不会执行影子副作用；创建人不能审批自己的草稿。</p>
+      <div class="table-wrap"><table><thead><tr>
+        <th>草稿</th><th>状态</th><th>创建人</th><th>工单</th><th>创建时间</th><th>操作</th>
+      </tr></thead><tbody id="configurationDraftsBody"><tr><td colspan="6" class="empty">等待加载</td></tr></tbody></table></div>
+    </section>
+
     <section id="outboxPanel" class="panel" hidden>
       <div class="panel-heading">
         <div><p class="eyebrow">TRANSACTIONAL OUTBOX</p><h2>命令 Outbox</h2></div>

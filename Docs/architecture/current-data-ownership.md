@@ -125,3 +125,6 @@
 - 回滚：阶段10新增 `rollback-stage10.sql` 可在先关闭 BFF 会话后精确删除管理员会话和登录安全事件表；其他历史 Schema 仍采用发布前备份或向前修复。
 - 数据校验：有架构测试验证 Schema 输出隔离；外部 PostgreSQL 测试验证关键唯一约束和事务。
 - 阶段10已在临时 PostgreSQL 17 上验证 Admin Schema 前滚、并发持久化和精确回滚；生产仍必须由独立 migration 身份执行。
+# 阶段 11 增量：Configuration 所有权
+
+`configuration.config_drafts`、`configuration.config_versions`、`configuration.config_current`、`configuration.config_application_reports` 和 `configuration_integration.platform_outbox` 由 `GuiyangMahjong.Configuration` 唯一写入。Workers 仅可领取、标记和归档 Outbox；Admin 只能通过 Configuration 管理命令 API 操作，不能直接写表。已发布版本为不可变历史，回滚创建更高版本。

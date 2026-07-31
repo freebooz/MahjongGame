@@ -23,6 +23,26 @@ public sealed class AgonesAllocatorOptions
     [Required] public string ServiceAccountCaPath { get; init; } =
         "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt";
     [Range(1, 60)] public int RequestTimeoutSeconds { get; init; } = 10;
+
+    /// <summary>
+    /// 配置中心 Fleet 路由消费参数。关闭时沿用 FleetName 安全基线；开启后只允许当前签名配置中明确启用的
+    /// Build、RuleSet、Protocol、Region 路由进入新分配，拉取失败时继续使用磁盘 LKG。
+    /// </summary>
+    [Required] public AgonesFleetConfigurationOptions DynamicFleetConfiguration { get; init; } = new();
+}
+
+/// <summary>
+/// Allocator 动态 Fleet 路由配置。读取令牌和签名密钥必须通过环境变量或 Secret 注入，
+/// LKG 文件应位于持久卷；该配置不改变已分配房间的 Fleet，也不会触发旧 GameServer 终止。
+/// </summary>
+public sealed class AgonesFleetConfigurationOptions
+{
+    public bool Enabled { get; init; }
+    [Required, Url] public string BaseUrl { get; init; } = "http://configuration:18086";
+    [Range(5, 300)] public int PollSeconds { get; init; } = 30;
+    [Required] public string LastKnownGoodPath { get; init; } = "allocator-state/fleet-routing-lkg.json";
+    [MinLength(32)] public string ReadToken { get; init; } = string.Empty;
+    [MinLength(32)] public string SigningKey { get; init; } = string.Empty;
 }
 
 /// <summary>

@@ -1,0 +1,21 @@
+# 阶段 11 数据库发布顺序。每个步骤必须独立审批和记录迁移摘要，不允许合并删除兼容字段。
+release: stage-11-configuration-governance
+owner: Configuration
+expand:
+  - create_schemas: [configuration, configuration_integration]
+  - create_tables: [config_drafts, config_versions, config_current, config_application_reports, platform_outbox]
+  - grant_runtime_dml_without_ddl: mahjong_configuration_rw
+migrate:
+  - seed_required: false
+  - backfill_required: false
+  - validation: "config_versions/config_current 外键一致，发布 Outbox 与版本同事务"
+contract:
+  earliest_release: stage-13-or-later
+  preconditions:
+    - all_consumers_report_supported_config_version
+    - old_client_and_old_fleet_traffic_is_zero_for_retention_window
+    - rollback_drill_completed
+  destructive_changes: []
+rollback:
+  application: "关闭 Admin__Configuration__Enabled 与 EdgeGateway__DynamicConfiguration__Enabled，继续使用静态基线/LKG"
+  database: "发布后保留 Schema 与不可变历史；不得 DROP。仅在从未发布版本的空环境中由 migration 身份删除"

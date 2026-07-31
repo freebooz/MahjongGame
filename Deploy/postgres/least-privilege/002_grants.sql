@@ -7,6 +7,7 @@ REVOKE ALL ON SCHEMA
     lobby, room, matchmaking,
     player_data, admin_monitor,
     settlement, game_record, replay, leaderboard, game_data_integration,
+    configuration, configuration_integration,
     identity_integration, lobby_integration, worker_integration, worker_projection
 FROM PUBLIC;
 GRANT USAGE ON SCHEMA public TO
@@ -20,6 +21,9 @@ GRANT USAGE ON SCHEMA player_data TO
     mahjong_player_data_rw, mahjong_monitor_ro;
 GRANT USAGE ON SCHEMA settlement, game_record, replay, leaderboard, game_data_integration TO
     mahjong_game_data_rw, mahjong_monitor_ro;
+-- Configuration 是独立数据所有者；Worker 只领取其 Outbox，Admin 没有该 Schema 的直接写权限。
+GRANT USAGE ON SCHEMA configuration, configuration_integration TO
+    mahjong_configuration_rw, mahjong_workers_rw, mahjong_monitor_ro;
 -- Producer 只能向自己的事务 Outbox 追加；Worker 只能领取、标记和归档 Outbox，不能读取业务表。
 GRANT USAGE ON SCHEMA identity_integration TO mahjong_auth_rw, mahjong_workers_rw, mahjong_monitor_ro;
 GRANT USAGE ON SCHEMA lobby_integration TO mahjong_lobby_rw, mahjong_workers_rw, mahjong_monitor_ro;
@@ -41,6 +45,8 @@ ALTER SCHEMA game_record OWNER TO mahjong_migration;
 ALTER SCHEMA replay OWNER TO mahjong_migration;
 ALTER SCHEMA leaderboard OWNER TO mahjong_migration;
 ALTER SCHEMA game_data_integration OWNER TO mahjong_migration;
+ALTER SCHEMA configuration OWNER TO mahjong_migration;
+ALTER SCHEMA configuration_integration OWNER TO mahjong_migration;
 ALTER SCHEMA identity_integration OWNER TO mahjong_migration;
 ALTER SCHEMA lobby_integration OWNER TO mahjong_migration;
 ALTER SCHEMA worker_integration OWNER TO mahjong_migration;
@@ -55,6 +61,7 @@ REVOKE ALL ON ALL TABLES IN SCHEMA auth, session, player, integration FROM PUBLI
 REVOKE ALL ON ALL TABLES IN SCHEMA lobby, room, matchmaking FROM PUBLIC;
 REVOKE ALL ON ALL TABLES IN SCHEMA player_data, admin_monitor FROM PUBLIC;
 REVOKE ALL ON ALL TABLES IN SCHEMA settlement, game_record, replay, leaderboard, game_data_integration FROM PUBLIC;
+REVOKE ALL ON ALL TABLES IN SCHEMA configuration, configuration_integration FROM PUBLIC;
 REVOKE ALL ON ALL TABLES IN SCHEMA identity_integration, lobby_integration, worker_integration, worker_projection FROM PUBLIC;
 
 -- 事务生产者只有 INSERT 权限；SELECT/UPDATE/DELETE 仅交给发布 Worker，阻止业务服务伪造已发布状态。
@@ -63,9 +70,11 @@ GRANT INSERT ON lobby_integration.platform_outbox TO mahjong_lobby_rw;
 GRANT SELECT, UPDATE, DELETE ON identity_integration.platform_outbox,
     lobby_integration.platform_outbox,
     game_data_integration.platform_outbox TO mahjong_workers_rw;
+GRANT SELECT, UPDATE, DELETE ON configuration_integration.platform_outbox TO mahjong_workers_rw;
 GRANT SELECT, INSERT ON identity_integration.platform_outbox_archive,
     lobby_integration.platform_outbox_archive,
     game_data_integration.platform_outbox_archive TO mahjong_workers_rw;
+GRANT SELECT, INSERT ON configuration_integration.platform_outbox_archive TO mahjong_workers_rw;
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA worker_integration, worker_projection TO mahjong_workers_rw;
 GRANT SELECT ON ALL TABLES IN SCHEMA identity_integration, lobby_integration, worker_integration, worker_projection TO mahjong_monitor_ro;
 REVOKE ALL ON ALL SEQUENCES IN SCHEMA admin_monitor FROM PUBLIC;
@@ -90,6 +99,7 @@ BEGIN
             'lobby', 'room', 'matchmaking',
             'player_data', 'admin_monitor',
             'settlement', 'game_record', 'replay', 'leaderboard', 'game_data_integration',
+            'configuration', 'configuration_integration',
             'identity_integration', 'lobby_integration', 'worker_integration', 'worker_projection')
     LOOP
         EXECUTE format('ALTER TABLE %s OWNER TO mahjong_migration', object_record.object_name);
@@ -133,6 +143,9 @@ TO mahjong_player_data_rw;
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA
     settlement, game_record, replay, leaderboard, game_data_integration
 TO mahjong_game_data_rw;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA
+    configuration, configuration_integration
+TO mahjong_configuration_rw;
 
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE
     admin_monitor.action_requests,
@@ -166,6 +179,19 @@ GRANT SELECT ON ALL TABLES IN SCHEMA player_data, admin_monitor
 TO mahjong_monitor_ro;
 GRANT SELECT ON ALL TABLES IN SCHEMA settlement, game_record, replay, leaderboard, game_data_integration
 TO mahjong_monitor_ro;
+GRANT SELECT ON ALL TABLES IN SCHEMA configuration, configuration_integration
+TO mahjong_monitor_ro;
+
+ALTER DEFAULT PRIVILEGES FOR ROLE mahjong_migration IN SCHEMA configuration
+    REVOKE ALL ON TABLES FROM PUBLIC;
+ALTER DEFAULT PRIVILEGES FOR ROLE mahjong_migration IN SCHEMA configuration
+    GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO mahjong_configuration_rw;
+ALTER DEFAULT PRIVILEGES FOR ROLE mahjong_migration IN SCHEMA configuration_integration
+    REVOKE ALL ON TABLES FROM PUBLIC;
+ALTER DEFAULT PRIVILEGES FOR ROLE mahjong_migration IN SCHEMA configuration_integration
+    GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO mahjong_configuration_rw;
+ALTER DEFAULT PRIVILEGES FOR ROLE mahjong_migration IN SCHEMA configuration_integration
+    GRANT SELECT, UPDATE, DELETE ON TABLES TO mahjong_workers_rw;
 
 ALTER DEFAULT PRIVILEGES FOR ROLE mahjong_migration IN SCHEMA settlement
     GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO mahjong_game_data_rw;

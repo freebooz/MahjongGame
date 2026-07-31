@@ -32,6 +32,7 @@ services:
       LOBBY_DB_PASSWORD: ${LOBBY_DB_PASSWORD:?LOBBY_DB_PASSWORD is required}
       PLAYER_DATA_DB_PASSWORD: ${PLAYER_DATA_DB_PASSWORD:?PLAYER_DATA_DB_PASSWORD is required}
       GAME_DATA_DB_PASSWORD: ${GAME_DATA_DB_PASSWORD:?GAME_DATA_DB_PASSWORD is required}
+      CONFIGURATION_DB_PASSWORD: ${CONFIGURATION_DB_PASSWORD:?CONFIGURATION_DB_PASSWORD is required}
       WORKERS_DB_PASSWORD: ${WORKERS_DB_PASSWORD:?WORKERS_DB_PASSWORD is required}
       ADMIN_DB_PASSWORD: ${ADMIN_DB_PASSWORD:?ADMIN_DB_PASSWORD is required}
       MONITOR_DB_PASSWORD: ${MONITOR_DB_PASSWORD:?MONITOR_DB_PASSWORD is required}
@@ -44,6 +45,7 @@ services:
       - ../../Services/GuiyangMahjong.PlayerData/Storage:/migration/player-data:ro
       - ../../Services/GuiyangMahjong.Admin/Storage:/migration/admin:ro
       - ../../Services/Apps/GuiyangMahjong.GameData/Storage:/migration/game-data:ro
+      - ../../Services/Apps/GuiyangMahjong.Configuration/Storage:/migration/configuration:ro
       - ../../Services/Apps/GuiyangMahjong.Workers/Storage:/migration/workers:ro
     entrypoint: ["/bin/sh", "-ec"]
     command:
@@ -55,6 +57,7 @@ services:
         $$base -f /migration/player-data/schema.sql
         $$base -f /migration/admin/schema.sql
         $$base -f /migration/game-data/schema.sql
+        $$base -f /migration/configuration/schema.sql
         $$base -f /migration/workers/schema.sql
         $$base -f /migration/least-privilege/002_grants.sql
         $$base \
@@ -63,6 +66,7 @@ services:
           -v lobby_password="$$LOBBY_DB_PASSWORD" \
           -v player_data_password="$$PLAYER_DATA_DB_PASSWORD" \
           -v game_data_password="$$GAME_DATA_DB_PASSWORD" \
+          -v configuration_password="$$CONFIGURATION_DB_PASSWORD" \
           -v workers_password="$$WORKERS_DB_PASSWORD" \
           -v admin_password="$$ADMIN_DB_PASSWORD" \
           -v monitor_password="$$MONITOR_DB_PASSWORD" \
@@ -157,6 +161,9 @@ services:
       Workers__OutboxSources__2__Name: game-data
       Workers__OutboxSources__2__Schema: game_data_integration
       Workers__OutboxSources__2__ConnectionString: Host=postgres;Port=5432;Database=mahjong;Username=mahjong_workers;Password=${WORKERS_DB_PASSWORD};Options=-c role=mahjong_workers_rw
+      Workers__OutboxSources__3__Name: configuration
+      Workers__OutboxSources__3__Schema: configuration_integration
+      Workers__OutboxSources__3__ConnectionString: Host=postgres;Port=5432;Database=mahjong;Username=mahjong_workers;Password=${WORKERS_DB_PASSWORD};Options=-c role=mahjong_workers_rw
     depends_on:
       postgres-migration: {condition: service_completed_successfully}
       nats: {condition: service_healthy}
@@ -172,6 +179,38 @@ services:
     pids_limit: 256
     read_only: true
     tmpfs: ["/tmp:rw,noexec,nosuid,size=64m"]
+    security_opt: ["no-new-privileges:true"]
+    logging: *logging
+
+  configuration:
+    image: ${IMAGE_REGISTRY:-local}/guiyang-mahjong-configuration:${MAHJONG_VERSION:-dev}
+    build:
+      context: ../..
+      dockerfile: Services/Apps/GuiyangMahjong.Configuration/Dockerfile
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      Observability__Enabled: ${OBSERVABILITY_ENABLED:-false}
+      Observability__OtlpEndpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://host.docker.internal:4317}
+      ConfigurationService__PersistenceMode: Postgres
+      ConfigurationService__ApplyDatabaseMigrations: "false"
+      ConfigurationService__PostgresConnectionString: Host=postgres;Port=5432;Database=mahjong;Username=mahjong_configuration;Password=${CONFIGURATION_DB_PASSWORD};Options=-c role=mahjong_configuration_rw
+      ConfigurationService__SigningKey: ${CONFIGURATION_SIGNING_KEY:?CONFIGURATION_SIGNING_KEY is required}
+      ConfigurationService__AdminCommandToken: ${CONFIGURATION_ADMIN_TOKEN:?CONFIGURATION_ADMIN_TOKEN is required}
+      ConfigurationService__ServiceReadToken: ${CONFIGURATION_READ_TOKEN:?CONFIGURATION_READ_TOKEN is required}
+    depends_on:
+      postgres-migration: {condition: service_completed_successfully}
+      nats: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "--show-error", "http://127.0.0.1:8080/health/ready"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+    cpus: ${CONFIGURATION_CPUS:-0.5}
+    mem_limit: ${CONFIGURATION_MEMORY:-256m}
+    pids_limit: 128
+    read_only: true
+    tmpfs: ["/tmp:rw,noexec,nosuid,size=32m"]
     security_opt: ["no-new-privileges:true"]
     logging: *logging
 
@@ -460,6 +499,12 @@ services:
       EdgeGateway__DistributedRateLimit__PermitLimit: ${EDGE_DISTRIBUTED_PERMIT_LIMIT:-1000}
       EdgeGateway__DistributedRateLimit__WindowSeconds: ${EDGE_RATE_LIMIT_WINDOW_SECONDS:-60}
       EdgeGateway__DistributedRateLimit__FailClosed: "true"
+      # 动态配置故障时网关继续使用持久化 LKG；签名密钥与读取凭据仅从环境 Secret 注入。
+      EdgeGateway__DynamicConfiguration__Enabled: "true"
+      EdgeGateway__DynamicConfiguration__BaseUrl: http://configuration:8080
+      EdgeGateway__DynamicConfiguration__ReadToken: ${CONFIGURATION_READ_TOKEN:?CONFIGURATION_READ_TOKEN is required}
+      EdgeGateway__DynamicConfiguration__SigningKey: ${CONFIGURATION_SIGNING_KEY:?CONFIGURATION_SIGNING_KEY is required}
+      EdgeGateway__DynamicConfiguration__LastKnownGoodPath: /var/lib/guiyang-mahjong/configuration/edge-lkg.json
       # 容器直接接收玩家连接；如前置 Ingress/LB，必须显式覆盖可信代理 IP/CIDR。
       EdgeGateway__TrustedProxies__0: 127.0.0.1
       EdgeGateway__TrustedProxies__1: ::1
@@ -470,6 +515,7 @@ services:
       ReverseProxy__Clusters__lobby__Destinations__primary__Address: http://lobby:8080
       ReverseProxy__Clusters__player-data__Destinations__primary__Address: http://player-data:8080
     depends_on:
+      configuration: {condition: service_healthy}
       auth: {condition: service_healthy}
       lobby: {condition: service_healthy}
       player-data: {condition: service_healthy}
@@ -489,6 +535,8 @@ services:
     pids_limit: 256
     read_only: true
     tmpfs: ["/tmp:rw,noexec,nosuid,size=64m"]
+    volumes:
+      - edge-configuration-lkg:/var/lib/guiyang-mahjong/configuration
     security_opt: ["no-new-privileges:true"]
     logging: *logging
 
@@ -583,6 +631,9 @@ services:
       Admin__Wallet__Enabled: "true"
       Admin__Wallet__BaseUrl: http://player-data:8080
       Admin__Wallet__CommandToken: ${PLAYER_DATA_ADMIN_COMMAND_TOKEN:?PLAYER_DATA_ADMIN_COMMAND_TOKEN is required}
+      Admin__Configuration__Enabled: "true"
+      Admin__Configuration__BaseUrl: http://configuration:8080
+      Admin__Configuration__CommandToken: ${CONFIGURATION_ADMIN_TOKEN:?CONFIGURATION_ADMIN_TOKEN is required}
       Admin__Wallet__TimeoutSeconds: ${ADMIN_WALLET_TIMEOUT_SECONDS:-5}
       Admin__Auth__Enabled: "true"
       Admin__Auth__BaseUrl: http://auth:8080
@@ -597,6 +648,7 @@ services:
       Admin__Allocators__0__MonitoringToken: ${ADMIN_TOPOLOGY_ALLOCATOR_TOKEN:?ADMIN_TOPOLOGY_ALLOCATOR_TOKEN is required}
       Admin__Allocators__0__ManagementCommandToken: ${ALLOCATOR_MANAGEMENT_COMMAND_TOKEN:?ALLOCATOR_MANAGEMENT_COMMAND_TOKEN is required}
     depends_on:
+      configuration: {condition: service_healthy}
       auth: {condition: service_healthy}
       lobby: {condition: service_healthy}
       game-node: {condition: service_healthy}
@@ -622,3 +674,4 @@ volumes:
   postgres-data:
   redis-data:
   nats-data:
+  edge-configuration-lkg:

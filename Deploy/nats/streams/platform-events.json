@@ -15,6 +15,7 @@
     "match.finished.v1",
     "settlement.committed.v1",
     "room.terminated.v1",
+    "configuration.published.v1",
     "platform.failed.v1"
   ],
   "retention": "limits",
@@ -25,4 +26,3 @@
   "max_msg_size": 1048576,
   "duplicate_window": 600000000000
 }
-

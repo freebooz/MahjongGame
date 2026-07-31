@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <!-- 配置中心独占 Configuration Schema 输出目录，避免与其他应用的 schema.sql 相互覆盖。 -->
+    <MahjongSchemaServiceName>Configuration</MahjongSchemaServiceName>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Npgsql" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\GuiyangMahjong.Observability\GuiyangMahjong.Observability.csproj" />
+    <ProjectReference Include="..\..\Contracts\GuiyangMahjong.Contracts.Common\GuiyangMahjong.Contracts.Common.csproj" />
+    <ProjectReference Include="..\..\Contracts\GuiyangMahjong.Contracts.Events\GuiyangMahjong.Contracts.Events.csproj" />
+    <ProjectReference Include="..\..\BuildingBlocks\GuiyangMahjong.BuildingBlocks.Messaging\GuiyangMahjong.BuildingBlocks.Messaging.csproj" />
+  </ItemGroup>
+</Project>

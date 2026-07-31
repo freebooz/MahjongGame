@@ -11,6 +11,7 @@ BEGIN
         'mahjong_lobby_rw',
         'mahjong_player_data_rw',
         'mahjong_game_data_rw',
+        'mahjong_configuration_rw',
         'mahjong_workers_rw',
         'mahjong_admin_rw',
         'mahjong_monitor_ro',
@@ -31,6 +32,7 @@ BEGIN
         'mahjong_lobby',
         'mahjong_player_data',
         'mahjong_game_data',
+        'mahjong_configuration',
         'mahjong_workers',
         'mahjong_admin',
         'mahjong_monitor',
@@ -52,6 +54,8 @@ GRANT mahjong_auth_rw TO mahjong_auth;
 GRANT mahjong_lobby_rw TO mahjong_lobby;
 GRANT mahjong_player_data_rw TO mahjong_player_data;
 GRANT mahjong_game_data_rw TO mahjong_game_data;
+-- Configuration 运行身份只能显式切换到自身最小权限角色，不继承 migration DDL 权限。
+GRANT mahjong_configuration_rw TO mahjong_configuration;
 GRANT mahjong_workers_rw TO mahjong_workers;
 GRANT mahjong_admin_rw TO mahjong_admin;
 GRANT mahjong_monitor_ro TO mahjong_monitor;

@@ -1,0 +1,28 @@
+# 配置服务镜像必须由 CI 替换为不可变 digest；禁止在生产环境使用 latest。
+configuration:
+  replicas: 2
+  image: ghcr.io/freebooz/guiyang-mahjong-configuration
+  digest: sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+  configVersion: "0"
+  resources:
+    requests: {cpu: 100m, memory: 128Mi}
+    limits: {cpu: "1", memory: 512Mi}
+
+# Stable 与 Canary 使用独立 Fleet；停止 Canary 只将其新分配权重归零，不删除正在游戏的实例。
+gameServer:
+  stable:
+    enabled: true
+    fleet: guiyang-mahjong
+    replicas: 2
+    build: replace-stable-build
+    ruleset: guiyang-zhuoji-v1
+    imageDigest: sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+  canary:
+    enabled: true
+    fleet: guiyang-mahjong-canary
+    replicas: 1
+    build: replace-canary-build
+    ruleset: replace-canary-ruleset
+    imageDigest: sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+  protocolVersion: "1"
+  region: cn-southwest

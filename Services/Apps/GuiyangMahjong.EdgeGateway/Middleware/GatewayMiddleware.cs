@@ -6,6 +6,7 @@ using GuiyangMahjong.EdgeGateway.Options;
 using GuiyangMahjong.EdgeGateway.RateLimiting;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.Extensions.Options;
+using GuiyangMahjong.EdgeGateway.Configuration;
 using Microsoft.Net.Http.Headers;
 using Yarp.ReverseProxy.Forwarder;
 
@@ -272,7 +273,8 @@ public sealed class GatewayHostValidationMiddleware
 /// </summary>
 public sealed class ClientContractMiddleware(
     RequestDelegate next,
-    IOptions<EdgeGatewayOptions> options)
+    IOptions<EdgeGatewayOptions> options,
+    GatewayConfigurationState dynamicConfiguration)
 {
     private readonly EdgeGatewayOptions options = options.Value;
 
@@ -321,9 +323,11 @@ public sealed class ClientContractMiddleware(
             context.Request.Headers["X-Platform"].ToString().Trim();
         var channel =
             context.Request.Headers["X-Channel"].ToString().Trim();
+        // 每个请求只读取一次原子快照，保证最低版本和协议列表来自同一配置版本。
+        var activeContract = dynamicConfiguration.Snapshot();
         if (!Version.TryParse(clientVersion, out var parsedClientVersion)
             || !Version.TryParse(
-                options.ClientContract.MinimumClientVersion,
+                activeContract.Contract.MinimumClientVersion,
                 out var minimumClientVersion))
         {
             await GatewayErrorWriter.WriteAsync(
@@ -331,6 +335,16 @@ public sealed class ClientContractMiddleware(
                 StatusCodes.Status400BadRequest,
                 "CLIENT_CONTRACT_INVALID",
                 "客户端版本头缺失或格式无效。");
+            return;
+        }
+        // 显式阻断用于紧急撤回，必须优先于普通最低版本提示。
+        if (activeContract.Contract.BlockedVersions.Contains(clientVersion, StringComparer.Ordinal))
+        {
+            await GatewayErrorWriter.WriteAsync(
+                context,
+                StatusCodes.Status426UpgradeRequired,
+                "CLIENT_VERSION_BLOCKED",
+                "当前客户端版本已被安全策略阻断，请升级后继续。");
             return;
         }
         if (parsedClientVersion < minimumClientVersion)
@@ -342,7 +356,10 @@ public sealed class ClientContractMiddleware(
                 "客户端版本过低，必须升级后继续。");
             return;
         }
-        if (!options.ClientContract.SupportedProtocolVersions.Contains(
+        if (Version.TryParse(activeContract.Contract.RecommendedClientVersion, out var recommended)
+            && parsedClientVersion < recommended)
+            context.Response.Headers["X-Recommended-Client-Version"] = recommended.ToString();
+        if (!activeContract.Contract.SupportedProtocolVersions.Contains(
                 protocolVersion,
                 StringComparer.Ordinal))
         {
@@ -374,6 +391,7 @@ public sealed class ClientContractMiddleware(
             protocolVersion;
         context.Request.Headers["X-Platform"] = platform;
         context.Request.Headers["X-Channel"] = channel;
+        context.Request.Headers["X-Config-Version"] = activeContract.ConfigVersion.ToString(System.Globalization.CultureInfo.InvariantCulture);
         await next(context);
     }
 

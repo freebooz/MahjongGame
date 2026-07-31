@@ -6,6 +6,7 @@ metadata:
   labels:
     app.kubernetes.io/name: guiyang-mahjong
     app.kubernetes.io/component: game-server
+    mahjong.freebooz/release-track: stable
 spec:
   replicas: 2
   scheduling: Packed
@@ -26,6 +27,8 @@ spec:
         mahjong.freebooz/ruleset-version: guiyang-zhuoji-v1
         mahjong.freebooz/protocol-version: "1"
         mahjong.freebooz/capacity: "4"
+        mahjong.freebooz/release-track: stable
+        mahjong.freebooz/config-version: "REPLACE_WITH_CONFIG_VERSION"
     spec:
       ports:
         - name: game

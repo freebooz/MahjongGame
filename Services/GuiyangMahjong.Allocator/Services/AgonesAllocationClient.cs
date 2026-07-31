@@ -57,12 +57,16 @@ public sealed class KubernetesAgonesAllocationClient : IAgonesAllocationClient, 
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private readonly AllocatorOptions options;
+    private readonly IAgonesFleetRouteResolver fleetRoutes;
     private readonly HttpClient client;
 
     /// <summary>建立使用集群内身份的 HTTP 客户端；配置错误会在首次操作或就绪检查中显式失败。</summary>
-    public KubernetesAgonesAllocationClient(IOptions<AllocatorOptions> options)
+    public KubernetesAgonesAllocationClient(
+        IOptions<AllocatorOptions> options,
+        IAgonesFleetRouteResolver fleetRoutes)
     {
         this.options = options.Value;
+        this.fleetRoutes = fleetRoutes;
         var agones = this.options.Agones;
         var handler = new HttpClientHandler();
         if (File.Exists(agones.ServiceAccountCaPath))
@@ -92,6 +96,8 @@ public sealed class KubernetesAgonesAllocationClient : IAgonesAllocationClient, 
     public async Task<AgonesAllocationResult> AllocateAsync(
         AgonesAllocationSpec spec, CancellationToken cancellationToken)
     {
+        // 在产生 Kubernetes 副作用前解析唯一的已发布路由；暂停 Canary 时只阻断新房间，不影响旧实例。
+        var fleetName = fleetRoutes.Resolve(spec);
         var annotations = new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["mahjong.freebooz/room-id"] = spec.RoomId,
@@ -120,7 +126,7 @@ public sealed class KubernetesAgonesAllocationClient : IAgonesAllocationClient, 
                 scheduling = "Packed",
                 selectors = new[] { new { matchLabels = new Dictionary<string, string>
                 {
-                    ["agones.dev/fleet"] = options.Agones.FleetName,
+                    ["agones.dev/fleet"] = fleetName,
                     ["mahjong.freebooz/game"] = spec.GameType,
                     ["mahjong.freebooz/region"] = spec.Region,
                     ["mahjong.freebooz/server-build"] = spec.BuildVersion,

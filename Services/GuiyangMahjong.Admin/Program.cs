@@ -383,6 +383,7 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
 builder.Services.ConfigureHttpJsonOptions(options =>
     options.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 builder.Services.AddHttpClient();
+builder.Services.AddSingleton<ConfigurationManagementClient>();
 builder.Services.AddHttpClient(
     nameof(AuditArchiveDispatcher),
     (provider, client) =>

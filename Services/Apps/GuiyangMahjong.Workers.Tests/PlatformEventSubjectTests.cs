@@ -24,7 +24,8 @@ public sealed class PlatformEventSubjectTests
             [PlatformEventTypes.MatchStarted] = "match.started.v1",
             [PlatformEventTypes.MatchFinished] = "match.finished.v1",
             [PlatformEventTypes.SettlementCommitted] = "settlement.committed.v1",
-            [PlatformEventTypes.RoomTerminated] = "room.terminated.v1"
+            [PlatformEventTypes.RoomTerminated] = "room.terminated.v1",
+            [PlatformEventTypes.ConfigurationPublished] = "configuration.published.v1"
         };
 
         foreach (var (eventType, subject) in expected)

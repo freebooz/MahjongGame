@@ -25,5 +25,6 @@ public static partial class AdminEndpoints
         MapActionEndpoints(api);
         MapInvestigationEndpoints(api);
         MapAuditEndpoints(api);
+        MapConfigurationEndpoints(api);
     }
 }

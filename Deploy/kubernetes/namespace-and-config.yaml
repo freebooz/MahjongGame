@@ -95,6 +95,9 @@ data:
   Admin__ReplayArchive__MaxObjectMegabytes: "64"
   Admin__Wallet__Enabled: "true"
   Admin__Wallet__BaseUrl: http://mahjong-player-data:8080
+  Admin__Configuration__Enabled: "true"
+  Admin__Configuration__BaseUrl: http://mahjong-configuration:8080
+  Admin__Configuration__TimeoutSeconds: "5"
   Admin__Wallet__TimeoutSeconds: "5"
   Admin__Allocators__0__Enabled: "true"
   Admin__Allocators__0__ClusterId: production
@@ -124,6 +127,11 @@ data:
   Allocator__Agones__Namespace: guiyang-mahjong
   Allocator__Agones__FleetName: guiyang-mahjong
   Allocator__Agones__ApiServer: https://kubernetes.default.svc
+  # Fleet 动态配置只决定新分配的兼容路由；旧房间保持原实例和原 Build/RuleSet。
+  Allocator__Agones__DynamicFleetConfiguration__Enabled: "true"
+  Allocator__Agones__DynamicFleetConfiguration__BaseUrl: http://mahjong-configuration:8080
+  Allocator__Agones__DynamicFleetConfiguration__PollSeconds: "30"
+  Allocator__Agones__DynamicFleetConfiguration__LastKnownGoodPath: /var/lib/guiyang-mahjong/state/fleet-routing-lkg.json
   Allocator__StateFilePath: /var/lib/guiyang-mahjong/state/instances.json
   Allocator__MatchResultOutboxDirectory: /var/lib/guiyang-mahjong/game-shared/outbox
   Allocator__RecoveryDirectory: /var/lib/guiyang-mahjong/game-shared/recovery
@@ -158,6 +166,12 @@ data:
   Workers__OutboxSources__1__Schema: lobby_integration
   Workers__OutboxSources__2__Name: game-data
   Workers__OutboxSources__2__Schema: game_data_integration
+  Workers__OutboxSources__3__Name: configuration
+  Workers__OutboxSources__3__Schema: configuration_integration
+  # Configuration 静态启动配置不参与动态发布；生产运行身份关闭 DDL。
+  ConfigurationService__PersistenceMode: Postgres
+  ConfigurationService__ApplyDatabaseMigrations: "false"
+  ConfigurationService__RetainedVersions: "10"
   Workers__SessionCleanup__Enabled: "false"
   Workers__RoomCleanup__Enabled: "false"
 # Kubernetes 命名空间与非敏感 ConfigMap 基线：统一服务发现、区域、集群和可观测性配置。
