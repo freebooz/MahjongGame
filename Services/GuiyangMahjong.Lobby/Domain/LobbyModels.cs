@@ -209,6 +209,7 @@ public sealed record SettlementAuthorityRequest(
     long RoomEpoch,
     string RuleSetVersion,
     string ServerBuild,
+    int RoundNo,
     string CredentialSha256);
 
 /// <summary>Lobby 返回的当前单一权威实例与参与者集合；不返回房间密码、Ticket 或凭据。</summary>
@@ -220,6 +221,7 @@ public sealed record SettlementAuthorityResponse(
     long RoomEpoch,
     string RuleSetVersion,
     string ServerBuild,
+    int ExpectedRoundNo,
     string[] PlayerIds,
     string? FailureCode = null);
 

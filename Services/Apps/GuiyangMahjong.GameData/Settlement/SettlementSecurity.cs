@@ -35,8 +35,6 @@ public static class SettlementSecurity
                 .Distinct(StringComparer.Ordinal).Count() != envelope.PlayerResults.Length
             || envelope.PlayerResults.Select(player => player.SeatId).Distinct().Count()
                 != envelope.PlayerResults.Length
-            || envelope.PlayerResults.Select(player => player.Rank).Distinct().Count()
-                != envelope.PlayerResults.Length
             || envelope.PlayerResults.Any(player => !IsPlayerId(player.PlayerId)
                 || player.SeatId is < 0 or > 3
                 || player.Rank is < 1 or > 4)
@@ -65,6 +63,7 @@ public static class SettlementSecurity
             || authority.RoomEpoch != envelope.RoomEpoch
             || authority.RuleSetVersion != envelope.RuleSetVersion
             || authority.ServerBuild != envelope.ServerBuild
+            || authority.ExpectedRoundNo != envelope.RoundNo
             || !submittedPlayers.SequenceEqual(expectedPlayers, StringComparer.Ordinal))
         {
             throw GameDataException.Unauthorized(

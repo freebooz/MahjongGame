@@ -63,6 +63,20 @@ public static class GameDataEndpoints
             return Results.Ok(result);
         }).WithMetadata(new RequestSizeLimitAttribute(256 * 1024));
 
+        app.MapPost("/internal/settlements/{matchId}/shadow-validate", async (
+            string matchId,
+            HttpContext context,
+            FinalResultEnvelope envelope,
+            SettlementService settlementService,
+            CancellationToken cancellationToken) =>
+        {
+            if (matchId != envelope.MatchId)
+                throw GameDataException.Invalid("MATCH_SCOPE_MISMATCH", "路径 MatchId 与结算信封不一致");
+            var result = await settlementService.ValidateOnlyAsync(
+                envelope, RequireBearer(context), cancellationToken);
+            return Results.Ok(result);
+        }).WithMetadata(new RequestSizeLimitAttribute(256 * 1024));
+
         var monitoring = app.MapGroup("/internal/monitoring");
         monitoring.MapGet("/matches/{matchId}", async (
             string matchId, HttpContext context, IOptions<GameDataOptions> options,

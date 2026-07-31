@@ -44,25 +44,10 @@ public sealed class SettlementService(
         activity?.SetTag("mahjong.match_id", envelope.MatchId);
         activity?.SetTag("mahjong.room_id", envelope.RoomId);
         activity?.SetTag("mahjong.room_epoch", envelope.RoomEpoch);
-        SettlementSecurity.ValidateEnvelope(envelope, timeProvider.GetUtcNow());
         var expectedIdempotencyKey = $"{envelope.MatchId}:{envelope.RoundNo}:{envelope.SettlementVersion}";
         if (!string.Equals(idempotencyKey, expectedIdempotencyKey, StringComparison.Ordinal))
             throw GameDataException.Invalid("IDEMPOTENCY_KEY_MISMATCH", "Idempotency-Key 与结算作用域不匹配");
-        if (!SettlementSecurity.VerifySignature(envelope, options.Value.SettlementSigningKey))
-            throw GameDataException.Unauthorized("SERVER_SIGNATURE_INVALID", "Dedicated Server 签名无效");
-        if (!trustedRecovery
-            && (string.IsNullOrWhiteSpace(workloadCredential)
-                || !string.Equals(
-                    SettlementSecurity.CredentialHash(workloadCredential),
-                    envelope.WorkloadCredentialHash,
-                    StringComparison.OrdinalIgnoreCase)))
-            throw GameDataException.Unauthorized("WORKLOAD_IDENTITY_MISMATCH", "Dedicated Server 工作负载身份无效");
-
-        var authority = await authorityClient.ValidateAsync(
-            envelope, envelope.WorkloadCredentialHash, cancellationToken);
-        SettlementSecurity.ValidateAuthority(envelope, authority);
-        await evidenceVerifier.VerifyAsync(envelope.EvidenceManifest, cancellationToken);
-
+        await ValidateSubmissionAsync(envelope, workloadCredential, trustedRecovery, cancellationToken);
         var now = timeProvider.GetUtcNow();
         var settlementId = Guid.NewGuid().ToString();
         var firstResult = new SettlementCommitResult(
@@ -100,6 +85,45 @@ public sealed class SettlementService(
             "可信结算已确认 MatchId={MatchId} RoundNo={RoundNo} SettlementVersion={SettlementVersion} Duplicate={Duplicate} TraceId={TraceId}",
             envelope.MatchId, envelope.RoundNo, envelope.SettlementVersion, result.Duplicate, traceId);
         return result;
+    }
+
+    /// <summary>
+    /// 执行影子验证但不写数据库、不写 Outbox、不关闭房间；用于旧 Lobby 仍正式写入期间对比新信封。
+    /// 调用方必须明确识别 Committed=false，禁止把该回执当作最终结算成功。
+    /// </summary>
+    public async Task<SettlementShadowValidationResult> ValidateOnlyAsync(
+        FinalResultEnvelope envelope,
+        string workloadCredential,
+        CancellationToken cancellationToken)
+    {
+        await ValidateSubmissionAsync(envelope, workloadCredential, false, cancellationToken);
+        logger.LogInformation(
+            "结算影子验证通过 MatchId={MatchId} RoundNo={RoundNo} SettlementVersion={SettlementVersion}",
+            envelope.MatchId, envelope.RoundNo, envelope.SettlementVersion);
+        return new SettlementShadowValidationResult(
+            envelope.MatchId, envelope.RoundNo, envelope.SettlementVersion,
+            timeProvider.GetUtcNow(), true);
+    }
+
+    /// <summary>集中执行格式、DS 签名、工作负载身份、Room 权威和证据验证，确保正式与影子路径规则一致。</summary>
+    private async Task ValidateSubmissionAsync(
+        FinalResultEnvelope envelope,
+        string? workloadCredential,
+        bool trustedRecovery,
+        CancellationToken cancellationToken)
+    {
+        SettlementSecurity.ValidateEnvelope(envelope, timeProvider.GetUtcNow());
+        if (!SettlementSecurity.VerifySignature(envelope, options.Value.SettlementSigningKey))
+            throw GameDataException.Unauthorized("SERVER_SIGNATURE_INVALID", "Dedicated Server 签名无效");
+        if (!trustedRecovery
+            && (string.IsNullOrWhiteSpace(workloadCredential)
+                || !string.Equals(SettlementSecurity.CredentialHash(workloadCredential),
+                    envelope.WorkloadCredentialHash, StringComparison.OrdinalIgnoreCase)))
+            throw GameDataException.Unauthorized("WORKLOAD_IDENTITY_MISMATCH", "Dedicated Server 工作负载身份无效");
+        var authority = await authorityClient.ValidateAsync(
+            envelope, envelope.WorkloadCredentialHash, cancellationToken);
+        SettlementSecurity.ValidateAuthority(envelope, authority);
+        await evidenceVerifier.VerifyAsync(envelope.EvidenceManifest, cancellationToken);
     }
 
     private static string NormalizeOperationId(string value)

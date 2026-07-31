@@ -93,6 +93,7 @@ public sealed class SettlementServiceTests
     [InlineData("rules")]
     [InlineData("build")]
     [InlineData("players")]
+    [InlineData("round")]
     public async Task Commit_AuthorityMismatchIsRejected(string mismatch)
     {
         var envelope = CreateEnvelope();
@@ -102,6 +103,7 @@ public sealed class SettlementServiceTests
             RoomEpoch = mismatch == "epoch" ? envelope.RoomEpoch + 1 : envelope.RoomEpoch,
             RuleSetVersion = mismatch == "rules" ? "other-rules" : envelope.RuleSetVersion,
             ServerBuild = mismatch == "build" ? "other-build" : envelope.ServerBuild,
+            ExpectedRoundNo = mismatch == "round" ? envelope.RoundNo + 1 : envelope.RoundNo,
             PlayerIds = mismatch == "players" ? ["unexpected-player"] : envelope.PlayerResults.Select(x => x.PlayerId).ToArray()
         };
         var service = CreateService(new InMemoryGameDataStore(), new AuthorityStub(envelope, authority));
@@ -169,6 +171,22 @@ public sealed class SettlementServiceTests
         await Assert.ThrowsAsync<InvalidOperationException>(() => CommitAsync(service, envelope));
 
         Assert.Null(await inner.GetMatchAsync(envelope.MatchId, default));
+    }
+
+    /// <summary>影子验证执行完整安全核对，但绝不能写入战绩、排行榜或结算 Outbox。</summary>
+    [Fact]
+    public async Task ShadowValidation_PerformsChecksWithoutWriting()
+    {
+        var store = new InMemoryGameDataStore();
+        var envelope = CreateEnvelope();
+        var service = CreateService(store, new AuthorityStub(envelope));
+
+        var result = await service.ValidateOnlyAsync(envelope, Credential, default);
+
+        Assert.True(result.Validated);
+        Assert.False(result.Committed);
+        Assert.Null(await store.GetMatchAsync(envelope.MatchId, default));
+        Assert.Empty(await store.GetLeaderboardAsync(10, default));
     }
 
     /// <summary>创建生产用服务对象，并显式固定时间和密钥，避免测试依赖墙钟或外部机密。</summary>
@@ -242,7 +260,7 @@ public sealed class SettlementServiceTests
             Task.CompletedTask;
         public static SettlementAuthority CreateAuthority(FinalResultEnvelope envelope) => new(
             true, envelope.MatchId, envelope.RoomId, envelope.ServerInstanceId, envelope.RoomEpoch,
-            envelope.RuleSetVersion, envelope.ServerBuild,
+            envelope.RuleSetVersion, envelope.ServerBuild, envelope.RoundNo,
             envelope.PlayerResults.Select(player => player.PlayerId).ToArray());
     }
 

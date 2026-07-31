@@ -72,6 +72,8 @@ public sealed class InMemoryGameDataStore : IGameDataStore
                 envelope.EvidenceId,
                 envelope.MatchId,
                 envelope.RoomEpoch,
+                envelope.RoundNo,
+                envelope.SettlementVersion,
                 envelope.FinalStateHash,
                 envelope.ActionLogHash,
                 envelope.RandomCommitment,
@@ -237,17 +239,18 @@ public sealed class PostgresGameDataStore(NpgsqlDataSource dataSource) : IGameDa
     {
         await using var command = dataSource.CreateCommand(
             """
-            SELECT evidence_id,match_id,room_epoch,final_state_hash,action_log_hash,
-                   random_commitment,retain_until,objects::text
+            SELECT evidence_id,match_id,room_epoch,round_no,settlement_version,
+                   final_state_hash,action_log_hash,random_commitment,retain_until,objects::text
             FROM replay.evidence_manifests WHERE evidence_id=$1
             """);
         command.Parameters.AddWithValue(Guid.Parse(evidenceId));
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         if (!await reader.ReadAsync(cancellationToken)) return null;
         return new ReplayEvidenceRecord(
-            reader.GetGuid(0).ToString(), reader.GetString(1), reader.GetInt64(2), reader.GetString(3),
-            reader.GetString(4), reader.GetString(5), reader.GetFieldValue<DateTimeOffset>(6),
-            JsonSerializer.Deserialize<EvidenceManifestItem[]>(reader.GetString(7), JsonOptions) ?? []);
+            reader.GetGuid(0).ToString(), reader.GetString(1), reader.GetInt64(2), reader.GetInt32(3),
+            reader.GetInt32(4), reader.GetString(5), reader.GetString(6), reader.GetString(7),
+            reader.GetFieldValue<DateTimeOffset>(8),
+            JsonSerializer.Deserialize<EvidenceManifestItem[]>(reader.GetString(9), JsonOptions) ?? []);
     }
 
     public async Task<IReadOnlyList<LeaderboardEntry>> GetLeaderboardAsync(int limit, CancellationToken cancellationToken)
@@ -362,13 +365,15 @@ public sealed class PostgresGameDataStore(NpgsqlDataSource dataSource) : IGameDa
         await using var evidence = new NpgsqlCommand(
             """
             INSERT INTO replay.evidence_manifests(
-                evidence_id,match_id,room_epoch,final_state_hash,action_log_hash,
-                random_commitment,objects,created_at,retain_until)
-            VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9)
+                evidence_id,match_id,room_epoch,round_no,settlement_version,
+                final_state_hash,action_log_hash,random_commitment,objects,created_at,retain_until)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10,$11)
             """, connection, transaction);
         evidence.Parameters.AddWithValue(Guid.Parse(envelope.EvidenceId));
         evidence.Parameters.AddWithValue(envelope.MatchId);
         evidence.Parameters.AddWithValue(envelope.RoomEpoch);
+        evidence.Parameters.AddWithValue(envelope.RoundNo);
+        evidence.Parameters.AddWithValue(envelope.SettlementVersion);
         evidence.Parameters.AddWithValue(envelope.FinalStateHash.ToLowerInvariant());
         evidence.Parameters.AddWithValue(envelope.ActionLogHash.ToLowerInvariant());
         evidence.Parameters.AddWithValue(envelope.RandomCommitment.ToLowerInvariant());

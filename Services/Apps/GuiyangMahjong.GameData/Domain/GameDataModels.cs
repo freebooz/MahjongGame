@@ -51,6 +51,15 @@ public sealed record SettlementCommitResult(
     DateTimeOffset CommittedAtUtc,
     bool Duplicate);
 
+/// <summary>影子验证回执；只证明身份、作用域、签名和证据通过，不代表数据库已经提交结算。</summary>
+public sealed record SettlementShadowValidationResult(
+    string MatchId,
+    int RoundNo,
+    int SettlementVersion,
+    DateTimeOffset ValidatedAtUtc,
+    bool Validated,
+    bool Committed = false);
+
 /// <summary>Lobby 对 GameData 返回的只读权威作用域，不包含结果凭据原文。</summary>
 public sealed record SettlementAuthority(
     bool Authorized,
@@ -60,6 +69,7 @@ public sealed record SettlementAuthority(
     long RoomEpoch,
     string RuleSetVersion,
     string ServerBuild,
+    int ExpectedRoundNo,
     string[] PlayerIds,
     string? FailureCode = null);
 
@@ -71,6 +81,7 @@ public sealed record SettlementAuthorityRequest(
     long RoomEpoch,
     string RuleSetVersion,
     string ServerBuild,
+    int RoundNo,
     string CredentialSha256);
 
 /// <summary>不可变战绩读模型；来源只能是已提交 SettlementCommitted 事务。</summary>
@@ -89,6 +100,8 @@ public sealed record ReplayEvidenceRecord(
     string EvidenceId,
     string MatchId,
     long RoomEpoch,
+    int RoundNo,
+    int SettlementVersion,
     string FinalStateHash,
     string ActionLogHash,
     string RandomCommitment,

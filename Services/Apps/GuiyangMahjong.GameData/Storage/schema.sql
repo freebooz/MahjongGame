@@ -74,13 +74,15 @@ CREATE TABLE IF NOT EXISTS replay.evidence_manifests (
     evidence_id UUID PRIMARY KEY,
     match_id VARCHAR(80) NOT NULL,
     room_epoch BIGINT NOT NULL CHECK (room_epoch > 0),
+    round_no INTEGER NOT NULL CHECK (round_no BETWEEN 1 AND 16),
+    settlement_version INTEGER NOT NULL CHECK (settlement_version > 0),
     final_state_hash CHAR(64) NOT NULL,
     action_log_hash CHAR(64) NOT NULL,
     random_commitment CHAR(64) NOT NULL,
     objects JSONB NOT NULL,
     created_at TIMESTAMPTZ NOT NULL,
     retain_until TIMESTAMPTZ NOT NULL,
-    CONSTRAINT ux_replay_match_epoch UNIQUE (match_id, room_epoch)
+    CONSTRAINT ux_replay_business_key UNIQUE (match_id, round_no, settlement_version)
 );
 
 -- 基础排行榜可由 SettlementCommitted 重建，不能反向成为战绩权威来源。

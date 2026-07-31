@@ -24,6 +24,7 @@ public sealed partial class LobbyService
             && room.RoomEpoch == request.RoomEpoch
             && room.RuleSetVersion == request.RuleSetVersion
             && room.BuildVersion == request.ServerBuild
+            && room.RoundCount == request.RoundNo
             && room.Lifecycle is RoomLifecycle.Settling or RoomLifecycle.Closed
             && FixedTimeHashEquals(request.CredentialSha256, room.ResultCredentialHash);
         return new SettlementAuthorityResponse(
@@ -34,6 +35,7 @@ public sealed partial class LobbyService
             request.RoomEpoch,
             request.RuleSetVersion,
             request.ServerBuild,
+            room?.RoundCount ?? 0,
             authorized ? room!.PlayerIds : [],
             authorized ? null : "SETTLEMENT_AUTHORITY_MISMATCH");
     }

@@ -35,6 +35,7 @@ public sealed class HttpSettlementAuthorityClient(
             envelope.RoomEpoch,
             envelope.RuleSetVersion,
             envelope.ServerBuild,
+            envelope.RoundNo,
             credentialSha256);
         using var request = new HttpRequestMessage(
             HttpMethod.Post,
