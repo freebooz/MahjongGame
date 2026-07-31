@@ -18,6 +18,11 @@ public sealed class LobbyOptions
     [Range(60, 604800)] public int IdempotencyTtlSeconds { get; init; } = 86400;
     [Range(5, 120)] public int IdempotencyLockSeconds { get; init; } = 30;
     [MinLength(32)] public string TokenSigningKey { get; init; } = string.Empty;
+    /// <summary>
+    /// Auth 密钥轮换期间仍可验证的旧 HMAC 密钥。数组只通过密钥管理系统或环境变量注入，
+    /// 不得写入日志；完成最长 Access Token 生命周期的重叠窗口后应删除。
+    /// </summary>
+    public string[] PreviousTokenValidationKeys { get; init; } = [];
     [MinLength(32)] public string JoinTicketSigningKey { get; init; } = string.Empty;
     [MinLength(32)] public string InternalServiceToken { get; init; } = string.Empty;
     public string MonitoringReadOnlyToken { get; init; } = string.Empty;

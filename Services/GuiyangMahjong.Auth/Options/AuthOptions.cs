@@ -12,6 +12,11 @@ public sealed class AuthOptions
     public const string SectionName = "Auth";
 
     [MinLength(32)] public string TokenSigningKey { get; init; } = string.Empty;
+    /// <summary>
+    /// 当前签名密钥的非敏感稳定标识，用于发布验证元数据和轮换审计；
+    /// 该值不是密钥，也不得由客户端用于决定是否信任令牌。
+    /// </summary>
+    [Required] public string ActiveSigningKeyId { get; init; } = "primary";
     [MinLength(32)] public string GuestIdentityPepper { get; init; } = string.Empty;
     [Range(1, 60)] public int AccessTokenMinutes { get; init; } = 15;
     [Range(1, 90)] public int RefreshTokenDays { get; init; } = 30;

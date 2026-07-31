@@ -243,3 +243,26 @@ Migrations/0001_platform_building_blocks.down.sql
 4. 不需要回滚现有 API、Redis、服务配置或业务数据。
 
 由于本阶段没有对现有数据库执行升级，仓库级回滚不执行任何 DDL。
+
+## 14. 实际验证结果
+
+| 验证 | 结果 |
+|---|---|
+| `dotnet restore Services/GuiyangMahjong.Services.slnx` | 通过 |
+| .NET Release build | 25 个项目通过，0 warning、0 error |
+| 全解决方案常规测试 | 197 通过、0 失败、22 个显式外部持久化测试跳过 |
+| BuildingBlocks 无外部依赖测试 | 13 通过、0 失败 |
+| Contracts/BuildingBlocks 架构测试 | 6 通过、0 失败 |
+| 隔离 PostgreSQL 17 事务测试 | 5 通过、0 失败；一次性容器已删除 |
+| 强类型 ID JSON/无效输入/脱敏日志 | 通过 |
+| Outbox 业务同事务与回滚 | 通过 |
+| Outbox 多 Worker 重复领取保护 | 通过 |
+| Inbox 业务同事务、回滚与重复消费 | 通过 |
+| API 幂等重放与不同参数冲突 | 通过 |
+| PostgreSQL 升级与逆向迁移 API | 通过 |
+| Request/Correlation/W3C Trace 传播 | 通过 |
+| proto 输出与版本字段 | 通过 |
+
+Angular、Docker Compose、Kubernetes、Helm 和 Unreal 文件均未在本阶段修改，因此没有新增对应构建或部署验证。阶段 1 已记录的 `GuiyangFairShuffle.cpp` 与 Unreal/OpenSSL `UI` 名称冲突仍是整个仓库 UE 全量编译的既有阻塞；本阶段未越界修改该文件。
+
+阶段 2 的 .NET Contracts、BuildingBlocks、数据库迁移构件和测试验收通过。进入后续业务模块阶段前，必须明确第一个接入服务的数据所有权、兼容映射和单写切换方案，不能一次性让全部服务引用 Persistence。

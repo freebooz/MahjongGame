@@ -1,5 +1,7 @@
 using System.Security.Cryptography;
+using GuiyangMahjong.Auth.Devices;
 using GuiyangMahjong.Auth.Domain;
+using GuiyangMahjong.Auth.Players;
 
 namespace GuiyangMahjong.Auth.Storage;
 
@@ -8,7 +10,7 @@ namespace GuiyangMahjong.Auth.Storage;
 /// gate 把身份、会话轮换、管理幂等和控制事件组成原子临界区；
 /// 数据不持久化且无法跨副本共享，生产环境禁止注册此实现。
 /// </summary>
-public sealed class InMemoryAuthStore : IAuthStore
+public sealed class InMemoryAuthStore : IAuthStore, IPlayerProfileReader
 {
     // 各集合分别保存安装/玩家身份索引、会话、管理回执、控制状态/历史和登录事件。
     // 所有复合读写必须持有 gate，避免轮换和控制撤销交错产生两个有效会话。
@@ -22,6 +24,9 @@ public sealed class InMemoryAuthStore : IAuthStore
     private readonly Dictionary<string, PlayerControlEvent> playerControlEvents =
         new(StringComparer.Ordinal);
     private readonly List<AuthLoginEvent> loginEvents = [];
+    private readonly Dictionary<string, PlayerProfile> playerProfiles = new(StringComparer.Ordinal);
+    private readonly Dictionary<(string PlayerId, string DeviceId), DeviceSummary> devices = [];
+    private readonly List<DeviceSwitchEvent> deviceSwitchEvents = [];
     private readonly object gate = new();
 
     /// <inheritdoc/>
@@ -43,6 +48,15 @@ public sealed class InMemoryAuthStore : IAuthStore
                 return Task.FromResult(existing);
             identitiesByInstallation[installationHash] = proposedIdentity;
             identitiesByPlayer[proposedIdentity.PlayerId] = proposedIdentity;
+            playerProfiles[proposedIdentity.PlayerId] = new PlayerProfile(
+                proposedIdentity.PlayerId,
+                proposedIdentity.DisplayName,
+                null,
+                null,
+                1,
+                "{}",
+                "{}",
+                proposedIdentity.UpdatedAtUtc);
             return Task.FromResult(proposedIdentity);
         }
     }
@@ -61,6 +75,24 @@ public sealed class InMemoryAuthStore : IAuthStore
                 return Task.FromResult(SessionCreationStatus.Banned);
             if (control.AccountStatus == "Frozen")
                 return Task.FromResult(SessionCreationStatus.Frozen);
+
+            var activeSessions = sessions.Values
+                .Where(item => item.PlayerId == session.PlayerId
+                    && item.RevokedAtUtc is null
+                    && item.ExpiresAtUtc > now)
+                .OrderBy(item => item.CreatedAtUtc)
+                .ToArray();
+            var revokeCount = session.SessionMode == "SingleDevice"
+                ? activeSessions.Length
+                : Math.Max(0, activeSessions.Length - session.MaximumActiveSessions + 1);
+            foreach (var superseded in activeSessions.Take(revokeCount))
+            {
+                sessions[superseded.SessionId] = superseded with
+                {
+                    RevokedAtUtc = now,
+                    RevocationReason = "SessionPolicy"
+                };
+            }
             sessions.Add(session.SessionId, session);
             return Task.FromResult(SessionCreationStatus.Created);
         }
@@ -82,7 +114,45 @@ public sealed class InMemoryAuthStore : IAuthStore
             if (!FixedTimeEquals(current.TokenHash, currentTokenHash))
                 return Task.FromResult(new RefreshRotationResult(RefreshRotationStatus.Invalid, null));
             if (current.RevokedAtUtc is not null)
+            {
+                if (current.RevocationReason == "Rotated")
+                {
+                    // 已轮换令牌再次出现意味着旧凭证可能泄漏；撤销整个 Token Family，
+                    // 并推进两个 Epoch，使后续消费者可以拒绝此前签发的短期访问令牌。
+                    foreach (var familySession in sessions.Values
+                                 .Where(item => item.PlayerId == current.PlayerId
+                                     && item.FamilyId == current.FamilyId
+                                     && item.RevokedAtUtc is null)
+                                 .ToArray())
+                    {
+                        sessions[familySession.SessionId] = familySession with
+                        {
+                            RevokedAtUtc = now,
+                            RevocationReason = "RefreshTokenReuse",
+                            ReuseDetectedAtUtc = now
+                        };
+                    }
+                    if (identitiesByPlayer.TryGetValue(current.PlayerId, out var compromised))
+                    {
+                        var advanced = compromised with
+                        {
+                            SessionEpoch = compromised.SessionEpoch + 1,
+                            SecurityEpoch = compromised.SecurityEpoch + 1,
+                            UpdatedAtUtc = now
+                        };
+                        identitiesByPlayer[current.PlayerId] = advanced;
+                        foreach (var pair in identitiesByInstallation
+                                     .Where(pair => pair.Value.PlayerId == current.PlayerId)
+                                     .ToArray())
+                            identitiesByInstallation[pair.Key] = advanced;
+                    }
+                    sessions[currentSessionId] = current with { ReuseDetectedAtUtc = now };
+                    return Task.FromResult(new RefreshRotationResult(
+                        RefreshRotationStatus.ReuseDetected,
+                        null));
+                }
                 return Task.FromResult(new RefreshRotationResult(RefreshRotationStatus.Revoked, null));
+            }
             if (current.ExpiresAtUtc <= now)
                 return Task.FromResult(new RefreshRotationResult(RefreshRotationStatus.Expired, null));
             if (!identitiesByPlayer.TryGetValue(current.PlayerId, out var identity))
@@ -93,9 +163,26 @@ public sealed class InMemoryAuthStore : IAuthStore
             if (control.AccountStatus == "Frozen")
                 return Task.FromResult(new RefreshRotationResult(RefreshRotationStatus.Frozen, null));
 
-            sessions[currentSessionId] = current with { RevokedAtUtc = now };
-            sessions.Add(replacement.SessionId, replacement with { PlayerId = current.PlayerId });
-            return Task.FromResult(new RefreshRotationResult(RefreshRotationStatus.Rotated, identity));
+            var effectiveReplacement = replacement with
+            {
+                PlayerId = current.PlayerId,
+                FamilyId = current.FamilyId,
+                ParentSessionId = current.SessionId,
+                DeviceId = current.DeviceId,
+                SessionEpoch = identity.SessionEpoch,
+                SecurityEpoch = identity.SecurityEpoch
+            };
+            sessions[currentSessionId] = current with
+            {
+                RevokedAtUtc = now,
+                ReplacedBySessionId = effectiveReplacement.SessionId,
+                RevocationReason = "Rotated"
+            };
+            sessions.Add(effectiveReplacement.SessionId, effectiveReplacement);
+            return Task.FromResult(new RefreshRotationResult(
+                RefreshRotationStatus.Rotated,
+                identity,
+                effectiveReplacement));
         }
     }
 
@@ -112,7 +199,11 @@ public sealed class InMemoryAuthStore : IAuthStore
             if (!sessions.TryGetValue(sessionId, out var session)
                 || session.RevokedAtUtc is not null
                 || !FixedTimeEquals(session.TokenHash, tokenHash)) return Task.FromResult(false);
-            sessions[sessionId] = session with { RevokedAtUtc = now };
+            sessions[sessionId] = session with
+            {
+                RevokedAtUtc = now,
+                RevocationReason = "Logout"
+            };
             return Task.FromResult(true);
         }
     }
@@ -140,10 +231,13 @@ public sealed class InMemoryAuthStore : IAuthStore
             {
                 sessions[session.SessionId] = session with
                 {
-                    RevokedAtUtc = effectiveAtUtc
+                    RevokedAtUtc = effectiveAtUtc,
+                    RevocationReason = "AdministrativeRevocation"
                 };
                 revoked++;
             }
+            if (found)
+                AdvanceIdentityEpochs(playerId, effectiveAtUtc, advanceSecurityEpoch: false);
             var result = new AdminRevokePlayerSessionsResult(
                 commandId,
                 playerId,
@@ -240,10 +334,12 @@ public sealed class InMemoryAuthStore : IAuthStore
                 {
                     sessions[session.SessionId] = session with
                     {
-                        RevokedAtUtc = effectiveAtUtc
+                        RevokedAtUtc = effectiveAtUtc,
+                        RevocationReason = action.ToString()
                     };
                     revoked++;
                 }
+                AdvanceIdentityEpochs(playerId, effectiveAtUtc, advanceSecurityEpoch: true);
             }
             var controlEvent = new PlayerControlEvent(
                 commandId,
@@ -275,10 +371,48 @@ public sealed class InMemoryAuthStore : IAuthStore
         cancellationToken.ThrowIfCancellationRequested();
         lock (gate)
         {
+            var previousDeviceId = loginEvents
+                .Where(item => item.PlayerId == loginEvent.PlayerId
+                    && item.Outcome == "Success")
+                .MaxBy(item => item.OccurredAtUtc)
+                ?.DeviceId;
             loginEvents.Add(loginEvent);
             if (loginEvents.Count > 10_000) loginEvents.RemoveRange(0, loginEvents.Count - 10_000);
+            if (loginEvent.Outcome == "Success")
+            {
+                var key = (loginEvent.PlayerId, loginEvent.DeviceId);
+                var firstSeen = devices.TryGetValue(key, out var current)
+                    ? current.FirstSeenAtUtc
+                    : loginEvent.OccurredAtUtc;
+                devices[key] = new DeviceSummary(
+                    loginEvent.PlayerId,
+                    loginEvent.DeviceId,
+                    current?.TrustState ?? "Unknown",
+                    current?.RiskLabelReferences ?? [],
+                    firstSeen,
+                    loginEvent.OccurredAtUtc);
+                if (previousDeviceId is not null && previousDeviceId != loginEvent.DeviceId)
+                {
+                    deviceSwitchEvents.Add(new DeviceSwitchEvent(
+                        loginEvent.EventId,
+                        loginEvent.PlayerId,
+                        previousDeviceId,
+                        loginEvent.DeviceId,
+                        loginEvent.OccurredAtUtc));
+                }
+            }
         }
         return Task.CompletedTask;
+    }
+
+    /// <inheritdoc/>
+    public Task<PlayerProfile?> GetProfileAsync(
+        string playerId,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        lock (gate)
+            return Task.FromResult(playerProfiles.GetValueOrDefault(playerId));
     }
 
     /// <inheritdoc/>
@@ -381,6 +515,29 @@ public sealed class InMemoryAuthStore : IAuthStore
         var state = playerControls.GetValueOrDefault(playerId)
             ?? PlayerControlPolicy.Empty;
         return PlayerControlPolicy.Normalize(state, now);
+    }
+
+    /// <summary>
+    /// 在持有 gate 时推进身份 Epoch。SessionEpoch 表示全局会话撤销水位，
+    /// SecurityEpoch 只在凭证泄漏或账号安全状态变化时推进。
+    /// </summary>
+    private void AdvanceIdentityEpochs(
+        string playerId,
+        DateTimeOffset now,
+        bool advanceSecurityEpoch)
+    {
+        if (!identitiesByPlayer.TryGetValue(playerId, out var identity)) return;
+        var advanced = identity with
+        {
+            SessionEpoch = identity.SessionEpoch + 1,
+            SecurityEpoch = identity.SecurityEpoch + (advanceSecurityEpoch ? 1 : 0),
+            UpdatedAtUtc = now
+        };
+        identitiesByPlayer[playerId] = advanced;
+        foreach (var pair in identitiesByInstallation
+                     .Where(pair => pair.Value.PlayerId == playerId)
+                     .ToArray())
+            identitiesByInstallation[pair.Key] = advanced;
     }
 
     private static (PlayerControlState? State, string? Error) ApplyControlTransition(

@@ -82,6 +82,12 @@ public sealed class PlayerTokenOptions
     [MinLength(32)]
     public string LegacySigningKey { get; init; } = string.Empty;
 
+    /// <summary>
+    /// 两段式 HMAC Token 的旧验证密钥。仅用于有界轮换窗口，不能用于新令牌签发，
+    /// 每个值必须来自部署密钥源且不得出现在诊断输出中。
+    /// </summary>
+    public string[] PreviousLegacyValidationKeys { get; init; } = [];
+
     /// <summary>标准 JWT HMAC 密钥；为空时使用 LegacySigningKey，避免要求 Auth 本阶段改签发格式。</summary>
     public string JwtSigningKey { get; init; } = string.Empty;
 

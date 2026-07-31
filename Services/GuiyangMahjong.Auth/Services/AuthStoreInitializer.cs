@@ -1,4 +1,4 @@
-using GuiyangMahjong.Auth.Storage;
+using GuiyangMahjong.Auth.Infrastructure;
 using GuiyangMahjong.Auth.Options;
 using Microsoft.Extensions.Options;
 
@@ -8,7 +8,7 @@ namespace GuiyangMahjong.Auth.Services;
 /// Auth 存储启动器。生产环境仅使用既有结构，不执行 DDL；数据库迁移由发布流水线负责。
 /// </summary>
 public sealed class AuthStoreInitializer(
-    IAuthStore store,
+    IIdentityStorageLifecycle store,
     IOptions<AuthOptions> options,
     ILogger<AuthStoreInitializer> logger) : IHostedService
 {

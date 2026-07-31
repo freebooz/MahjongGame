@@ -21,6 +21,14 @@ builder.Services
     .AddOptions<LobbyOptions>()
     .Bind(builder.Configuration.GetSection(LobbyOptions.SectionName))
     .ValidateDataAnnotations()
+    .Validate(
+        options => options.PreviousTokenValidationKeys.All(key => key.Length >= 32)
+                   && options.PreviousTokenValidationKeys
+                       .Append(options.TokenSigningKey)
+                       .Distinct(StringComparer.Ordinal)
+                       .Count()
+                      == options.PreviousTokenValidationKeys.Length + 1,
+        "Lobby previous token validation keys must be unique and contain at least 32 characters.")
     .Validate(options => options.JoinTicketSigningKey.Length >= 32,
         "Lobby:JoinTicketSigningKey must contain at least 32 characters.")
     .Validate(options => options.InternalServiceToken.Length >= 32,

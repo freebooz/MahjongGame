@@ -2,34 +2,33 @@
 -- 先撤销 PUBLIC，再逐表授权，避免 public schema 中 Auth 与 Lobby 互相越权。
 
 REVOKE CREATE ON SCHEMA public FROM PUBLIC;
-REVOKE ALL ON SCHEMA player_data, admin_monitor FROM PUBLIC;
+REVOKE ALL ON SCHEMA auth, session, player, integration, player_data, admin_monitor FROM PUBLIC;
 GRANT USAGE ON SCHEMA public TO
-    mahjong_auth_rw, mahjong_lobby_rw, mahjong_monitor_ro;
+    mahjong_lobby_rw, mahjong_monitor_ro;
+GRANT USAGE ON SCHEMA auth, session, player, integration TO
+    mahjong_auth_rw, mahjong_monitor_ro;
 GRANT USAGE ON SCHEMA player_data TO
     mahjong_player_data_rw, mahjong_monitor_ro;
 GRANT USAGE ON SCHEMA admin_monitor TO
     mahjong_admin_rw, mahjong_monitor_ro,
     mahjong_audit_append, mahjong_archive_dispatch;
 GRANT CREATE, USAGE ON SCHEMA public TO mahjong_migration;
+ALTER SCHEMA auth OWNER TO mahjong_migration;
+ALTER SCHEMA session OWNER TO mahjong_migration;
+ALTER SCHEMA player OWNER TO mahjong_migration;
+ALTER SCHEMA integration OWNER TO mahjong_migration;
 ALTER SCHEMA player_data OWNER TO mahjong_migration;
 ALTER SCHEMA admin_monitor OWNER TO mahjong_migration;
 
 REVOKE ALL ON TABLE
-    auth_identities, auth_refresh_sessions, auth_login_events,
-    auth_admin_commands, auth_player_controls, auth_player_control_events,
     lobby_rooms, active_player_rooms, match_results,
     room_event_history, player_room_history, player_connection_history
 FROM PUBLIC;
+REVOKE ALL ON ALL TABLES IN SCHEMA auth, session, player, integration FROM PUBLIC;
 REVOKE ALL ON ALL TABLES IN SCHEMA player_data, admin_monitor FROM PUBLIC;
 REVOKE ALL ON ALL SEQUENCES IN SCHEMA admin_monitor FROM PUBLIC;
 REVOKE ALL ON ALL FUNCTIONS IN SCHEMA admin_monitor FROM PUBLIC;
 
-ALTER TABLE auth_identities OWNER TO mahjong_migration;
-ALTER TABLE auth_refresh_sessions OWNER TO mahjong_migration;
-ALTER TABLE auth_login_events OWNER TO mahjong_migration;
-ALTER TABLE auth_admin_commands OWNER TO mahjong_migration;
-ALTER TABLE auth_player_controls OWNER TO mahjong_migration;
-ALTER TABLE auth_player_control_events OWNER TO mahjong_migration;
 ALTER TABLE lobby_rooms OWNER TO mahjong_migration;
 ALTER TABLE active_player_rooms OWNER TO mahjong_migration;
 ALTER TABLE match_results OWNER TO mahjong_migration;
@@ -44,7 +43,9 @@ BEGIN
     FOR object_record IN
         SELECT format('%I.%I', schemaname, tablename) AS object_name
         FROM pg_tables
-        WHERE schemaname IN ('player_data', 'admin_monitor')
+        WHERE schemaname IN (
+            'auth', 'session', 'player', 'integration',
+            'player_data', 'admin_monitor')
     LOOP
         EXECUTE format('ALTER TABLE %s OWNER TO mahjong_migration', object_record.object_name);
     END LOOP;
@@ -66,9 +67,8 @@ BEGIN
 END
 $ownership$;
 
-GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE
-    auth_identities, auth_refresh_sessions, auth_login_events,
-    auth_admin_commands, auth_player_controls, auth_player_control_events
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA
+    auth, session, player, integration
 TO mahjong_auth_rw;
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE
     lobby_rooms, active_player_rooms, match_results
@@ -97,10 +97,10 @@ GRANT SELECT, UPDATE ON TABLE admin_monitor.audit_archive_outbox
 TO mahjong_archive_dispatch;
 
 GRANT SELECT ON TABLE
-    auth_identities, auth_refresh_sessions, auth_login_events,
-    auth_admin_commands, auth_player_controls, auth_player_control_events,
     lobby_rooms, active_player_rooms, match_results,
     room_event_history, player_room_history, player_connection_history
+TO mahjong_monitor_ro;
+GRANT SELECT ON ALL TABLES IN SCHEMA auth, session, player, integration
 TO mahjong_monitor_ro;
 GRANT SELECT ON ALL TABLES IN SCHEMA player_data, admin_monitor
 TO mahjong_monitor_ro;
@@ -131,4 +131,28 @@ ALTER DEFAULT PRIVILEGES FOR ROLE mahjong_migration IN SCHEMA player_data
 ALTER DEFAULT PRIVILEGES FOR ROLE mahjong_migration IN SCHEMA admin_monitor
     REVOKE ALL ON TABLES FROM PUBLIC;
 ALTER DEFAULT PRIVILEGES FOR ROLE mahjong_migration IN SCHEMA admin_monitor
+    GRANT SELECT ON TABLES TO mahjong_monitor_ro;
+ALTER DEFAULT PRIVILEGES FOR ROLE mahjong_migration IN SCHEMA auth
+    REVOKE ALL ON TABLES FROM PUBLIC;
+ALTER DEFAULT PRIVILEGES FOR ROLE mahjong_migration IN SCHEMA session
+    REVOKE ALL ON TABLES FROM PUBLIC;
+ALTER DEFAULT PRIVILEGES FOR ROLE mahjong_migration IN SCHEMA player
+    REVOKE ALL ON TABLES FROM PUBLIC;
+ALTER DEFAULT PRIVILEGES FOR ROLE mahjong_migration IN SCHEMA integration
+    REVOKE ALL ON TABLES FROM PUBLIC;
+ALTER DEFAULT PRIVILEGES FOR ROLE mahjong_migration IN SCHEMA auth
+    GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO mahjong_auth_rw;
+ALTER DEFAULT PRIVILEGES FOR ROLE mahjong_migration IN SCHEMA session
+    GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO mahjong_auth_rw;
+ALTER DEFAULT PRIVILEGES FOR ROLE mahjong_migration IN SCHEMA player
+    GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO mahjong_auth_rw;
+ALTER DEFAULT PRIVILEGES FOR ROLE mahjong_migration IN SCHEMA integration
+    GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO mahjong_auth_rw;
+ALTER DEFAULT PRIVILEGES FOR ROLE mahjong_migration IN SCHEMA auth
+    GRANT SELECT ON TABLES TO mahjong_monitor_ro;
+ALTER DEFAULT PRIVILEGES FOR ROLE mahjong_migration IN SCHEMA session
+    GRANT SELECT ON TABLES TO mahjong_monitor_ro;
+ALTER DEFAULT PRIVILEGES FOR ROLE mahjong_migration IN SCHEMA player
+    GRANT SELECT ON TABLES TO mahjong_monitor_ro;
+ALTER DEFAULT PRIVILEGES FOR ROLE mahjong_migration IN SCHEMA integration
     GRANT SELECT ON TABLES TO mahjong_monitor_ro;

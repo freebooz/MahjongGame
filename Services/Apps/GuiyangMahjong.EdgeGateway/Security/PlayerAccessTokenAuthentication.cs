@@ -44,8 +44,12 @@ public sealed class LegacyPlayerTokenAuthenticationHandler(
         logger,
         encoder)
 {
-    private readonly byte[] signingKey = Encoding.UTF8.GetBytes(
-        gatewayOptions.Value.PlayerTokens.LegacySigningKey);
+    // 网关只使用当前密钥和受控旧密钥进行本地验证，不持久化也不输出任何密钥内容。
+    private readonly byte[][] validationKeys =
+        gatewayOptions.Value.PlayerTokens.PreviousLegacyValidationKeys
+            .Prepend(gatewayOptions.Value.PlayerTokens.LegacySigningKey)
+            .Select(Encoding.UTF8.GetBytes)
+            .ToArray();
     private readonly TimeProvider timeProvider = timeProvider;
     private readonly TimeSpan clockSkew = TimeSpan.FromSeconds(
         gatewayOptions.Value.PlayerTokens.ClockSkewSeconds);
@@ -74,13 +78,17 @@ public sealed class LegacyPlayerTokenAuthenticationHandler(
                 AuthenticateResult.Fail("PLAYER_TOKEN_FORMAT_INVALID"));
         }
 
-        var expected = HMACSHA256.HashData(
-            signingKey,
-            Encoding.ASCII.GetBytes(parts[0]));
-        if (signature.Length != expected.Length
-            || !CryptographicOperations.FixedTimeEquals(
-                signature,
-                expected))
+        var signedBytes = Encoding.ASCII.GetBytes(parts[0]);
+        var signatureValid = false;
+        foreach (var validationKey in validationKeys)
+        {
+            var expected = HMACSHA256.HashData(validationKey, signedBytes);
+            signatureValid |= signature.Length == expected.Length
+                              && CryptographicOperations.FixedTimeEquals(
+                                  signature,
+                                  expected);
+        }
+        if (!signatureValid)
         {
             return Task.FromResult(
                 AuthenticateResult.Fail("PLAYER_TOKEN_SIGNATURE_INVALID"));

@@ -37,6 +37,15 @@ builder.Services
         EdgeGatewayOptions.SectionName))
     .ValidateDataAnnotations()
     .Validate(
+        options => options.PlayerTokens.PreviousLegacyValidationKeys.All(
+            key => key.Length >= 32)
+            && options.PlayerTokens.PreviousLegacyValidationKeys
+                .Append(options.PlayerTokens.LegacySigningKey)
+                .Distinct(StringComparer.Ordinal)
+                .Count()
+               == options.PlayerTokens.PreviousLegacyValidationKeys.Length + 1,
+        "EdgeGateway previous legacy validation keys must be unique and contain at least 32 characters.")
+    .Validate(
         options => Version.TryParse(
             options.ClientContract.MinimumClientVersion,
             out _),
