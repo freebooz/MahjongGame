@@ -136,7 +136,10 @@ sudo ./Deploy/linux/deploy.sh restore --backup-file /path/to/backup.tar.gz --con
 
 ## 架构与验收资料
 
-- [完整应用架构](../Docs/FULL_APPLICATION_ARCHITECTURE.md)
+- [当前系统与模块清单](../Docs/architecture/current-system-inventory.md)
+- [当前主业务流程](../Docs/architecture/current-main-flows.md)
+- [统一 Allocation Service](../Docs/architecture/stage-5-allocation-service.md)
+- [Dedicated Server 生命周期与恢复](../Docs/architecture/stage-6-dedicated-server-lifecycle-recovery.md)
 - [告警运行手册](../Docs/RUNBOOKS/OBSERVABILITY_ALERTS.md)
 - [多集群与 SLO 治理运行手册](../Docs/RUNBOOKS/SLO_MULTI_CLUSTER_GOVERNANCE.md)
 

@@ -20,6 +20,27 @@ function Add-GovernanceFailure {
     $failures.Add($Message)
 }
 
+<#
+.SYNOPSIS
+返回相对项目根目录且统一使用正斜杠的路径。
+.DESCRIPTION
+Windows PowerShell 5.1 所使用的 .NET Framework 不提供 Path.GetRelativePath；
+结构门禁必须同时可在旧版 Windows PowerShell 和 CI 的 PowerShell 7 中执行，因此在此做有界前缀换算。
+#>
+function Get-ProjectRelativePath {
+    param([Parameter(Mandatory)][string]$Path)
+
+    $rootPath = [IO.Path]::GetFullPath($projectRoot).TrimEnd(
+        [IO.Path]::DirectorySeparatorChar,
+        [IO.Path]::AltDirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
+    $fullPath = [IO.Path]::GetFullPath($Path)
+    if (!$fullPath.StartsWith($rootPath, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "路径不在项目根目录内：$fullPath"
+    }
+
+    return $fullPath.Substring($rootPath.Length).Replace('\', '/')
+}
+
 # 可重建产物即使仍在 Git 索引中，只要工作树已删除就视为本轮清理成功；
 # 合并后的 CI 会通过同一检查阻止它们再次出现。
 $trackedExistingFiles = @(
@@ -143,9 +164,7 @@ $playerEvidenceFiles = @(
 foreach ($file in $playerEvidenceFiles) {
     $lineCount = @(Get-Content -LiteralPath $file.FullName).Count
     if ($lineCount -gt 350) {
-        $relative = [IO.Path]::GetRelativePath(
-            $projectRoot,
-            $file.FullName).Replace('\', '/')
+        $relative = Get-ProjectRelativePath -Path $file.FullName
         Add-GovernanceFailure (
             "玩家证据端点分区超过 350 行：$relative lines=$lineCount")
     }
@@ -162,19 +181,25 @@ $lobbyEndpointFiles = @(
 foreach ($file in $lobbyEndpointFiles) {
     $lineCount = @(Get-Content -LiteralPath $file.FullName).Count
     if ($lineCount -gt 350) {
-        $relative = [IO.Path]::GetRelativePath(
-            $projectRoot,
-            $file.FullName).Replace('\', '/')
+        $relative = Get-ProjectRelativePath -Path $file.FullName
         Add-GovernanceFailure (
             "Lobby 端点分区超过 350 行：$relative lines=$lineCount")
     }
 }
 
-# Docs 只允许保留当前架构、监控、安全、UI 和运行手册；阶段流水账应由 Git/CI 证据追溯，
-# 不再回流到解决方案工作树。白名单同时作为必需清单，避免清理时误删运维入口。
+# 当前清单是开发与部署的事实入口；阶段文档和 ADR 只保存已经实施的迁移、兼容与回滚证据。
+# 必需清单防止清理时误删入口，受控命名规则则阻止任意临时报告重新进入工作树。
 $coreDocs = @(
     'Docs/README.md',
-    'Docs/FULL_APPLICATION_ARCHITECTURE.md',
+    'Docs/architecture/current-system-inventory.md',
+    'Docs/architecture/current-main-flows.md',
+    'Docs/architecture/current-api-inventory.md',
+    'Docs/architecture/current-runtime-dependencies.md',
+    'Docs/architecture/current-data-ownership.md',
+    'Docs/architecture/current-redis-inventory.md',
+    'Docs/architecture/current-risk-register.md',
+    'Docs/architecture/current-configuration-inventory.md',
+    'Docs/adr/ADR-0001-platform-evolution-strategy.md',
     'Docs/REALTIME_SERVER_PLAYER_MONITORING_REVIEW_20260728.md',
     'Docs/PLAYER_MONITORING_ADMIN_DESIGN.md',
     'Docs/UI_ASSET_AND_VISUAL_STANDARD.md',
@@ -197,7 +222,11 @@ $unexpectedDocs = @(
         ForEach-Object {
             $_.FullName.Substring($projectRootPrefix.Length).Replace('\', '/')
         } |
-        Where-Object { $_ -notin $coreDocs }
+        Where-Object {
+            $_ -notin $coreDocs -and
+            $_ -notmatch '^Docs/architecture/stage-[0-9]+(?:[.-][a-z0-9-]+)*\.md$' -and
+            $_ -notmatch '^Docs/architecture/ue58-toolchain-recovery-validation-[0-9]{8}\.md$'
+        }
 )
 foreach ($relative in $unexpectedDocs) {
     Add-GovernanceFailure "Docs 出现未登记的非核心文档：$relative"
@@ -549,7 +578,7 @@ foreach ($relative in $trackedExistingFiles) {
 }
 
 $architectureDocumentPath =
-    Join-Path $projectRoot 'Docs/FULL_APPLICATION_ARCHITECTURE.md'
+    Join-Path $projectRoot 'Docs/architecture/current-configuration-inventory.md'
 # 文档统一以 UTF-8 保存；显式指定编码可避免 Windows PowerShell 5.1 按本地代码页读取，
 # 从而把中文治理标识误判为缺失。
 $architectureDocument = Get-Content -LiteralPath $architectureDocumentPath -Raw -Encoding UTF8
@@ -589,7 +618,9 @@ foreach ($requiredToken in @('docker-build-matrix:', 'allocator-build',
 }
 
 if ($failures.Count -gt 0) {
-    $failures | ForEach-Object { Write-Error $_ }
+    # 显式继续输出全部违规项；脚本全局采用 Stop，若不覆盖会在第一条 Write-Error 后提前终止，
+    # 使另一台机器或 CI 合入的批量问题无法在一次审查中完整修复。
+    $failures | ForEach-Object { Write-Error $_ -ErrorAction Continue }
     throw "PROJECT_STRUCTURE_GOVERNANCE_FAILED count=$($failures.Count)"
 }
 
