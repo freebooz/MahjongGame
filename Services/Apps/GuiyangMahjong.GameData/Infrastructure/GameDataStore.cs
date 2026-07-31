@@ -3,6 +3,7 @@ using System.Text.Json;
 using GuiyangMahjong.Contracts.Common;
 using GuiyangMahjong.Contracts.Events;
 using GuiyangMahjong.GameData.Domain;
+using GuiyangMahjong.GameData.Settlement;
 using Npgsql;
 
 namespace GuiyangMahjong.GameData.Infrastructure;
@@ -22,6 +23,10 @@ public interface IGameDataStore
     Task<GameRecord?> GetMatchAsync(string matchId, CancellationToken cancellationToken);
     Task<IReadOnlyList<GameRecord>> GetPlayerRecordsAsync(string playerId, int limit, CancellationToken cancellationToken);
     Task<ReplayEvidenceRecord?> GetEvidenceAsync(string evidenceId, CancellationToken cancellationToken);
+    /// <summary>幂等接收阶段 8.2 旧回放索引；不得写入结算或排行榜。</summary>
+    Task<LegacyReplayEvidenceResult> RecordLegacyReplayAsync(
+        LegacyReplayEvidenceRequest request,
+        CancellationToken cancellationToken);
     Task<IReadOnlyList<LeaderboardEntry>> GetLeaderboardAsync(int limit, CancellationToken cancellationToken);
     Task<bool> CheckHealthAsync(CancellationToken cancellationToken);
 }
@@ -33,6 +38,7 @@ public sealed class InMemoryGameDataStore : IGameDataStore
     private readonly Dictionary<string, (string Fingerprint, SettlementCommitResult Result)> settlements = [];
     private readonly Dictionary<string, GameRecord> records = [];
     private readonly Dictionary<string, ReplayEvidenceRecord> evidence = [];
+    private readonly Dictionary<string, (string Fingerprint, LegacyReplayEvidenceResult Result)> legacyReplay = [];
     private readonly Dictionary<string, LeaderboardEntry> leaderboard = [];
     private readonly HashSet<string> outboxEvents = [];
 
@@ -122,6 +128,27 @@ public sealed class InMemoryGameDataStore : IGameDataStore
     {
         cancellationToken.ThrowIfCancellationRequested();
         lock (gate) return Task.FromResult(evidence.GetValueOrDefault(evidenceId));
+    }
+
+    /// <inheritdoc />
+    public Task<LegacyReplayEvidenceResult> RecordLegacyReplayAsync(
+        LegacyReplayEvidenceRequest request,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var fingerprint = LegacyReplayFingerprint.Create(request);
+        lock (gate)
+        {
+            if (legacyReplay.TryGetValue(request.EventId, out var existing))
+            {
+                if (existing.Fingerprint != fingerprint)
+                    throw GameDataException.Conflict("LEGACY_REPLAY_IDEMPOTENCY_CONFLICT", "相同 EventId 的回放索引参数不一致");
+                return Task.FromResult(existing.Result with { Duplicate = true });
+            }
+            var result = new LegacyReplayEvidenceResult(request.EventId, false);
+            legacyReplay.Add(request.EventId, (fingerprint, result));
+            return Task.FromResult(result);
+        }
     }
 
     public Task<IReadOnlyList<LeaderboardEntry>> GetLeaderboardAsync(int limit, CancellationToken cancellationToken)
@@ -251,6 +278,50 @@ public sealed class PostgresGameDataStore(NpgsqlDataSource dataSource) : IGameDa
             reader.GetInt32(4), reader.GetString(5), reader.GetString(6), reader.GetString(7),
             reader.GetFieldValue<DateTimeOffset>(8),
             JsonSerializer.Deserialize<EvidenceManifestItem[]>(reader.GetString(9), JsonOptions) ?? []);
+    }
+
+    /// <inheritdoc />
+    public async Task<LegacyReplayEvidenceResult> RecordLegacyReplayAsync(
+        LegacyReplayEvidenceRequest request,
+        CancellationToken cancellationToken)
+    {
+        var fingerprint = LegacyReplayFingerprint.Create(request);
+        await using var command = dataSource.CreateCommand(
+            """
+            INSERT INTO replay.legacy_player_evidence(
+                event_id,player_id,occurred_at,source_reference,data,sensitivity,
+                request_fingerprint,recorded_at)
+            VALUES ($1,$2,$3,$4,$5::jsonb,$6,$7,now())
+            ON CONFLICT DO NOTHING
+            RETURNING event_id
+            """);
+        command.Parameters.AddWithValue(Guid.Parse(request.EventId));
+        command.Parameters.AddWithValue(request.PlayerId);
+        command.Parameters.AddWithValue(request.OccurredAtUtc);
+        command.Parameters.AddWithValue(request.SourceReference);
+        command.Parameters.AddWithValue(request.Data.GetRawText());
+        command.Parameters.AddWithValue(request.Sensitivity);
+        command.Parameters.AddWithValue(fingerprint);
+        if (await command.ExecuteScalarAsync(cancellationToken) is not null)
+            return new LegacyReplayEvidenceResult(request.EventId, false);
+
+        await using var existing = dataSource.CreateCommand(
+            """
+            SELECT event_id
+            FROM replay.legacy_player_evidence
+            WHERE (event_id=$1 OR source_reference=$4)
+              AND player_id=$2 AND occurred_at=$3 AND source_reference=$4
+              AND data=$5::jsonb AND sensitivity=$6
+            """);
+        existing.Parameters.AddWithValue(Guid.Parse(request.EventId));
+        existing.Parameters.AddWithValue(request.PlayerId);
+        existing.Parameters.AddWithValue(request.OccurredAtUtc);
+        existing.Parameters.AddWithValue(request.SourceReference);
+        existing.Parameters.AddWithValue(request.Data.GetRawText());
+        existing.Parameters.AddWithValue(request.Sensitivity);
+        if (await existing.ExecuteScalarAsync(cancellationToken) is null)
+            throw GameDataException.Conflict("LEGACY_REPLAY_IDEMPOTENCY_CONFLICT", "相同 EventId 的回放索引参数不一致");
+        return new LegacyReplayEvidenceResult(request.EventId, true);
     }
 
     public async Task<IReadOnlyList<LeaderboardEntry>> GetLeaderboardAsync(int limit, CancellationToken cancellationToken)
@@ -414,4 +485,15 @@ public sealed class PostgresGameDataStore(NpgsqlDataSource dataSource) : IGameDa
         reader.GetGuid(0).ToString(), reader.GetString(1), reader.GetString(2), reader.GetInt32(3),
         reader.GetInt32(4), reader.GetString(5), reader.GetFieldValue<DateTimeOffset>(6),
         JsonSerializer.Deserialize<FinalPlayerResult[]>(reader.GetString(7), JsonOptions) ?? []);
+}
+
+/// <summary>为旧回放索引生成稳定请求指纹，确保响应丢失后的重复提交不会产生不同记录。</summary>
+internal static class LegacyReplayFingerprint
+{
+    public static string Create(LegacyReplayEvidenceRequest request)
+    {
+        var material = string.Join('\n', request.EventId, request.PlayerId, request.OccurredAtUtc.ToUniversalTime().ToString("O"),
+            request.SourceReference, request.Data.GetRawText(), request.Sensitivity);
+        return Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(material)));
+    }
 }

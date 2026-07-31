@@ -128,3 +128,10 @@
 # 阶段 11 增量：Configuration 所有权
 
 `configuration.config_drafts`、`configuration.config_versions`、`configuration.config_current`、`configuration.config_application_reports` 和 `configuration_integration.platform_outbox` 由 `GuiyangMahjong.Configuration` 唯一写入。Workers 仅可领取、标记和归档 Outbox；Admin 只能通过 Configuration 管理命令 API 操作，不能直接写表。已发布版本为不可变历史，回滚创建更高版本。
+
+# 阶段 8.2 增量：ReplayEvidence 单写切换
+
+`replay.evidence_manifests` 与 `replay.legacy_player_evidence` 由GameData唯一写入。PlayerData旧
+`/internal/sources/replays` 仅为兼容转发入口，数据库触发器拒绝向
+`player_data.evidence_events` 新增或更新Replay类型；旧行保留用于迁移核验和回滚，不形成长期双写。
+Report、PaymentOrder、RewardClaim和AssetChange仍由PlayerData持有，等待8.3～8.5分别迁移。

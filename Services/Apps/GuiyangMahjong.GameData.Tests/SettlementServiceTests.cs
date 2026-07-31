@@ -282,6 +282,9 @@ public sealed class SettlementServiceTests
             inner.GetPlayerRecordsAsync(id, limit, token);
         public Task<ReplayEvidenceRecord?> GetEvidenceAsync(string id, CancellationToken token) =>
             inner.GetEvidenceAsync(id, token);
+        public Task<LegacyReplayEvidenceResult> RecordLegacyReplayAsync(
+            LegacyReplayEvidenceRequest request, CancellationToken token) =>
+            inner.RecordLegacyReplayAsync(request, token);
         public Task<IReadOnlyList<LeaderboardEntry>> GetLeaderboardAsync(int limit, CancellationToken token) =>
             inner.GetLeaderboardAsync(limit, token);
         public Task<bool> CheckHealthAsync(CancellationToken token) => inner.CheckHealthAsync(token);

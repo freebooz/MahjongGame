@@ -18,6 +18,65 @@ public interface IChatPolicyClient
         CancellationToken cancellationToken);
 }
 
+/// <summary>阶段8.2旧回放接口的GameData窄客户端；调用成功后PlayerData不得再写Replay旧表。</summary>
+public interface ILegacyReplayEvidenceClient
+{
+    /// <summary>将经过原有校验的Replay元数据幂等转发给GameData，网络或身份失败采用失败关闭。</summary>
+    Task<EvidenceRecordResult> RecordAsync(RecordEvidenceRequest request, CancellationToken cancellationToken);
+}
+
+/// <summary>
+/// PlayerData兼容适配器的HTTP实现。它传播EventId幂等键，不透明重试POST，
+/// 并且不记录请求正文、玩家私有数据或服务凭据。
+/// </summary>
+public sealed class HttpLegacyReplayEvidenceClient(
+    IHttpClientFactory httpClientFactory,
+    IOptions<PlayerDataOptions> options,
+    ILogger<HttpLegacyReplayEvidenceClient> logger) : ILegacyReplayEvidenceClient
+{
+    private readonly PlayerDataOptions settings = options.Value;
+
+    /// <inheritdoc />
+    public async Task<EvidenceRecordResult> RecordAsync(
+        RecordEvidenceRequest request,
+        CancellationToken cancellationToken)
+    {
+        using var message = new HttpRequestMessage(
+            HttpMethod.Post,
+            new Uri(new Uri(settings.GameDataBaseUrl), "/internal/replay-evidence/legacy-player-index"))
+        {
+            Content = JsonContent.Create(request)
+        };
+        message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", settings.GameDataLegacyReplayToken);
+        message.Headers.Add("Idempotency-Key", Guid.Parse(request.EventId).ToString());
+        using var client = httpClientFactory.CreateClient(nameof(HttpLegacyReplayEvidenceClient));
+        try
+        {
+            using var response = await client.SendAsync(message, cancellationToken);
+            if (!response.IsSuccessStatusCode)
+                throw new PlayerDataOperationException(
+                    "REPLAY_OWNER_REJECTED",
+                    "GameData拒绝了回放索引写入。",
+                    response.StatusCode == HttpStatusCode.Conflict ? 409 : 503);
+            var result = await response.Content.ReadFromJsonAsync<EvidenceRecordResult>(cancellationToken: cancellationToken);
+            return result ?? throw new PlayerDataOperationException(
+                "REPLAY_OWNER_RESPONSE_INVALID", "GameData回放索引响应无效。", 503);
+        }
+        catch (HttpRequestException exception)
+        {
+            logger.LogWarning("GameData回放索引暂时不可用。ErrorCode={ErrorCode}", exception.GetType().Name);
+            throw new PlayerDataOperationException(
+                "REPLAY_OWNER_UNAVAILABLE", "GameData回放索引暂时不可用。", 503);
+        }
+        catch (TaskCanceledException exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            logger.LogWarning("GameData回放索引请求超时。ErrorCode={ErrorCode}", exception.GetType().Name);
+            throw new PlayerDataOperationException(
+                "REPLAY_OWNER_TIMEOUT", "GameData回放索引请求超时。", 503);
+        }
+    }
+}
+
 /// <summary>
 /// 使用独立服务身份调用 Auth 聊天策略端点。
 /// 请求不携带消息正文；网络、身份或协议失败采用关闭式拒绝语义。

@@ -811,6 +811,34 @@ public sealed class ProjectArchitectureTests
     }
 
     /// <summary>
+    /// 阶段8.2以后GameData必须拥有Replay索引表，PlayerData旧URL只能调用窄适配器，
+    /// 并由数据库触发器拒绝任何遗留Replay写入，防止回归为长期双写。
+    /// </summary>
+    [Fact]
+    public void ReplayEvidence_HasSingleGameDataWriterAndPlayerDataFailClosedGuard()
+    {
+        var root = FindProjectRoot();
+        var gameDataSchema = File.ReadAllText(Path.Combine(
+            root, "Services", "Apps", "GuiyangMahjong.GameData", "Storage", "schema.sql"));
+        var playerDataSchema = File.ReadAllText(Path.Combine(
+            root, "Services", "GuiyangMahjong.PlayerData", "Storage", "schema.sql"));
+        var endpoints = File.ReadAllText(Path.Combine(
+            root, "Services", "GuiyangMahjong.PlayerData", "Api", "PlayerDataEndpoints.cs"));
+
+        Assert.Contains("replay.legacy_player_evidence", gameDataSchema, StringComparison.Ordinal);
+        Assert.Contains("trg_reject_replay_evidence_write", playerDataSchema, StringComparison.Ordinal);
+        Assert.Contains("ILegacyReplayEvidenceClient replayClient", endpoints, StringComparison.Ordinal);
+        Assert.Contains("replayClient.RecordAsync", endpoints, StringComparison.Ordinal);
+        var replayStart = endpoints.IndexOf("sources.MapPost(\"/replays\"", StringComparison.Ordinal);
+        var replayEnd = endpoints.IndexOf("app.MapPost(\"/internal/admin", replayStart, StringComparison.Ordinal);
+        Assert.True(replayStart >= 0 && replayEnd > replayStart);
+        Assert.DoesNotContain(
+            "store.RecordEvidenceAsync",
+            endpoints[replayStart..replayEnd],
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// 阶段10冻结 Admin 数据和基础设施边界：生产项目不得引用业务实现、Kubernetes/Agones SDK，
     /// 持久化写 SQL 只能指向 admin_monitor，防止后台演化为任意数据修改工具。
     /// </summary>

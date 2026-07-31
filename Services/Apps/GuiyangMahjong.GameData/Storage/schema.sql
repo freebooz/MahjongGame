@@ -85,6 +85,20 @@ CREATE TABLE IF NOT EXISTS replay.evidence_manifests (
     CONSTRAINT ux_replay_business_key UNIQUE (match_id, round_no, settlement_version)
 );
 
+-- 阶段 8.2 兼容索引承接 PlayerData 的旧 Replay 元数据；它不是权威结算证据清单，不能被 Settlement 引用。
+CREATE TABLE IF NOT EXISTS replay.legacy_player_evidence (
+    event_id UUID PRIMARY KEY,
+    player_id VARCHAR(128) NOT NULL,
+    occurred_at TIMESTAMPTZ NOT NULL,
+    source_reference VARCHAR(128) NOT NULL UNIQUE,
+    data JSONB NOT NULL,
+    sensitivity VARCHAR(16) NOT NULL CHECK (sensitivity = 'Restricted'),
+    request_fingerprint CHAR(64) NOT NULL,
+    recorded_at TIMESTAMPTZ NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_replay_legacy_player
+    ON replay.legacy_player_evidence(player_id, occurred_at DESC);
+
 -- 基础排行榜可由 SettlementCommitted 重建，不能反向成为战绩权威来源。
 CREATE TABLE IF NOT EXISTS leaderboard.player_scores (
     player_id VARCHAR(80) PRIMARY KEY,
@@ -142,4 +156,8 @@ FOR EACH STATEMENT EXECUTE FUNCTION settlement.reject_immutable_mutation();
 DROP TRIGGER IF EXISTS trg_evidence_immutable ON replay.evidence_manifests;
 CREATE TRIGGER trg_evidence_immutable
 BEFORE UPDATE OR DELETE OR TRUNCATE ON replay.evidence_manifests
+FOR EACH STATEMENT EXECUTE FUNCTION settlement.reject_immutable_mutation();
+DROP TRIGGER IF EXISTS trg_legacy_replay_immutable ON replay.legacy_player_evidence;
+CREATE TRIGGER trg_legacy_replay_immutable
+BEFORE UPDATE OR DELETE OR TRUNCATE ON replay.legacy_player_evidence
 FOR EACH STATEMENT EXECUTE FUNCTION settlement.reject_immutable_mutation();

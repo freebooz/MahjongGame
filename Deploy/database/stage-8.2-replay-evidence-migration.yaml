@@ -1,0 +1,26 @@
+# 阶段8.2部署编排说明：生产执行器应逐项记录开始时间、结束时间、操作者、工单和核验结果。
+# 本文件不包含数据库凭据，也不自动删除源数据；真实迁移只能由独立migration身份执行。
+stage: "8.2"
+owner: "GameData/ReplayEvidence"
+strategy: "copy-verify-stop-old-writer"
+source:
+  schema: "player_data"
+  table: "evidence_events"
+  filter: "evidence_type = 'Replay'"
+target:
+  schema: "replay"
+  table: "legacy_player_evidence"
+steps:
+  - "apply GameData schema"
+  - "run stage-8.2-replay-evidence-migration.sql with migration identity"
+  - "run stage-8.2-replay-evidence-validation.sql and attach results to the change ticket"
+  - "deploy GameData ingestion endpoint"
+  - "deploy PlayerData compatibility adapter"
+  - "observe deprecated endpoint callers and zero old Replay writes"
+rollback:
+  - "route traffic to the stage 8.1 PlayerData image first"
+  - "run stage-8.2-replay-evidence-rollback.sql"
+  - "retain GameData copied records; do not delete evidence during rollback"
+lock_assessment:
+  source: "Replay rows are read only; trigger installation takes a short table metadata lock."
+  target: "INSERT-only with UUID and source-reference unique indexes."

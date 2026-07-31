@@ -47,6 +47,7 @@ builder.Services
             && options.ChatGatewayToken.Length >= 32
             && options.MonitoringToken.Length >= 32
             && options.AuthMonitoringToken.Length >= 32
+            && options.GameDataLegacyReplayToken.Length >= 32
             && options.ProjectionEnabled
             && options.AdminEvidenceIngestionToken.Length >= 32),
         "Production PlayerData requires PostgreSQL and all dedicated credentials.")
@@ -58,7 +59,8 @@ builder.Services
             options.ChatGatewayToken,
             options.MonitoringToken,
             options.AuthMonitoringToken,
-            options.AdminEvidenceIngestionToken
+            options.AdminEvidenceIngestionToken,
+            options.GameDataLegacyReplayToken
         }
         .Where(value => !string.IsNullOrEmpty(value))
         .Distinct(StringComparer.Ordinal)
@@ -71,7 +73,8 @@ builder.Services
             options.ChatGatewayToken,
             options.MonitoringToken,
             options.AuthMonitoringToken,
-            options.AdminEvidenceIngestionToken
+            options.AdminEvidenceIngestionToken,
+            options.GameDataLegacyReplayToken
         }.Count(value => !string.IsNullOrEmpty(value)),
         "PlayerData credentials must all be distinct.")
     .ValidateOnStart();
@@ -86,6 +89,9 @@ builder.Services.AddHttpClient(
 builder.Services.AddHttpClient(
     nameof(ProjectionDispatcher),
     client => client.Timeout = TimeSpan.FromSeconds(5));
+builder.Services.AddHttpClient(
+    nameof(HttpLegacyReplayEvidenceClient),
+    client => client.Timeout = TimeSpan.FromSeconds(5));
 builder.Services.AddSingleton<IPlayerDataStore>(provider =>
 {
     var options = provider
@@ -98,6 +104,7 @@ builder.Services.AddSingleton<IPlayerDataStore>(provider =>
         : new InMemoryPlayerDataStore();
 });
 builder.Services.AddSingleton<IChatPolicyClient, HttpChatPolicyClient>();
+builder.Services.AddSingleton<ILegacyReplayEvidenceClient, HttpLegacyReplayEvidenceClient>();
 builder.Services.AddSingleton<ProjectionDispatcher>();
 builder.Services.AddHostedService<PlayerDataStoreInitializer>();
 builder.Services.AddHostedService<ProjectionDispatcherService>();

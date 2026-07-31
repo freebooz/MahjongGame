@@ -127,3 +127,65 @@ EdgeGateway 仍配置 `/api/v1/player-data/**` 到 PlayerData，但当前服务�
 技术结论：8.1 达到“资料与会话由 Identity 独占、PlayerData 无旧写入口、无长期双写”的验收条件。真实环境的数据数量核验必须由具备授权的迁移人员运行同一只读脚本并将结果附到工单；本次未读取任何环境密钥或生产凭据。
 
 8.1 未经人工验收前不实施 8.2。
+
+## 6. 8.2 战绩与回放证据迁移
+
+### 6.1 实际边界
+
+GameRecords 与权威 `replay.evidence_manifests` 已由阶段7的 GameData 独占。本步骤只迁移 PlayerData
+`evidence_events` 中 `evidence_type='Replay'` 的旧玩家回放索引，不触碰 Report、PaymentOrder、
+RewardClaim、AssetChange、钱包、奖励或聊天授权。旧索引不能冒充经过DS签名和结算校验的权威证据清单。
+
+### 6.2 API与单写切换
+
+- GameData 新增 `POST /internal/replay-evidence/legacy-player-index`，要求用途隔离Bearer凭据和
+  `Idempotency-Key=eventId`，拒绝敏感字段、错误分类、超限正文和冲突重放。
+- PlayerData 保留 `/internal/sources/replays` 响应兼容，但仅调用GameData窄客户端，不透明重试POST，
+  不再调用 `IPlayerDataStore.RecordEvidenceAsync`。
+- `player_data.reject_replay_evidence_write` 触发器在数据库层拒绝任何遗留Replay INSERT/UPDATE；
+  其他四类证据仍由PlayerData按后续独立步骤迁移。
+- Redis无变化；结算、战绩查询和EdgeGateway响应无变化。
+
+### 6.3 数据映射与迁移
+
+| 源字段 | 目标字段 | 转换 |
+|---|---|---|
+| `event_id` | `event_id` | UUID原值，主键幂等 |
+| `player_id` | `player_id` | 原值 |
+| `occurred_at_utc` | `occurred_at` | UTC原值 |
+| `source_reference` | `source_reference` | 原值，唯一约束 |
+| `data` | `data` | JSONB原值，不复制到普通日志 |
+| `sensitivity` | `sensitivity` | Replay只允许Restricted |
+| 规范字段摘要 | `request_fingerprint` | SHA-256，仅用于冲突审计 |
+| `recorded_at_utc` | `recorded_at` | 原值 |
+
+迁移入口为 `sql/stage-8.2-replay-evidence-migration.sql`，使用 `INSERT ... ON CONFLICT DO NOTHING`
+并在同一事务核对缺失行后关闭旧写入口。只读核验位于
+`sql/stage-8.2-replay-evidence-validation.sql`。迁移只扫描Replay部分索引；生产执行前应通过
+`EXPLAIN`与实际行数评估扫描时间，必要时先在线建立`evidence_type`部分索引。脚本不更新源行，
+不会对钱包和奖励事务加写锁。
+
+### 6.4 兼容与回滚
+
+推荐顺序为：应用目标表 → 执行幂等迁移与核验 → 部署GameData → 部署PlayerData适配器 →
+观察旧入口成功率和调用方 → 确认无旧Replay写入。紧急回滚必须先把流量和PlayerData镜像切回8.1，
+再执行 `sql/stage-8.2-replay-evidence-rollback.sql` 删除旧写拒绝触发器。回滚不删除GameData记录，
+避免证据丢失；禁止在新旧两个入口同时开放写入。
+
+### 6.5 当前验收门
+
+8.2完成后仍不能开始8.4或8.5；下一步只能单独实施8.3 Economy/Rewards/Inventory迁移。
+真实生产数据数量、锁等待和旧接口调用量仍必须由授权迁移人员附入工单，本地测试不得读取生产凭据。
+
+### 6.6 8.2技术验证结果
+
+- `dotnet restore`、Release构建通过，0警告、0错误。
+- 非外部全解决方案测试285项通过、4项NATS外部集成测试按Category跳过、0失败。
+- GameData阶段8.2测试覆盖专用凭据、敏感字段拒绝、首次写入、重复写入和冲突重放。
+- PlayerData兼容测试证明旧URL调用GameData适配器，且同EventId没有进入PlayerData投影Outbox。
+- 架构测试证明GameData目标表、PlayerData旧写触发器和窄客户端边界存在。
+- 一次性PostgreSQL 17验证迁移脚本重复执行、目标数量、旧写拒绝和回滚恢复，1项通过。
+- Compose展开、Kubernetes YAML、阶段迁移YAML和两个服务的JSON配置语法通过。
+
+技术结论：8.2代码和本地数据迁移验收通过。生产验收仍需在授权停写窗口执行数量核验、锁影响观察、
+旧接口调用量确认并附入工单；未完成这些人工证据前不得删除PlayerData旧Replay行或开始8.3生产切流。

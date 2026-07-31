@@ -44,6 +44,10 @@ public sealed class PlayerDataWebApplicationFactory
             services.AddSingleton<TestChatPolicyClient>();
             services.AddSingleton<IChatPolicyClient>(provider =>
                 provider.GetRequiredService<TestChatPolicyClient>());
+            services.RemoveAll<ILegacyReplayEvidenceClient>();
+            services.AddSingleton<TestLegacyReplayEvidenceClient>();
+            services.AddSingleton<ILegacyReplayEvidenceClient>(provider =>
+                provider.GetRequiredService<TestLegacyReplayEvidenceClient>());
         });
     }
 }
@@ -212,6 +216,38 @@ public sealed class PlayerDataApiTests(
         Assert.Equal(HttpStatusCode.BadRequest, pii.StatusCode);
     }
 
+    /// <summary>旧Replay URL保持响应兼容，但只调用GameData适配器且不再创建PlayerData投影。</summary>
+    [Fact]
+    public async Task LegacyReplayEndpoint_ForwardsWithoutWritingPlayerDataStore()
+    {
+        var adapter = factory.Services.GetRequiredService<TestLegacyReplayEvidenceClient>();
+        adapter.Requests.Clear();
+        var eventId = Guid.NewGuid().ToString();
+        using var client = factory.CreateClient();
+        using var response = await SendAsync(
+            client,
+            "/internal/sources/replays",
+            PlayerDataWebApplicationFactory.SourceToken,
+            eventId,
+            new
+            {
+                eventId,
+                playerId = "player-replay-test",
+                evidenceType = "Replay",
+                occurredAtUtc = DateTimeOffset.UtcNow,
+                sourceReference = $"replay:{eventId}",
+                data = new { replayId = "legacy-replay-1" },
+                sensitivity = "Restricted"
+            });
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        Assert.Single(adapter.Requests);
+
+        var store = factory.Services.GetRequiredService<GuiyangMahjong.PlayerData.Storage.IPlayerDataStore>();
+        var projections = await store.ClaimProjectionsAsync(
+            "test-worker", 10, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddMinutes(1), default);
+        Assert.DoesNotContain(projections, item => item.EventId == eventId);
+    }
+
     [Fact]
     public async Task ChatAuthorizationFailsClosedForMutedPlayer()
     {
@@ -291,4 +327,19 @@ public sealed class TestChatPolicyClient : IChatPolicyClient
             Allowed,
             Allowed ? null : DateTimeOffset.UtcNow.AddHours(1),
             Allowed ? "Allowed" : "Muted"));
+}
+
+/// <summary>测试替身只记录兼容转发，不访问数据库或网络。</summary>
+public sealed class TestLegacyReplayEvidenceClient : ILegacyReplayEvidenceClient
+{
+    public List<RecordEvidenceRequest> Requests { get; } = [];
+
+    public Task<EvidenceRecordResult> RecordAsync(
+        RecordEvidenceRequest request,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        Requests.Add(request);
+        return Task.FromResult(new EvidenceRecordResult(request.EventId, false));
+    }
 }

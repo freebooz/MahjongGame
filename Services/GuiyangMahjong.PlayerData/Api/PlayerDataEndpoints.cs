@@ -71,10 +71,27 @@ public static class PlayerDataEndpoints
             sources,
             "/reports",
             PlayerEvidenceType.Report);
-        MapEvidenceSource(
-            sources,
-            "/replays",
-            PlayerEvidenceType.Replay);
+        // 阶段8.2保留旧URL和响应结构，但写入权威已经切到GameData；禁止继续写player_data.evidence_events。
+        sources.MapPost("/replays", async (
+            HttpContext context,
+            RecordEvidenceRequest request,
+            IOptions<PlayerDataOptions> options,
+            ILegacyReplayEvidenceClient replayClient,
+            TimeProvider timeProvider,
+            ILoggerFactory loggerFactory,
+            CancellationToken cancellationToken) =>
+        {
+            RequireCredential(context, options.Value.SourceIngestionToken);
+            var idempotencyKey = PlayerDataValidation.RequireIdempotencyKey(context);
+            PlayerDataValidation.ValidateEvidence(request, PlayerEvidenceType.Replay, timeProvider.GetUtcNow());
+            if (idempotencyKey != Guid.Parse(request.EventId).ToString())
+                throw PlayerDataOperationException.Invalid("Idempotency-Key must match eventId.");
+            loggerFactory.CreateLogger("PlayerData.LegacyReplayAdapter").LogInformation(
+                "旧Replay写入口已转发至GameData。DeprecatedEndpoint={DeprecatedEndpoint} Owner={Owner}",
+                "/internal/sources/replays", "GameData/ReplayEvidence");
+            var result = await replayClient.RecordAsync(request, cancellationToken);
+            return result.Duplicate ? Results.Ok(result) : Results.Json(result, statusCode: StatusCodes.Status201Created);
+        }).WithMetadata(new RequestSizeLimitAttribute(24 * 1024));
 
         app.MapPost("/internal/admin/wallet-operations", async (
             HttpContext context,

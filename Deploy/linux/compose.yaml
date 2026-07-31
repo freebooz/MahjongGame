@@ -47,6 +47,7 @@ services:
       - ../../Services/Apps/GuiyangMahjong.GameData/Storage:/migration/game-data:ro
       - ../../Services/Apps/GuiyangMahjong.Configuration/Storage:/migration/configuration:ro
       - ../../Services/Apps/GuiyangMahjong.Workers/Storage:/migration/workers:ro
+      - ../../Docs/architecture/sql:/migration/stage-sql:ro
     entrypoint: ["/bin/sh", "-ec"]
     command:
       - |
@@ -57,6 +58,8 @@ services:
         $$base -f /migration/player-data/schema.sql
         $$base -f /migration/admin/schema.sql
         $$base -f /migration/game-data/schema.sql
+        # Replay源表和目标表均存在后执行幂等复制；脚本核对成功才提交旧写关闭门禁。
+        $$base -f /migration/stage-sql/stage-8.2-replay-evidence-migration.sql
         $$base -f /migration/configuration/schema.sql
         $$base -f /migration/workers/schema.sql
         $$base -f /migration/least-privilege/002_grants.sql
@@ -404,6 +407,7 @@ services:
       GameData__MonitoringToken: ${GAMEDATA_MONITORING_TOKEN:?GAMEDATA_MONITORING_TOKEN is required}
       GameData__SettlementSigningKey: ${SETTLEMENT_SIGNING_KEY:?SETTLEMENT_SIGNING_KEY is required}
       GameData__AllocatorRecoveryToken: ${GAMEDATA_RECOVERY_TOKEN:?GAMEDATA_RECOVERY_TOKEN is required}
+      GameData__LegacyReplayIngestionToken: ${GAMEDATA_LEGACY_REPLAY_TOKEN:?GAMEDATA_LEGACY_REPLAY_TOKEN is required}
       GameData__EvidenceStorage__Mode: FileSystem
       GameData__EvidenceStorage__RootDirectory: /var/lib/guiyang-mahjong/recovery
     volumes:
@@ -447,12 +451,16 @@ services:
       PlayerData__AuthMonitoringToken: ${MONITORING_READ_ONLY_TOKEN:?MONITORING_READ_ONLY_TOKEN is required}
       PlayerData__AdminProjectionBaseUrl: http://admin:8080
       PlayerData__AdminEvidenceIngestionToken: ${ADMIN_EVIDENCE_INGESTION_TOKEN:?ADMIN_EVIDENCE_INGESTION_TOKEN is required}
+      # 阶段8.2保留旧URL但由GameData独占Replay写入，PlayerData不再双写旧表。
+      PlayerData__GameDataBaseUrl: http://game-data:8080
+      PlayerData__GameDataLegacyReplayToken: ${GAMEDATA_LEGACY_REPLAY_TOKEN:?GAMEDATA_LEGACY_REPLAY_TOKEN is required}
       PlayerData__ProjectionEnabled: "true"
       PlayerData__ProjectionPollMilliseconds: ${PLAYER_DATA_PROJECTION_POLL_MS:-1000}
       PlayerData__ProjectionMaxAttempts: ${PLAYER_DATA_PROJECTION_MAX_ATTEMPTS:-10}
     depends_on:
       postgres-migration: {condition: service_completed_successfully}
       auth: {condition: service_healthy}
+      game-data: {condition: service_healthy}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports: ["127.0.0.1:${PLAYER_DATA_PORT:-18084}:8080"]

@@ -25,6 +25,8 @@ public sealed class GameDataOptions
     [MinLength(32)] public string SettlementSigningKey { get; init; } = string.Empty;
     /// <summary>Allocator 恢复遗留 DS Outbox 的专用凭据，只授权 recovery 入口。</summary>
     [MinLength(32)] public string AllocatorRecoveryToken { get; init; } = string.Empty;
+    /// <summary>PlayerData 8.2 兼容入口写入旧回放索引的专用凭据；不得授权结算、监控或对象读取。</summary>
+    [MinLength(32)] public string LegacyReplayIngestionToken { get; init; } = string.Empty;
     /// <summary>证据验证配置；FileSystem 用于共享恢复卷，HttpGateway 用于 MinIO/S3 对象网关。</summary>
     [Required] public EvidenceStorageOptions EvidenceStorage { get; init; } = new();
 }

@@ -108,6 +108,22 @@ public sealed record ReplayEvidenceRecord(
     DateTimeOffset RetainUntilUtc,
     IReadOnlyList<EvidenceManifestItem> Objects);
 
+/// <summary>
+/// 阶段 8.2 从 PlayerData 迁入的旧回放索引。该记录只保存旧调用方已经提供的受控元数据，
+/// 不冒充阶段 7 的权威结算证据清单，也不得包含完整手牌、访问令牌或对象存储凭据。
+/// </summary>
+public sealed record LegacyReplayEvidenceRequest(
+    string EventId,
+    string PlayerId,
+    string EvidenceType,
+    DateTimeOffset OccurredAtUtc,
+    string SourceReference,
+    System.Text.Json.JsonElement Data,
+    string Sensitivity);
+
+/// <summary>旧回放索引的幂等写入结果；重复事件返回首次 EventId，冲突请求被显式拒绝。</summary>
+public sealed record LegacyReplayEvidenceResult(string EventId, bool Duplicate);
+
 /// <summary>基础排行榜投影；它可重建且不是比赛结果权威来源。</summary>
 public sealed record LeaderboardEntry(
     string PlayerId,

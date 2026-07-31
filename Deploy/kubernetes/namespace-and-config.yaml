@@ -107,6 +107,7 @@ data:
   PlayerData__ApplyDatabaseMigrations: "false"
   PlayerData__AuthBaseUrl: http://mahjong-auth:8080
   PlayerData__AdminProjectionBaseUrl: http://mahjong-admin:8080
+  PlayerData__GameDataBaseUrl: http://mahjong-game-data:8080
   PlayerData__ProjectionEnabled: "true"
   PlayerData__ProjectionPollMilliseconds: "1000"
   PlayerData__ProjectionMaxAttempts: "10"
