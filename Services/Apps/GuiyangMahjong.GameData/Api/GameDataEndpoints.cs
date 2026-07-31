@@ -77,31 +77,6 @@ public static class GameDataEndpoints
             return Results.Ok(result);
         }).WithMetadata(new RequestSizeLimitAttribute(256 * 1024));
 
-        app.MapPost("/internal/replay-evidence/legacy-player-index", async (
-            HttpContext context,
-            LegacyReplayEvidenceRequest request,
-            IOptions<GameDataOptions> options,
-            IGameDataStore store,
-            TimeProvider timeProvider,
-            CancellationToken cancellationToken) =>
-        {
-            RequireDedicatedBearer(context, options.Value.LegacyReplayIngestionToken, "LEGACY_REPLAY_INGESTION_FORBIDDEN");
-            var idempotencyKey = RequireHeader(context, "Idempotency-Key", 36, 36);
-            if (!Guid.TryParse(request.EventId, out var eventId)
-                || idempotencyKey != eventId.ToString()
-                || request.EvidenceType != "Replay"
-                || request.Sensitivity != "Restricted"
-                || request.PlayerId.Length is < 1 or > 128
-                || request.SourceReference.Length is < 1 or > 128
-                || request.Data.ValueKind != System.Text.Json.JsonValueKind.Object
-                || request.OccurredAtUtc < timeProvider.GetUtcNow().AddYears(-5)
-                || request.OccurredAtUtc > timeProvider.GetUtcNow().AddMinutes(5)
-                || ContainsForbiddenReplayData(request.Data))
-                throw GameDataException.Invalid("LEGACY_REPLAY_REQUEST_INVALID", "旧回放索引请求格式无效");
-            var result = await store.RecordLegacyReplayAsync(request, cancellationToken);
-            return result.Duplicate ? Results.Ok(result) : Results.Json(result, statusCode: StatusCodes.Status201Created);
-        }).WithMetadata(new RequestSizeLimitAttribute(24 * 1024));
-
         var monitoring = app.MapGroup("/internal/monitoring");
         monitoring.MapGet("/matches/{matchId}", async (
             string matchId, HttpContext context, IOptions<GameDataOptions> options,

@@ -208,8 +208,6 @@ jobs:
           - name: lobby
             dockerfile: Services/GuiyangMahjong.Lobby/Dockerfile
             target: ""
-          - name: player-data
-            dockerfile: Services/GuiyangMahjong.PlayerData/Dockerfile
             target: ""
           - name: admin
             dockerfile: Services/GuiyangMahjong.Admin/Dockerfile

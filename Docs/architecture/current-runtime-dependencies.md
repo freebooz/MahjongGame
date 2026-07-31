@@ -54,7 +54,7 @@ ASP.NET Core 配置采用 `appsettings.json`、环境专用 JSON、环境变量�
 - `Services/GuiyangMahjong.Allocator/Dockerfile`
 - `Services/GuiyangMahjong.Allocator/Dockerfile.agones`
 - `Services/GuiyangMahjong.Allocator/Dockerfile.windows`
-- `Services/GuiyangMahjong.PlayerData/Dockerfile`
+- `Services/GuiyangMahjong.PlayerData/Dockerfile`（阶段8.6已从CI和部署矩阵移除，仅限期保留作回滚审计）
 - `Services/GuiyangMahjong.Admin/Dockerfile`
 - `Deploy/Docker/Dockerfile.gameserver`
 
@@ -149,4 +149,3 @@ OTel Collector 对敏感属性执行删除/脱敏处理。Prometheus 加载普�
 # 阶段 11 增量：配置发布依赖
 
 Configuration 依赖 PostgreSQL 和 OpenTelemetry；发布事件经自有 Outbox 由 Workers 发送至 NATS JetStream。EdgeGateway 可选依赖 Configuration 内网 API，并在上游不可用时使用持久化 Last Known Good。Admin BFF 可选依赖 Configuration 管理 API。Dedicated Server UDP/UE 网络不经过 Configuration 或 EdgeGateway。
-

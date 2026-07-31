@@ -103,17 +103,6 @@ data:
   Admin__Allocators__0__ClusterId: production
   Admin__Allocators__0__NodeId: agones
   Admin__Allocators__0__BaseUrl: http://mahjong-allocator:8080
-  PlayerData__PersistenceMode: Postgres
-  PlayerData__ApplyDatabaseMigrations: "false"
-  # 阶段8.4旧聊天授权入口只转发到Community，不再读取Identity。
-  PlayerData__CommunityBaseUrl: http://mahjong-community:8080
-  PlayerData__AdminProjectionBaseUrl: http://mahjong-admin:8080
-  PlayerData__GameDataBaseUrl: http://mahjong-game-data:8080
-  # 兼容期旧资产入口仅转发；权威写入和余额查询由 Economy 提供。
-  PlayerData__EconomyBaseUrl: http://mahjong-economy:8080
-  PlayerData__ProjectionEnabled: "false"
-  PlayerData__ProjectionPollMilliseconds: "1000"
-  PlayerData__ProjectionMaxAttempts: "10"
   Economy__PersistenceMode: Postgres
   Economy__ApplyDatabaseMigrations: "false"
   Community__AuthBaseUrl: http://mahjong-auth:8080

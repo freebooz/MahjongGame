@@ -23,13 +23,13 @@
 | 生产 | `GuiyangMahjong.Auth` | 游客身份、访问令牌、刷新会话、账号控制 | `Observability` |
 | 生产 | `GuiyangMahjong.Lobby` | 大厅、房间控制面、路由、DS 回调、结算落库 | `Observability` |
 | 生产 | `GuiyangMahjong.Allocator` | DS 分配、进程/Agones 生命周期、实例租约 | `Observability` |
-| 生产 | `GuiyangMahjong.PlayerData` | 钱包、奖励、支付/举报/回放证据投影 | `Observability` |
+| 已退役 | `GuiyangMahjong.PlayerData` | 阶段8.6已退出解决方案与部署；历史源码仅用于限期回滚审计 | - |
 | 生产 | `GuiyangMahjong.Admin` | 房间/玩家聚合监控、审批、命令、调查、审计 | `Observability` |
 | 生产 | `GuiyangMahjong.Observability` | 结构化日志、指标、Trace、敏感字段约束 | 无 |
 | 测试 | `GuiyangMahjong.Auth.Tests` | Auth API、令牌、PostgreSQL 集成 | `Auth` |
 | 测试 | `GuiyangMahjong.Lobby.Tests` | 房间、Redis/PostgreSQL、DS/结算契约 | `Lobby` |
 | 测试 | `GuiyangMahjong.Allocator.Tests` | 分配、进程、Agones、恢复和管理命令 | `Allocator` |
-| 测试 | `GuiyangMahjong.PlayerData.Tests` | 资产、证据、投影、PostgreSQL 集成 | `PlayerData` |
+| 已退役 | `GuiyangMahjong.PlayerData.Tests` | 已退出解决方案；所有者测试由Economy、GameData、Community和Admin承担 | - |
 | 测试 | `GuiyangMahjong.Admin.Tests` | 聚合、RBAC/ABAC、审批、审计和调查 | `Admin` |
 | 测试 | `GuiyangMahjong.Architecture.Tests` | Schema 输出隔离和项目引用边界 | `Auth`、`Lobby`、`PlayerData`、`Admin` |
 

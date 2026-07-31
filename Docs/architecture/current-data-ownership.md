@@ -8,7 +8,7 @@
 |---|---|---|---|
 | `public` 中的 `auth_*` | Auth | `GuiyangMahjong.Auth/Storage/schema.sql` | Auth |
 | `public` 中的 `lobby_*`、房间/比赛历史表 | Lobby | `GuiyangMahjong.Lobby/Storage/schema.sql` | Lobby |
-| `player_data` | PlayerData | `GuiyangMahjong.PlayerData/Storage/schema.sql` | PlayerData |
+| `player_data` | 只读历史归档 | `GuiyangMahjong.PlayerData/Storage/schema.sql` | 无运行写入者；阶段8.6冻结 |
 | `admin_monitor` | Admin | `GuiyangMahjong.Admin/Storage/schema.sql` | Admin |
 
 每个 Schema 文件被构建到唯一的 `Schemas/{Service}/schema.sql`，不会因同名文件互相覆盖。生产运行时校验禁止 Auth、Lobby、PlayerData、Admin 自动执行迁移；`mahjong_migration` 独立承担 DDL。
@@ -75,14 +75,14 @@
 | `lobby_rooms` / `active_player_rooms` | - | W/R | - | - | R/C（HTTP） | C（注册/心跳） |
 | `match_results` | - | W/R | - | - | R（HTTP） | C（结算 HTTP） |
 | 房间/玩家历史 | - | W/R | - | - | R（HTTP） | C（心跳事件） |
-| `player_data.*` | - | - | - | W/R | R/C（HTTP） | - |
-| `admin_monitor.*` | - | - | - | P（HTTP Outbox） | W/R | - |
+| `player_data.*`（只读历史） | - | - | - | - | R（受控调查） | - |
+| `admin_monitor.*` | - | - | - | - | W/R | - |
 | Allocator JSON 状态/结算恢复目录 | - | C | W/R | - | R/C（HTTP） | C |
 
 结论：
 
 - 未发现两个服务长期直接双写同一 PostgreSQL 业务表。
-- Admin 不直接写 Auth、Lobby、PlayerData 的业务表；管理操作先写 Admin 自有审批/Outbox，再调用所有者 API。
+- Admin 不直接写 Auth、Lobby、Economy 或 GameData 的业务表；管理操作先写 Admin 自有审批/Outbox，再调用所有者 API。
 - Dedicated Server 没有 Npgsql 或 PostgreSQL 连接，不直接写任何数据库表。
 - PlayerData 向 Admin 的证据同步采用本地事务 + `projection_outbox`；Admin 以 `event_id`/来源唯一约束幂等接收。
 - Admin 命令采用本地审批事务 + `command_outbox`，但 Lobby 的结算链路当前仍由 Lobby 自身持久化，并未形成独立 Settlement 模块。
@@ -131,7 +131,4 @@
 
 # 阶段 8.2 增量：ReplayEvidence 单写切换
 
-`replay.evidence_manifests` 与 `replay.legacy_player_evidence` 由GameData唯一写入。PlayerData旧
-`/internal/sources/replays` 仅为兼容转发入口，数据库触发器拒绝向
-`player_data.evidence_events` 新增或更新Replay类型；旧行保留用于迁移核验和回滚，不形成长期双写。
-Report、PaymentOrder、RewardClaim和AssetChange仍由PlayerData持有，等待8.3～8.5分别迁移。
+`replay.evidence_manifests` 与 `replay.legacy_player_evidence` 由GameData唯一写入。阶段8.6已删除PlayerData兼容入口和运行部署；`player_data.evidence_events`旧行仅作为冻结的只读历史证据保留。

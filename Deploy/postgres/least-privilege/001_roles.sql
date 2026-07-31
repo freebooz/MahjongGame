@@ -54,7 +54,9 @@ $roles$;
 -- NOINHERIT 登录身份必须显式 SET ROLE；连接串通过 Options=-c role=... 固定激活唯一权限角色。
 GRANT mahjong_auth_rw TO mahjong_auth;
 GRANT mahjong_lobby_rw TO mahjong_lobby;
-GRANT mahjong_player_data_rw TO mahjong_player_data;
+-- 阶段8.6后保留同名角色仅用于识别历史授权；运行身份禁止登录且不再继承读写角色。
+REVOKE mahjong_player_data_rw FROM mahjong_player_data;
+ALTER ROLE mahjong_player_data NOLOGIN;
 GRANT mahjong_game_data_rw TO mahjong_game_data;
 GRANT mahjong_economy_rw TO mahjong_economy;
 -- Configuration 运行身份只能显式切换到自身最小权限角色，不继承 migration DDL 权限。
@@ -68,7 +70,7 @@ GRANT mahjong_archive_dispatch TO mahjong_archive;
 COMMENT ON ROLE mahjong_migration IS '仅发布流水线使用的 DDL/对象所有者身份，不得注入应用 Pod';
 COMMENT ON ROLE mahjong_auth_rw IS 'Auth 业务表最小读写权限';
 COMMENT ON ROLE mahjong_lobby_rw IS 'Lobby 房间业务表最小读写权限';
-COMMENT ON ROLE mahjong_player_data_rw IS 'PlayerData 资产与证据表最小读写权限';
+COMMENT ON ROLE mahjong_player_data_rw IS '阶段8.6退役的PlayerData历史权限角色，不得授予运行身份';
 COMMENT ON ROLE mahjong_game_data_rw IS 'GameData 结算、战绩、证据目录、排行榜与 Outbox 最小读写权限';
 COMMENT ON ROLE mahjong_workers_rw IS 'BackgroundWorkers 仅处理服务 Outbox、Worker Inbox、投影与人工失败事件';
 COMMENT ON ROLE mahjong_admin_rw IS 'Admin 管理工作流读写权限，审计账本仅追加';

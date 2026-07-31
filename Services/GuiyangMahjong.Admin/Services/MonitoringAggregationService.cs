@@ -11,7 +11,6 @@ namespace GuiyangMahjong.Admin.Services;
 public sealed class MonitoringAggregationService(
     ILobbyMonitoringClient lobby,
     IAllocatorMonitoringClient allocator,
-    IPlayerDataMonitoringClient playerData,
     MonitoringSourceReliabilityService reliability,
     IOptions<AdminOptions> options,
     TimeProvider timeProvider)
@@ -23,11 +22,7 @@ public sealed class MonitoringAggregationService(
     /// </summary>
     public async Task<MonitoringOverview> GetOverviewAsync(CancellationToken cancellationToken)
     {
-        var loadedTask = LoadAsync(cancellationToken);
-        var playerDataTask = ExecutePlayerDataAsync(cancellationToken);
-        await Task.WhenAll(loadedTask, playerDataTask);
-        var loaded = await loadedTask;
-        var playerDataResult = await playerDataTask;
+        var loaded = await LoadAsync(cancellationToken);
         var rooms = loaded.Rooms.Value;
         var instances = loaded.Instances.Value;
         var authHealth = reliability.GetHealth("Auth", adminOptions.Auth.Enabled);
@@ -57,12 +52,10 @@ public sealed class MonitoringAggregationService(
             BuildMetadata(
                 IsLiveOrDisabled(loaded.Rooms, adminOptions.Lobby.Enabled)
                 && IsLiveOrDisabled(loaded.Instances, AllocatorEnabled)
-                && (!authHealth.Enabled || authHealth.Status == "Healthy")
-                && (!adminOptions.PlayerData.Enabled || playerDataResult.IsLive),
+                && (!authHealth.Enabled || authHealth.Status == "Healthy"),
                 loaded.Rooms.Health,
                 loaded.Instances.Health,
-                authHealth,
-                playerDataResult.Health));
+                authHealth));
     }
 
     /// <summary>
@@ -326,8 +319,7 @@ public sealed class MonitoringAggregationService(
         {
             reliability.GetHealth("Lobby", adminOptions.Lobby.Enabled),
             reliability.GetHealth("Allocator", AllocatorEnabled),
-            reliability.GetHealth("Auth", adminOptions.Auth.Enabled),
-            reliability.GetHealth("PlayerData", adminOptions.PlayerData.Enabled)
+            reliability.GetHealth("Auth", adminOptions.Auth.Enabled)
         };
         var safe = health
             .Where(item => item.Enabled)
@@ -393,18 +385,6 @@ public sealed class MonitoringAggregationService(
             true,
             cancellationToken);
     }
-
-    private Task<MonitoringSourceResult<bool>> ExecutePlayerDataAsync(
-        CancellationToken cancellationToken) =>
-        reliability.ExecuteAsync(
-            "PlayerData",
-            "readiness",
-            adminOptions.PlayerData.Enabled,
-            TimeSpan.FromSeconds(adminOptions.PlayerData.TimeoutSeconds),
-            playerData.CheckReadyAsync,
-            () => false,
-            false,
-            cancellationToken);
 
     private bool AllocatorEnabled =>
         adminOptions.Allocators.Any(item => item.Enabled);

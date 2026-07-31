@@ -3,7 +3,6 @@
 ALTER ROLE mahjong_migration PASSWORD :'migration_password';
 ALTER ROLE mahjong_auth PASSWORD :'auth_password';
 ALTER ROLE mahjong_lobby PASSWORD :'lobby_password';
-ALTER ROLE mahjong_player_data PASSWORD :'player_data_password';
 ALTER ROLE mahjong_game_data PASSWORD :'game_data_password';
 ALTER ROLE mahjong_economy PASSWORD :'economy_password';
 ALTER ROLE mahjong_configuration PASSWORD :'configuration_password';

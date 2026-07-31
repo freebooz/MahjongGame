@@ -28,7 +28,7 @@
 
 `Scripts/Linux/build-service-images.sh` 是服务镜像的本地统一验证入口：
 
-- 默认构建 Auth、Lobby、PlayerData、Admin，以及包含真实
+- 默认构建 Auth、Lobby、Admin 及其他在役服务，以及包含真实
   `Artifacts/LinuxServer` 制品的 game-node 最终镜像；
 - `--compile-only` 仍构建四个 Web 服务的最终镜像，但将 game-node 替换为
   Allocator 编译阶段，用于没有 Unreal LinuxServer 制品的服务 CI；

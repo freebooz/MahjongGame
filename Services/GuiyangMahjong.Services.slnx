@@ -11,8 +11,6 @@
   <Project Path="GuiyangMahjong.Lobby.Tests/GuiyangMahjong.Lobby.Tests.csproj" />
   <Project Path="GuiyangMahjong.Lobby/GuiyangMahjong.Lobby.csproj" />
   <Project Path="GuiyangMahjong.Observability/GuiyangMahjong.Observability.csproj" />
-  <Project Path="GuiyangMahjong.PlayerData/GuiyangMahjong.PlayerData.csproj" />
-  <Project Path="GuiyangMahjong.PlayerData.Tests/GuiyangMahjong.PlayerData.Tests.csproj" />
   <Project Path="Apps/GuiyangMahjong.EdgeGateway/GuiyangMahjong.EdgeGateway.csproj" />
   <Project Path="Apps/GuiyangMahjong.EdgeGateway.Tests/GuiyangMahjong.EdgeGateway.Tests.csproj" />
   <!-- 阶段 7：最终结算、战绩、回放证据和基础排行榜的独立部署单元及测试。 -->

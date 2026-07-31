@@ -17,8 +17,10 @@ GRANT USAGE ON SCHEMA lobby, room, matchmaking TO
     mahjong_lobby_rw, mahjong_monitor_ro;
 GRANT USAGE ON SCHEMA auth, session, player, integration TO
     mahjong_auth_rw, mahjong_monitor_ro;
-GRANT USAGE ON SCHEMA player_data TO
-    mahjong_player_data_rw, mahjong_monitor_ro;
+-- PlayerData 已退役；空环境仅保留只读历史命名空间，升级环境中的旧表由阶段8.6核对后冻结。
+CREATE SCHEMA IF NOT EXISTS player_data AUTHORIZATION mahjong_migration;
+GRANT USAGE ON SCHEMA player_data TO mahjong_monitor_ro;
+REVOKE ALL ON SCHEMA player_data FROM mahjong_player_data_rw, mahjong_player_data;
 GRANT USAGE ON SCHEMA settlement, game_record, replay, leaderboard, game_data_integration TO
     mahjong_game_data_rw, mahjong_monitor_ro;
 -- Configuration 是独立数据所有者；Worker 只领取其 Outbox，Admin 没有该 Schema 的直接写权限。
@@ -137,8 +139,9 @@ GRANT SELECT ON ALL TABLES IN SCHEMA room TO mahjong_lobby_rw;
 GRANT SELECT, INSERT ON TABLE room_event_history TO mahjong_lobby_rw;
 GRANT SELECT ON TABLE player_room_history, player_connection_history
 TO mahjong_lobby_rw;
-GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA player_data
-TO mahjong_player_data_rw;
+REVOKE ALL ON ALL TABLES IN SCHEMA player_data
+FROM mahjong_player_data_rw, mahjong_player_data;
+GRANT SELECT ON ALL TABLES IN SCHEMA player_data TO mahjong_monitor_ro;
 -- 不可变触发器会拒绝权威历史 UPDATE/DELETE；运行身份仍需更新排行榜和 Outbox 调度状态。
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA
     settlement, game_record, replay, leaderboard, game_data_integration
@@ -260,7 +263,7 @@ REVOKE ALL ON FUNCTION room.project_room_allocation() FROM PUBLIC;
 ALTER DEFAULT PRIVILEGES FOR ROLE mahjong_migration IN SCHEMA player_data
     REVOKE ALL ON TABLES FROM PUBLIC;
 ALTER DEFAULT PRIVILEGES FOR ROLE mahjong_migration IN SCHEMA player_data
-    GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO mahjong_player_data_rw;
+    REVOKE ALL ON TABLES FROM mahjong_player_data_rw;
 ALTER DEFAULT PRIVILEGES FOR ROLE mahjong_migration IN SCHEMA admin_monitor
     REVOKE ALL ON TABLES FROM PUBLIC;
 ALTER DEFAULT PRIVILEGES FOR ROLE mahjong_migration IN SCHEMA admin_monitor

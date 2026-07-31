@@ -253,15 +253,6 @@ builder.Services
         "Admin:Auth:MonitoringToken must contain at least 32 characters when enabled.")
     .Validate(options => !options.Lobby.Enabled || options.Lobby.MonitoringToken.Length >= 32,
         "Admin:Lobby:MonitoringToken must contain at least 32 characters when enabled.")
-    .Validate(options => !options.PlayerData.Enabled
-            || options.PlayerData.MonitoringToken.Length >= 32,
-        "Admin:PlayerData:MonitoringToken must contain at least 32 characters when enabled.")
-    .Validate(options => string.IsNullOrEmpty(options.PlayerData.MonitoringToken)
-            || !string.Equals(
-                options.PlayerData.MonitoringToken,
-                options.Wallet.CommandToken,
-                StringComparison.Ordinal),
-        "PlayerData monitoring credential must differ from the Wallet command credential.")
     .Validate(options => !options.CentralLogs.Enabled
             || options.CentralLogs.QueryToken.Length >= 32,
         "Enabled central log queries require a dedicated 32+ character read-only token.")
@@ -395,7 +386,6 @@ builder.Services.AddHttpClient(
     });
 builder.Services.AddSingleton<ILobbyMonitoringClient, HttpLobbyMonitoringClient>();
 builder.Services.AddSingleton<IAllocatorMonitoringClient, HttpAllocatorMonitoringClient>();
-builder.Services.AddSingleton<IPlayerDataMonitoringClient, HttpPlayerDataMonitoringClient>();
 builder.Services.AddSingleton<ICentralLogQueryClient, LokiCentralLogQueryClient>();
 builder.Services.AddSingleton<IChatArchiveQueryClient, HttpChatArchiveQueryClient>();
 builder.Services.AddSingleton<IReplayArchiveClient, HttpReplayArchiveClient>();

@@ -30,7 +30,6 @@ services:
       MIGRATION_DB_PASSWORD: ${MIGRATION_DB_PASSWORD:?MIGRATION_DB_PASSWORD is required}
       AUTH_DB_PASSWORD: ${AUTH_DB_PASSWORD:?AUTH_DB_PASSWORD is required}
       LOBBY_DB_PASSWORD: ${LOBBY_DB_PASSWORD:?LOBBY_DB_PASSWORD is required}
-      PLAYER_DATA_DB_PASSWORD: ${PLAYER_DATA_DB_PASSWORD:?PLAYER_DATA_DB_PASSWORD is required}
       GAME_DATA_DB_PASSWORD: ${GAME_DATA_DB_PASSWORD:?GAME_DATA_DB_PASSWORD is required}
       ECONOMY_DB_PASSWORD: ${ECONOMY_DB_PASSWORD:?ECONOMY_DB_PASSWORD is required}
       CONFIGURATION_DB_PASSWORD: ${CONFIGURATION_DB_PASSWORD:?CONFIGURATION_DB_PASSWORD is required}
@@ -43,7 +42,6 @@ services:
       - ../../Deploy/postgres/least-privilege:/migration/least-privilege:ro
       - ../../Services/GuiyangMahjong.Auth/Storage:/migration/auth:ro
       - ../../Services/GuiyangMahjong.Lobby/Storage:/migration/lobby:ro
-      - ../../Services/GuiyangMahjong.PlayerData/Storage:/migration/player-data:ro
       - ../../Services/GuiyangMahjong.Admin/Storage:/migration/admin:ro
       - ../../Services/Apps/GuiyangMahjong.GameData/Storage:/migration/game-data:ro
       - ../../Services/Apps/GuiyangMahjong.Economy/Storage:/migration/economy:ro
@@ -58,15 +56,9 @@ services:
         $$base -f /migration/least-privilege/001_roles.sql
         $$base -f /migration/auth/schema.sql
         $$base -f /migration/lobby/schema.sql
-        $$base -f /migration/player-data/schema.sql
         $$base -f /migration/admin/schema.sql
         $$base -f /migration/game-data/schema.sql
         $$base -f /migration/economy/schema.sql
-        $$base -f /migration/economy-stage/Stage8_3_MigrateFromPlayerData.sql
-        # Replay源表和目标表均存在后执行幂等复制；脚本核对成功才提交旧写关闭门禁。
-        $$base -f /migration/stage-sql/stage-8.2-replay-evidence-migration.sql
-        # 阶段8.5将其余历史证据核对到Admin专用读模型；失败会终止整个迁移作业。
-        $$base -f /migration/stage-sql/stage-8.5-backoffice-evidence-migration.sql
         $$base -f /migration/configuration/schema.sql
         $$base -f /migration/workers/schema.sql
         $$base -f /migration/least-privilege/002_grants.sql
@@ -74,7 +66,6 @@ services:
           -v migration_password="$$MIGRATION_DB_PASSWORD" \
           -v auth_password="$$AUTH_DB_PASSWORD" \
           -v lobby_password="$$LOBBY_DB_PASSWORD" \
-          -v player_data_password="$$PLAYER_DATA_DB_PASSWORD" \
           -v game_data_password="$$GAME_DATA_DB_PASSWORD" \
           -v economy_password="$$ECONOMY_DB_PASSWORD" \
           -v configuration_password="$$CONFIGURATION_DB_PASSWORD" \
@@ -415,7 +406,6 @@ services:
       GameData__MonitoringToken: ${GAMEDATA_MONITORING_TOKEN:?GAMEDATA_MONITORING_TOKEN is required}
       GameData__SettlementSigningKey: ${SETTLEMENT_SIGNING_KEY:?SETTLEMENT_SIGNING_KEY is required}
       GameData__AllocatorRecoveryToken: ${GAMEDATA_RECOVERY_TOKEN:?GAMEDATA_RECOVERY_TOKEN is required}
-      GameData__LegacyReplayIngestionToken: ${GAMEDATA_LEGACY_REPLAY_TOKEN:?GAMEDATA_LEGACY_REPLAY_TOKEN is required}
       GameData__EvidenceStorage__Mode: FileSystem
       GameData__EvidenceStorage__RootDirectory: /var/lib/guiyang-mahjong/recovery
     volumes:
@@ -448,7 +438,6 @@ services:
       Observability__Enabled: ${OBSERVABILITY_ENABLED:-false}
       Observability__OtlpEndpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://host.docker.internal:4317}
       Community__ChatGatewayToken: ${COMMUNITY_CHAT_GATEWAY_TOKEN:?COMMUNITY_CHAT_GATEWAY_TOKEN is required}
-      Community__LegacyPlayerDataToken: ${COMMUNITY_PLAYERDATA_TOKEN:?COMMUNITY_PLAYERDATA_TOKEN is required}
       Community__AuthBaseUrl: http://auth:8080
       Community__AuthMonitoringToken: ${MONITORING_READ_ONLY_TOKEN:?MONITORING_READ_ONLY_TOKEN is required}
       Community__AuthTimeoutSeconds: ${COMMUNITY_AUTH_TIMEOUT_SECONDS:-5}
@@ -501,62 +490,6 @@ services:
     security_opt: ["no-new-privileges:true"]
     logging: *logging
 
-  player-data:
-    image: ${IMAGE_REGISTRY:-local}/guiyang-mahjong-player-data:${MAHJONG_VERSION:-dev}
-    build:
-      context: ../..
-      dockerfile: Services/GuiyangMahjong.PlayerData/Dockerfile
-    environment:
-      ASPNETCORE_ENVIRONMENT: Production
-      Observability__Enabled: ${OBSERVABILITY_ENABLED:-false}
-      Observability__OtlpEndpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://host.docker.internal:4317}
-      Observability__TraceSampleRatio: ${OTEL_TRACE_SAMPLE_RATIO:-0.1}
-      PlayerData__PersistenceMode: Postgres
-      PlayerData__ApplyDatabaseMigrations: "false"
-      PlayerData__PostgresConnectionString: Host=postgres;Port=5432;Database=mahjong;Username=mahjong_player_data;Password=${PLAYER_DATA_DB_PASSWORD};Options=-c role=mahjong_player_data_rw
-      PlayerData__SourceIngestionToken: ${PLAYER_DATA_SOURCE_INGESTION_TOKEN:?PLAYER_DATA_SOURCE_INGESTION_TOKEN is required}
-      PlayerData__AdminCommandToken: ${PLAYER_DATA_ADMIN_COMMAND_TOKEN:?PLAYER_DATA_ADMIN_COMMAND_TOKEN is required}
-      PlayerData__ChatGatewayToken: ${PLAYER_DATA_CHAT_GATEWAY_TOKEN:?PLAYER_DATA_CHAT_GATEWAY_TOKEN is required}
-      PlayerData__MonitoringToken: ${PLAYER_DATA_MONITORING_TOKEN:?PLAYER_DATA_MONITORING_TOKEN is required}
-      # 阶段8.4旧聊天URL只转发到Community，PlayerData不再读取Identity禁言状态。
-      PlayerData__CommunityBaseUrl: http://community:8080
-      PlayerData__CommunityLegacyChatToken: ${COMMUNITY_PLAYERDATA_TOKEN:?COMMUNITY_PLAYERDATA_TOKEN is required}
-      PlayerData__AdminProjectionBaseUrl: http://admin:8080
-      PlayerData__AdminEvidenceIngestionToken: ${ADMIN_EVIDENCE_INGESTION_TOKEN:?ADMIN_EVIDENCE_INGESTION_TOKEN is required}
-      # 阶段8.2保留旧URL但由GameData独占Replay写入，PlayerData不再双写旧表。
-      PlayerData__GameDataBaseUrl: http://game-data:8080
-      PlayerData__GameDataLegacyReplayToken: ${GAMEDATA_LEGACY_REPLAY_TOKEN:?GAMEDATA_LEGACY_REPLAY_TOKEN is required}
-      # 阶段8.3旧奖励、钱包和余额URL只转发到Economy，不再写PlayerData旧表。
-      PlayerData__EconomyBaseUrl: http://economy:8080
-      PlayerData__EconomySourceToken: ${ECONOMY_SOURCE_TOKEN:?ECONOMY_SOURCE_TOKEN is required}
-      PlayerData__EconomyAdminToken: ${ECONOMY_ADMIN_TOKEN:?ECONOMY_ADMIN_TOKEN is required}
-      PlayerData__EconomyMonitoringToken: ${ECONOMY_MONITORING_TOKEN:?ECONOMY_MONITORING_TOKEN is required}
-      # 阶段8.5新证据不再进入PlayerData Outbox；旧积压应在切换工单中清零后关闭Dispatcher。
-      PlayerData__ProjectionEnabled: "false"
-      PlayerData__ProjectionPollMilliseconds: ${PLAYER_DATA_PROJECTION_POLL_MS:-1000}
-      PlayerData__ProjectionMaxAttempts: ${PLAYER_DATA_PROJECTION_MAX_ATTEMPTS:-10}
-    depends_on:
-      postgres-migration: {condition: service_completed_successfully}
-      community: {condition: service_healthy}
-      game-data: {condition: service_healthy}
-      economy: {condition: service_healthy}
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    ports: ["127.0.0.1:${PLAYER_DATA_PORT:-18084}:8080"]
-    healthcheck:
-      test: ["CMD", "curl", "--fail", "--silent", "--show-error", "http://127.0.0.1:8080/health/ready"]
-      interval: 5s
-      timeout: 3s
-      retries: 30
-    restart: unless-stopped
-    cpus: ${PLAYER_DATA_CPUS:-1.0}
-    mem_limit: ${PLAYER_DATA_MEMORY:-512m}
-    pids_limit: 256
-    read_only: true
-    tmpfs: ["/tmp:rw,noexec,nosuid,size=64m"]
-    security_opt: ["no-new-privileges:true"]
-    logging: *logging
-
   edge-gateway:
     image: ${IMAGE_REGISTRY:-local}/guiyang-mahjong-edge-gateway:${MAHJONG_VERSION:-dev}
     build:
@@ -600,12 +533,10 @@ services:
       EdgeGateway__AllowedHosts: "${EDGE_ALLOWED_HOSTS:-localhost;127.0.0.1}"
       ReverseProxy__Clusters__auth__Destinations__primary__Address: http://auth:8080
       ReverseProxy__Clusters__lobby__Destinations__primary__Address: http://lobby:8080
-      ReverseProxy__Clusters__player-data__Destinations__primary__Address: http://player-data:8080
     depends_on:
       configuration: {condition: service_healthy}
       auth: {condition: service_healthy}
       lobby: {condition: service_healthy}
-      player-data: {condition: service_healthy}
       redis: {condition: service_healthy}
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -739,7 +670,6 @@ services:
       auth: {condition: service_healthy}
       lobby: {condition: service_healthy}
       game-node: {condition: service_healthy}
-      player-data: {condition: service_healthy}
       economy: {condition: service_healthy}
     extra_hosts:
       - "host.docker.internal:host-gateway"

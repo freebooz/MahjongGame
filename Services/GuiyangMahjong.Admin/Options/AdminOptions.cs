@@ -27,7 +27,6 @@ public sealed class AdminOptions
     [Required] public AdminAbacOptions Abac { get; init; } = new();
     [Required] public AuthMonitoringOptions Auth { get; init; } = new();
     [Required] public LobbyMonitoringOptions Lobby { get; init; } = new();
-    [Required] public PlayerDataMonitoringOptions PlayerData { get; init; } = new();
     [Required] public WalletExecutionOptions Wallet { get; init; } = new();
     /// <summary>Configuration Service 受控命令代理；浏览器永远不能取得此服务端凭据。</summary>
     [Required] public ConfigurationManagementOptions Configuration { get; init; } = new();
@@ -332,29 +331,11 @@ public sealed class LobbyMonitoringOptions
     [Required] public string NodeId { get; init; } = "node-local-1";
 }
 
-/// <summary>
-/// PlayerData 只读监控依赖配置；与 Wallet 管理命令凭据严格分离。
-/// </summary>
-public sealed class PlayerDataMonitoringOptions
-{
-    /// <summary>是否把 PlayerData 作为管理台只读监控来源；未启用时不会发起网络请求。</summary>
-    public bool Enabled { get; init; }
-
-    /// <summary>PlayerData 服务根地址，仅由服务端使用且不会出现在来源错误摘要中。</summary>
-    [Required, Url] public string BaseUrl { get; init; } = "http://127.0.0.1:18084";
-
-    /// <summary>只读监控专用凭据；不得复用 Wallet 管理命令凭据。</summary>
-    public string MonitoringToken { get; init; } = string.Empty;
-
-    /// <summary>PlayerData 单次监控请求硬超时，包含响应正文读取时间。</summary>
-    [Range(1, 30)] public int TimeoutSeconds { get; init; } = 5;
-}
-
 public sealed class WalletExecutionOptions
 {
     public bool Enabled { get; init; }
     [Required, Url] public string BaseUrl { get; init; } =
-        "http://127.0.0.1:18084";
+        "http://127.0.0.1:18086";
     public string CommandToken { get; init; } = string.Empty;
     [Range(1, 30)] public int TimeoutSeconds { get; init; } = 5;
 }

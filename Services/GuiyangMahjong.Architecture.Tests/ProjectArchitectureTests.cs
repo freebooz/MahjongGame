@@ -11,22 +11,22 @@ namespace GuiyangMahjong.Architecture.Tests;
 /// </summary>
 public sealed class ProjectArchitectureTests
 {
-    /// <summary>阶段 8.5 保证剩余证据只写 Admin/TrustSafety 读模型，PlayerData 旧入口不再落库。</summary>
+    /// <summary>阶段8.6保证PlayerData不再进入解决方案、镜像矩阵、网关路由或运行编排。</summary>
     [Fact]
-    public void BackofficeEvidenceHasSingleWriter_AndLegacyEndpointsOnlyForward()
+    public void PlayerDataIsAbsentFromAllRuntimeEntryPoints()
     {
         var root = FindProjectRoot();
-        var endpoints = File.ReadAllText(Path.Combine(root, "Services", "GuiyangMahjong.PlayerData",
-            "Api", "PlayerDataEndpoints.cs"));
-        Assert.Contains("ILegacyAdminEvidenceClient", endpoints, StringComparison.Ordinal);
-        Assert.DoesNotContain("store.RecordEvidenceAsync", endpoints, StringComparison.Ordinal);
-        var schema = File.ReadAllText(Path.Combine(root, "Services", "GuiyangMahjong.PlayerData",
-            "Storage", "schema.sql"));
-        Assert.Contains("reject_migrated_backoffice_evidence_write", schema, StringComparison.Ordinal);
+        var solution = File.ReadAllText(Path.Combine(root, "Services", "GuiyangMahjong.Services.slnx"));
         var compose = File.ReadAllText(Path.Combine(root, "Deploy", "linux", "compose.yaml"));
-        Assert.Contains("PlayerData__ProjectionEnabled: \"false\"", compose, StringComparison.Ordinal);
+        var gateway = File.ReadAllText(Path.Combine(root, "Services", "Apps",
+            "GuiyangMahjong.EdgeGateway", "appsettings.json"));
+        var workflow = File.ReadAllText(Path.Combine(root, ".github", "workflows", "services-ci.yml"));
+        Assert.DoesNotContain("GuiyangMahjong.PlayerData", solution, StringComparison.Ordinal);
+        Assert.DoesNotContain("  player-data:", compose, StringComparison.Ordinal);
+        Assert.DoesNotContain("player-data-v1", gateway, StringComparison.Ordinal);
+        Assert.DoesNotContain("GuiyangMahjong.PlayerData/Dockerfile", workflow, StringComparison.Ordinal);
         var grants = File.ReadAllText(Path.Combine(root, "Deploy", "postgres", "least-privilege", "002_grants.sql"));
-        Assert.DoesNotContain("player_evidence\nTO mahjong_player_data_rw", grants, StringComparison.Ordinal);
+        Assert.Contains("REVOKE ALL ON ALL TABLES IN SCHEMA player_data", grants, StringComparison.Ordinal);
     }
     /// <summary>阶段 8.4 保证聊天授权由 Community 承担，PlayerData 仅保留无策略逻辑的兼容转发。</summary>
     [Fact]
@@ -86,12 +86,11 @@ public sealed class ProjectArchitectureTests
         "GuiyangMahjong.Admin",
         "GuiyangMahjong.Allocator",
         "GuiyangMahjong.Auth",
-        "GuiyangMahjong.Lobby",
-        "GuiyangMahjong.PlayerData"
+        "GuiyangMahjong.Lobby"
     ];
 
     /// <summary>
-    /// 同时引用四个数据库服务后检查唯一目标和代表性表名，
+    /// 同时引用三个在役数据库服务后检查唯一目标和代表性表名，
     /// 防止增量构建把一个服务的 Schema 静默覆盖到另一个服务。
     /// </summary>
     [Fact]
@@ -101,7 +100,6 @@ public sealed class ProjectArchitectureTests
         {
             ["Auth"] = "auth_identities",
             ["Lobby"] = "lobby_rooms",
-            ["PlayerData"] = "player_data.wallet_balances",
             ["Admin"] = "admin_monitor"
         };
         var resolvedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -173,7 +171,6 @@ public sealed class ProjectArchitectureTests
         {
             "Auth",
             "Lobby",
-            "PlayerData",
             "Admin"
         };
         var declaredServiceNames = new HashSet<string>(
@@ -237,7 +234,6 @@ public sealed class ProjectArchitectureTests
         {
             "Auth",
             "Lobby",
-            "PlayerData",
             "Admin"
         };
 

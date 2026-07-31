@@ -85,17 +85,6 @@ public interface IAllocatorMonitoringClient
 }
 
 /// <summary>
-/// PlayerData 只读健康探测客户端；仅验证监控依赖可达性，不读取资产、支付或聊天证据。
-/// </summary>
-public interface IPlayerDataMonitoringClient
-{
-    /// <summary>
-    /// 调用 PlayerData 就绪端点；失败由统一可靠性边界转换为受控来源状态。
-    /// </summary>
-    Task<bool> CheckReadyAsync(CancellationToken cancellationToken);
-}
-
-/// <summary>
 /// 基于 HTTP 的多 Lobby 监控客户端。
 /// 静态与动态拓扑来源按 SourceId 去重，单来源使用原生游标；
 /// 多来源聚合采用绑定拓扑筛选的 Admin 游标并受 MaximumRooms 限制。
@@ -576,39 +565,5 @@ public sealed class HttpAllocatorMonitoringClient(
                 TimeoutSeconds = discovery.TimeoutSeconds
             };
         }
-    }
-}
-
-/// <summary>
-/// 使用独立监控配置探测 PlayerData，不复用具有写权限的 Wallet 命令凭据。
-/// </summary>
-public sealed class HttpPlayerDataMonitoringClient(
-    IHttpClientFactory httpClientFactory,
-    IOptions<AdminOptions> options) : IPlayerDataMonitoringClient
-{
-    /// <summary>
-    /// 检查 PlayerData 就绪状态；完整请求由外层可靠性服务施加硬超时与取消传播。
-    /// </summary>
-    public async Task<bool> CheckReadyAsync(CancellationToken cancellationToken)
-    {
-        var source = options.Value.PlayerData;
-        if (!source.Enabled) return false;
-        using var request = new HttpRequestMessage(
-            HttpMethod.Get,
-            $"{source.BaseUrl.TrimEnd('/')}/internal/monitoring/health");
-        if (!string.IsNullOrWhiteSpace(source.MonitoringToken))
-        {
-            request.Headers.Authorization =
-                new AuthenticationHeaderValue("Bearer", source.MonitoringToken);
-        }
-        request.Headers.Add("X-Request-Id", Guid.NewGuid().ToString());
-        request.Headers.Add(
-            "X-Trace-Id",
-            MahjongTelemetry.CurrentBusinessTraceId);
-        using var response = await httpClientFactory
-            .CreateClient(nameof(HttpPlayerDataMonitoringClient))
-            .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
-        response.EnsureSuccessStatusCode();
-        return true;
     }
 }

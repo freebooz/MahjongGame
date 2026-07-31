@@ -17,7 +17,7 @@ public enum PlayerAssetOperationType
 /// <summary>
 /// 玩家资产操作的不可变业务证据。
 /// 金额使用资产最小整数单位，奖励撤销通过原始发放标识定位；
-/// 申请人、审批人、工单和 TraceId 必须贯穿 Admin 与 PlayerData 两侧。
+/// 申请人、审批人、工单和 TraceId 必须贯穿 Admin 与 Economy 两侧。
 /// </summary>
 public sealed record PlayerAssetOperationRecord(
     string OperationId,

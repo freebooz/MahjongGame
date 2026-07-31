@@ -36,9 +36,8 @@ builder.Services.AddOptions<GameDataOptions>()
                          || options.EvidenceStorage.ReadToken.Length >= 32,
         "HttpGateway 必须配置用途隔离的 32+ 字符只读凭据。")
     .Validate(options => options.SettlementSigningKey.Length >= 32
-                         && options.AllocatorRecoveryToken.Length >= 32
-                         && options.LegacyReplayIngestionToken.Length >= 32,
-        "GameData 必须配置用途隔离的结算签名密钥、Allocator 恢复凭据和旧回放迁入凭据。")
+                         && options.AllocatorRecoveryToken.Length >= 32,
+        "GameData 必须配置用途隔离的结算签名密钥和 Allocator 恢复凭据。")
     .Validate(options => !builder.Environment.IsProduction()
                          || (options.PersistenceMode == "Postgres"
                              && !options.ApplyDatabaseMigrations

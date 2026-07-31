@@ -66,7 +66,6 @@ public sealed class EdgeGatewayApiTests : IAsyncLifetime
     [InlineData("/api/v1/lobby/bootstrap", "/v1/lobby/bootstrap")]
     [InlineData("/api/v1/rooms/123456/route", "/v1/rooms/123456/route")]
     [InlineData("/api/v1/game/reconnect/route", "/v1/reconnect/route")]
-    [InlineData("/api/v1/player-data/profile", "/v1/player-data/profile")]
     public async Task PlayerRoutes_ApplyConfirmedPathTransforms(
         string gatewayPath,
         string upstreamPath)
@@ -638,8 +637,6 @@ public sealed class EdgeGatewayWebApplicationFactory(
                 ["ReverseProxy:Clusters:auth:Destinations:primary:Address"] =
                     upstreamAddress.ToString(),
                 ["ReverseProxy:Clusters:lobby:Destinations:primary:Address"] =
-                    upstreamAddress.ToString(),
-                ["ReverseProxy:Clusters:player-data:Destinations:primary:Address"] =
                     upstreamAddress.ToString()
             };
             if (previousLegacyValidationKey is not null)

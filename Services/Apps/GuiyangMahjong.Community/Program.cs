@@ -13,13 +13,13 @@ builder.AddMahjongObservability("GuiyangMahjong.Community");
 builder.Services.AddOptions<CommunityOptions>().Bind(builder.Configuration.GetSection(CommunityOptions.SectionName))
     .ValidateDataAnnotations()
     .Validate(value => !builder.Environment.IsProduction()
-        || (value.ChatGatewayToken.Length >= 32 && value.LegacyPlayerDataToken.Length >= 32
+        || (value.ChatGatewayToken.Length >= 32
             && value.AuthMonitoringToken.Length >= 32),
         "生产 Community 必须配置聊天网关和 Identity 只读凭据。")
-    .Validate(value => new[] { value.ChatGatewayToken, value.LegacyPlayerDataToken, value.AuthMonitoringToken }
+    .Validate(value => new[] { value.ChatGatewayToken, value.AuthMonitoringToken }
         .Where(token => token.Length > 0).Distinct(StringComparer.Ordinal).Count()
-        == new[] { value.ChatGatewayToken, value.LegacyPlayerDataToken, value.AuthMonitoringToken }.Count(token => token.Length > 0),
-        "Community 直接网关、兼容适配和 Identity 只读凭据不得复用。")
+        == new[] { value.ChatGatewayToken, value.AuthMonitoringToken }.Count(token => token.Length > 0),
+        "Community 聊天网关和 Identity 只读凭据不得复用。")
     .ValidateOnStart();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddHttpClient(nameof(AuthBackedChatPolicyService), (provider, client) =>
@@ -47,8 +47,7 @@ app.MapPost("/internal/chat/messages/authorize", async (HttpContext context,
     AuthorizeChatMessageRequest request, IOptions<CommunityOptions> options, IChatPolicyService policy,
     TimeProvider clock, CancellationToken cancellationToken) =>
 {
-    CommunityValidation.RequireBearer(context,
-        [options.Value.ChatGatewayToken, options.Value.LegacyPlayerDataToken]);
+    CommunityValidation.RequireBearer(context, [options.Value.ChatGatewayToken]);
     CommunityValidation.Validate(request, clock.GetUtcNow());
     var result = await policy.AuthorizeAsync(request, cancellationToken);
     return result.Allowed ? Results.Ok(result) : Results.Json(result, statusCode: StatusCodes.Status423Locked);

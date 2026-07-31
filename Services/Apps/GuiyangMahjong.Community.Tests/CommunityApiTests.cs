@@ -24,7 +24,6 @@ public sealed class CommunityFactory : WebApplicationFactory<Program>
         builder.UseEnvironment("Development");
         builder.ConfigureAppConfiguration((_, configuration) => configuration.AddInMemoryCollection(
             new Dictionary<string, string?> { ["Community:ChatGatewayToken"] = ChatToken,
-                ["Community:LegacyPlayerDataToken"] = "community-playerdata-token-long-enough-003",
                 ["Community:AuthMonitoringToken"] = "community-auth-monitor-token-long-enough-0002" }));
         builder.ConfigureServices(services =>
         {

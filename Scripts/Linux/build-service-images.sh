@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-# 构建 Auth、Lobby、PlayerData、Admin 和包含真实 Dedicated Server 的 game-node。
+# 构建当前在役平台服务和包含真实 Dedicated Server 的 game-node；PlayerData 已在阶段8.6退役。
 # 脚本只写入本机 Docker 镜像缓存，不启动容器、不推送仓库，也不修改部署状态。
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 project_root="$(cd -- "${script_dir}/../.." && pwd)"
@@ -45,7 +45,6 @@ docker info >/dev/null
 entries=(
   "auth|Services/GuiyangMahjong.Auth/Dockerfile|"
   "lobby|Services/GuiyangMahjong.Lobby/Dockerfile|"
-  "player-data|Services/GuiyangMahjong.PlayerData/Dockerfile|"
   "admin|Services/GuiyangMahjong.Admin/Dockerfile|"
 )
 if [[ "${compile_only}" == true ]]; then

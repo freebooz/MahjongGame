@@ -1,4 +1,4 @@
-// Admin 命令执行器：把已审批操作转换为对 Auth、Lobby、Allocator 或 PlayerData 的受控 HTTP 调用。
+// Admin 命令执行器：把已审批操作转换为对 Auth、Lobby、Allocator 或 Economy 的受控 HTTP 调用。
 // 所有请求必须携带幂等键、短期服务凭据和 TraceId；超时或不确定结果不得伪装为成功。
 using System.Net;
 using System.Net.Http.Headers;
