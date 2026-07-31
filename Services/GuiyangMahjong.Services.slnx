@@ -21,6 +21,9 @@
   <!-- 阶段 8.3：奖励、资产余额与不可变交易流水的唯一写入者。 -->
   <Project Path="Apps/GuiyangMahjong.Economy/GuiyangMahjong.Economy.csproj" />
   <Project Path="Apps/GuiyangMahjong.Economy.Tests/GuiyangMahjong.Economy.Tests.csproj" />
+  <!-- 阶段 8.4：聊天发送授权边界及兼容测试。 -->
+  <Project Path="Apps/GuiyangMahjong.Community/GuiyangMahjong.Community.csproj" />
+  <Project Path="Apps/GuiyangMahjong.Community.Tests/GuiyangMahjong.Community.Tests.csproj" />
   <!-- 阶段 11：不可变动态配置、灰度求值、签名发布与回滚的独立数据所有者。 -->
   <Project Path="Apps/GuiyangMahjong.Configuration/GuiyangMahjong.Configuration.csproj" />
   <Project Path="Apps/GuiyangMahjong.Configuration.Tests/GuiyangMahjong.Configuration.Tests.csproj" />

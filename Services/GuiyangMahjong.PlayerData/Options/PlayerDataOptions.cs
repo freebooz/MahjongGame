@@ -19,9 +19,9 @@ public sealed class PlayerDataOptions
     public string AdminCommandToken { get; init; } = string.Empty;
     public string ChatGatewayToken { get; init; } = string.Empty;
     public string MonitoringToken { get; init; } = string.Empty;
-    [Required, Url] public string AuthBaseUrl { get; init; } =
-        "http://127.0.0.1:18082";
-    public string AuthMonitoringToken { get; init; } = string.Empty;
+    /// <summary>阶段 8.4 Community 权威聊天授权地址；旧 PlayerData URL 只负责兼容转发。</summary>
+    [Required, Url] public string CommunityBaseUrl { get; init; } = "http://127.0.0.1:18087";
+    public string CommunityLegacyChatToken { get; init; } = string.Empty;
     [Required, Url] public string AdminProjectionBaseUrl { get; init; } =
         "http://127.0.0.1:18083";
     public string AdminEvidenceIngestionToken { get; init; } = string.Empty;

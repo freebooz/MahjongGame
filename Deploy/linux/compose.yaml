@@ -436,6 +436,37 @@ services:
     security_opt: ["no-new-privileges:true"]
     logging: *logging
 
+  community:
+    image: ${IMAGE_REGISTRY:-local}/guiyang-mahjong-community:${MAHJONG_VERSION:-dev}
+    build:
+      context: ../..
+      dockerfile: Services/Apps/GuiyangMahjong.Community/Dockerfile
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      Observability__Enabled: ${OBSERVABILITY_ENABLED:-false}
+      Observability__OtlpEndpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://host.docker.internal:4317}
+      Community__ChatGatewayToken: ${COMMUNITY_CHAT_GATEWAY_TOKEN:?COMMUNITY_CHAT_GATEWAY_TOKEN is required}
+      Community__LegacyPlayerDataToken: ${COMMUNITY_PLAYERDATA_TOKEN:?COMMUNITY_PLAYERDATA_TOKEN is required}
+      Community__AuthBaseUrl: http://auth:8080
+      Community__AuthMonitoringToken: ${MONITORING_READ_ONLY_TOKEN:?MONITORING_READ_ONLY_TOKEN is required}
+      Community__AuthTimeoutSeconds: ${COMMUNITY_AUTH_TIMEOUT_SECONDS:-5}
+    depends_on:
+      auth: {condition: service_healthy}
+    ports: ["127.0.0.1:${COMMUNITY_PORT:-18087}:8080"]
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "--show-error", "http://127.0.0.1:8080/health/ready"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+    cpus: ${COMMUNITY_CPUS:-0.5}
+    mem_limit: ${COMMUNITY_MEMORY:-256m}
+    pids_limit: 128
+    read_only: true
+    tmpfs: ["/tmp:rw,noexec,nosuid,size=32m"]
+    security_opt: ["no-new-privileges:true"]
+    logging: *logging
+
   economy:
     image: ${IMAGE_REGISTRY:-local}/guiyang-mahjong-economy:${MAHJONG_VERSION:-dev}
     build:
@@ -485,8 +516,9 @@ services:
       PlayerData__AdminCommandToken: ${PLAYER_DATA_ADMIN_COMMAND_TOKEN:?PLAYER_DATA_ADMIN_COMMAND_TOKEN is required}
       PlayerData__ChatGatewayToken: ${PLAYER_DATA_CHAT_GATEWAY_TOKEN:?PLAYER_DATA_CHAT_GATEWAY_TOKEN is required}
       PlayerData__MonitoringToken: ${PLAYER_DATA_MONITORING_TOKEN:?PLAYER_DATA_MONITORING_TOKEN is required}
-      PlayerData__AuthBaseUrl: http://auth:8080
-      PlayerData__AuthMonitoringToken: ${MONITORING_READ_ONLY_TOKEN:?MONITORING_READ_ONLY_TOKEN is required}
+      # 阶段8.4旧聊天URL只转发到Community，PlayerData不再读取Identity禁言状态。
+      PlayerData__CommunityBaseUrl: http://community:8080
+      PlayerData__CommunityLegacyChatToken: ${COMMUNITY_PLAYERDATA_TOKEN:?COMMUNITY_PLAYERDATA_TOKEN is required}
       PlayerData__AdminProjectionBaseUrl: http://admin:8080
       PlayerData__AdminEvidenceIngestionToken: ${ADMIN_EVIDENCE_INGESTION_TOKEN:?ADMIN_EVIDENCE_INGESTION_TOKEN is required}
       # 阶段8.2保留旧URL但由GameData独占Replay写入，PlayerData不再双写旧表。
@@ -502,7 +534,7 @@ services:
       PlayerData__ProjectionMaxAttempts: ${PLAYER_DATA_PROJECTION_MAX_ATTEMPTS:-10}
     depends_on:
       postgres-migration: {condition: service_completed_successfully}
-      auth: {condition: service_healthy}
+      community: {condition: service_healthy}
       game-data: {condition: service_healthy}
       economy: {condition: service_healthy}
     extra_hosts:

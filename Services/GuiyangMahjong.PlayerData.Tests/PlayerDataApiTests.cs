@@ -40,10 +40,10 @@ public sealed class PlayerDataWebApplicationFactory
                 }));
         builder.ConfigureServices(services =>
         {
-            services.RemoveAll<IChatPolicyClient>();
-            services.AddSingleton<TestChatPolicyClient>();
-            services.AddSingleton<IChatPolicyClient>(provider =>
-                provider.GetRequiredService<TestChatPolicyClient>());
+            services.RemoveAll<ILegacyCommunityChatClient>();
+            services.AddSingleton<TestLegacyCommunityChatClient>();
+            services.AddSingleton<ILegacyCommunityChatClient>(provider =>
+                provider.GetRequiredService<TestLegacyCommunityChatClient>());
             services.RemoveAll<ILegacyReplayEvidenceClient>();
             services.AddSingleton<TestLegacyReplayEvidenceClient>();
             services.AddSingleton<ILegacyReplayEvidenceClient>(provider =>
@@ -256,7 +256,7 @@ public sealed class PlayerDataApiTests(
     public async Task ChatAuthorizationFailsClosedForMutedPlayer()
     {
         var policy =
-            factory.Services.GetRequiredService<TestChatPolicyClient>();
+            factory.Services.GetRequiredService<TestLegacyCommunityChatClient>();
         policy.Allowed = false;
         try
         {
@@ -319,15 +319,16 @@ public sealed class PlayerDataApiTests(
     }
 }
 
-public sealed class TestChatPolicyClient : IChatPolicyClient
+/// <summary>旧聊天入口兼容转发替身；验证 PlayerData 不再读取 Auth 或自行计算禁言状态。</summary>
+public sealed class TestLegacyCommunityChatClient : ILegacyCommunityChatClient
 {
     public bool Allowed { get; set; } = true;
 
-    public Task<ChatPolicyResult> GetPolicyAsync(
-        string playerId,
+    public Task<ChatPolicyResult> AuthorizeAsync(
+        AuthorizeChatMessageRequest request,
         CancellationToken cancellationToken) =>
         Task.FromResult(new ChatPolicyResult(
-            playerId,
+            request.PlayerId,
             Allowed,
             Allowed ? null : DateTimeOffset.UtcNow.AddHours(1),
             Allowed ? "Allowed" : "Muted"));

@@ -11,6 +11,23 @@ namespace GuiyangMahjong.Architecture.Tests;
 /// </summary>
 public sealed class ProjectArchitectureTests
 {
+    /// <summary>阶段 8.4 保证聊天授权由 Community 承担，PlayerData 仅保留无策略逻辑的兼容转发。</summary>
+    [Fact]
+    public void CommunityOwnsChatAuthorization_AndPlayerDataNoLongerQueriesIdentity()
+    {
+        var root = FindProjectRoot();
+        var communityProject = File.ReadAllText(Path.Combine(root, "Services", "Apps",
+            "GuiyangMahjong.Community", "GuiyangMahjong.Community.csproj"));
+        Assert.DoesNotContain("GuiyangMahjong.Auth", communityProject, StringComparison.Ordinal);
+        Assert.DoesNotContain("GuiyangMahjong.PlayerData", communityProject, StringComparison.Ordinal);
+        var endpoints = File.ReadAllText(Path.Combine(root, "Services", "GuiyangMahjong.PlayerData",
+            "Api", "PlayerDataEndpoints.cs"));
+        Assert.Contains("ILegacyCommunityChatClient", endpoints, StringComparison.Ordinal);
+        var services = File.ReadAllText(Path.Combine(root, "Services", "GuiyangMahjong.PlayerData",
+            "Services", "PlayerDataServices.cs"));
+        Assert.DoesNotContain("HttpChatPolicyClient", services, StringComparison.Ordinal);
+        Assert.DoesNotContain("/internal/monitoring/players/", services, StringComparison.Ordinal);
+    }
     /// <summary>阶段 8.3 保证 Economy 是资产唯一实现边界，且旧 PlayerData API 只依赖兼容客户端。</summary>
     [Fact]
     public void EconomyOwnsWalletWrites_AndPlayerDataUsesAdapterOnly()

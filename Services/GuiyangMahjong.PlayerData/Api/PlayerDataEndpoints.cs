@@ -149,7 +149,7 @@ public static class PlayerDataEndpoints
             HttpContext context,
             AuthorizeChatMessageRequest request,
             IOptions<PlayerDataOptions> options,
-            IChatPolicyClient policyClient,
+            ILegacyCommunityChatClient communityClient,
             TimeProvider timeProvider,
             CancellationToken cancellationToken) =>
         {
@@ -159,9 +159,7 @@ public static class PlayerDataEndpoints
             PlayerDataValidation.ValidateChatAuthorization(
                 request,
                 timeProvider.GetUtcNow());
-            var policy = await policyClient.GetPolicyAsync(
-                request.PlayerId,
-                cancellationToken);
+            var policy = await communityClient.AuthorizeAsync(request, cancellationToken);
             return policy.Allowed
                 ? Results.Ok(policy)
                 : Results.Json(

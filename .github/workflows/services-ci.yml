@@ -226,6 +226,9 @@ jobs:
           - name: economy
             dockerfile: Services/Apps/GuiyangMahjong.Economy/Dockerfile
             target: ""
+          - name: community
+            dockerfile: Services/Apps/GuiyangMahjong.Community/Dockerfile
+            target: ""
           - name: workers
             dockerfile: Services/Apps/GuiyangMahjong.Workers/Dockerfile
             target: ""

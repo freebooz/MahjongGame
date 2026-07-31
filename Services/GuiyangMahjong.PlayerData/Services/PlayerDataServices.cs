@@ -10,14 +10,6 @@ using Microsoft.Extensions.Options;
 namespace GuiyangMahjong.PlayerData.Services;
 
 /// <summary>PlayerData 查询 Auth 玩家禁言策略的最小只读客户端边界。</summary>
-public interface IChatPolicyClient
-{
-    /// <summary>读取玩家当前聊天策略；失败不得默认允许发送。</summary>
-    Task<ChatPolicyResult> GetPolicyAsync(
-        string playerId,
-        CancellationToken cancellationToken);
-}
-
 /// <summary>阶段8.2旧回放接口的GameData窄客户端；调用成功后PlayerData不得再写Replay旧表。</summary>
 public interface ILegacyReplayEvidenceClient
 {
@@ -81,70 +73,6 @@ public sealed class HttpLegacyReplayEvidenceClient(
 /// 使用独立服务身份调用 Auth 聊天策略端点。
 /// 请求不携带消息正文；网络、身份或协议失败采用关闭式拒绝语义。
 /// </summary>
-public sealed class HttpChatPolicyClient(
-    IHttpClientFactory httpClientFactory,
-    IOptions<PlayerDataOptions> options,
-    TimeProvider timeProvider) : IChatPolicyClient
-{
-    private readonly PlayerDataOptions settings = options.Value;
-
-    /// <inheritdoc/>
-    public async Task<ChatPolicyResult> GetPolicyAsync(
-        string playerId,
-        CancellationToken cancellationToken)
-    {
-        using var request = new HttpRequestMessage(
-            HttpMethod.Get,
-            new Uri(
-                new Uri(settings.AuthBaseUrl),
-                $"/internal/monitoring/players/{Uri.EscapeDataString(playerId)}"));
-        request.Headers.Authorization = new AuthenticationHeaderValue(
-            "Bearer",
-            settings.AuthMonitoringToken);
-        using var client = httpClientFactory.CreateClient(
-            nameof(HttpChatPolicyClient));
-        using var response = await client.SendAsync(
-            request,
-            HttpCompletionOption.ResponseHeadersRead,
-            cancellationToken);
-        if (response.StatusCode == HttpStatusCode.NotFound)
-        {
-            return new ChatPolicyResult(
-                playerId,
-                false,
-                null,
-                "Player account was not found.");
-        }
-        if (!response.IsSuccessStatusCode)
-        {
-            throw new HttpRequestException(
-                $"Auth policy lookup returned {(int)response.StatusCode}.",
-                null,
-                response.StatusCode);
-        }
-        var body = await response.Content.ReadFromJsonAsync<JsonElement>(
-            cancellationToken: cancellationToken);
-        var mutedUntilUtc = body
-            .GetProperty("player")
-            .TryGetProperty("mutedUntilUtc", out var muted)
-            && muted.ValueKind == JsonValueKind.String
-            ? muted.GetDateTimeOffset()
-            : (DateTimeOffset?)null;
-        var now = timeProvider.GetUtcNow();
-        return mutedUntilUtc > now
-            ? new ChatPolicyResult(
-                playerId,
-                false,
-                mutedUntilUtc,
-                "Player is muted by an approved sanction.")
-            : new ChatPolicyResult(
-                playerId,
-                true,
-                null,
-                "Player may send chat messages.");
-    }
-}
-
 /// <summary>
 /// 玩家证据投影 Outbox 的单批次执行器。
 /// 使用 workerId 租约领取记录，以 EventId 调用 Admin 幂等接入；

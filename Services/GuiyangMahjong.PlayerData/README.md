@@ -1,44 +1,29 @@
 # GuiyangMahjong.PlayerData
 
-PlayerData is the authoritative player wallet/reward ledger and the sanitized
-evidence ingress for the administration application.
+PlayerData 是阶段 8 拆解期间的短期兼容适配层，不得新增业务能力。
 
-Stage 8 has frozen this service boundary. Player profiles are owned by
-`Identity/Players` in `player.player_profiles`, and online sessions are owned by
-`Identity/Sessions` in `session.auth_refresh_sessions`. PlayerData has no profile
-or session write API and must not add one. New PlayerData features are prohibited;
-the remaining capabilities will move through the separately accepted Stage
-8.2-8.6 cutovers.
+当前所有权：
 
-It provides separate least-privilege credentials for:
+- 玩家资料和会话属于 Identity；
+- 战绩、结算和回放证据属于 GameData；
+- 奖励、资产余额和交易流水属于 Economy；
+- 聊天发送授权属于 Community/Chat。
 
-- reward, payment, report, and replay source ingestion;
-- approved Admin wallet commands;
-- chat send authorization;
-- balance monitoring;
-- evidence projection to Admin.
+旧的奖励、钱包、余额、回放和聊天 URL 暂时保留响应兼容，但只调用对应新所有者，禁止继续写旧表或在
+PlayerData 内复制策略。支付与举报证据将在阶段 8.5 迁移；全部兼容流量归零并完成数据核对后，阶段 8.6
+才能停止部署 PlayerData。
 
-Reward claims, compensation, reward reversal, balance version updates, evidence
-creation, and projection Outbox creation are committed atomically in PostgreSQL.
-Every source event and Admin command is idempotent. Compensation requires a
-different requester and approver; reward reversal must reference an existing
-claimed reward and cannot make the balance negative. There is no match-result
-mutation endpoint.
+保留的内部兼容入口：
 
-Production requires PostgreSQL, all six distinct 32+ character credentials, and
-Admin evidence projection. Chat authorization queries the current Auth control
-state and fails closed if Auth is unavailable.
+- `POST /internal/sources/reward-claims` → Economy；
+- `POST /internal/sources/replays` → GameData；
+- `POST /internal/admin/wallet-operations` → Economy；
+- `POST /internal/chat/messages/authorize` → Community；
+- `GET /internal/monitoring/players/{playerId}/balances` → Economy。
 
-Main internal endpoints:
+尚未迁移的入口：
 
-- `POST /internal/sources/reward-claims`
-- `POST /internal/sources/payment-orders`
-- `POST /internal/sources/reports`
-- `POST /internal/sources/replays`
-- `POST /internal/admin/wallet-operations`
-- `POST /internal/chat/messages/authorize`
-- `GET /internal/monitoring/players/{playerId}/balances`
+- `POST /internal/sources/payment-orders`；
+- `POST /internal/sources/reports`。
 
-Use `Deploy/linux/compose.yaml` or `Deploy/kubernetes/player-data.yaml` as the
-deployment baseline. Replace every example credential before enabling Admin
-command execution.
+所有兼容 POST 均不执行透明重试。生产环境必须使用用途隔离的工作负载凭据，并保持数据库 DDL 关闭。
