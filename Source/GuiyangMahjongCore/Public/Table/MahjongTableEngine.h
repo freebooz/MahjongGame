@@ -30,6 +30,10 @@ public:
     TArray<FMahjongAction> GetAvailableActions(int32 SeatIndex) const;
     const FGuiyangRuleSnapshot& GetLockedRuleSnapshot() const { return LockedRules; }
     bool GetSettlementResult(FMahjongSettlementResult& OutResult) const;
+    /** 导出完整权威状态；调用方必须按私有证据处理并在落盘前计算完整状态哈希。 */
+    bool ExportRecoveryState(FMahjongTableRecoveryState& OutState) const;
+    /** 从受验证快照恢复全部状态；失败不返回部分可运行牌桌。 */
+    bool RestoreRecoveryState(const FMahjongTableRecoveryState& State, FString& OutError);
     /**
      * 返回本局完整牌墙的服务端审计只读视图。
      *

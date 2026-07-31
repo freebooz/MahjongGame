@@ -29,6 +29,9 @@ public:
     int32 GetWallBreakSide() const { return WallBreakSide; }
     int32 GetWallBreakStackFromRight() const { return WallBreakStackFromRight; }
     const TArray<FMahjongTile>& GetDeckForServerTest() const { return Deck; }
+    /** 导出/恢复完整牌墙游标；调用方必须把返回值按私有证据等级保护。 */
+    FMahjongDeckRecoveryState ExportRecoveryState() const;
+    bool RestoreRecoveryState(const FMahjongDeckRecoveryState& State);
 
 private:
     UPROPERTY() TArray<FMahjongTile> Deck;

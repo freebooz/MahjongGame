@@ -90,6 +90,25 @@ public sealed class EdgeGatewayApiTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 
+    /// <summary>网关在有界密钥轮换窗口内继续接受旧 HMAC 密钥签发的有效访问令牌。</summary>
+    [Fact]
+    public async Task LegacyToken_PreviousRotationKey_ForwardsAuthorizedRoute()
+    {
+        const string previousKey =
+            "test-only-edge-previous-signing-key-long-enough";
+        using var rotationFactory = new EdgeGatewayWebApplicationFactory(
+            upstream?.BaseAddress
+                ?? throw new InvalidOperationException("Test upstream is not running."),
+            previousLegacyValidationKey: previousKey);
+        using var client = CreateClient(
+            CreateLegacyToken(previousKey),
+            rotationFactory);
+
+        using var response = await client.GetAsync("/api/v1/lobby/bootstrap");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
     /// <summary>篡改 JWT 签名必须在网关返回统一 401，不能到达上游。</summary>
     [Fact]
     public async Task JwtToken_WhenInvalid_ReturnsUnifiedUnauthorized()
@@ -513,7 +532,7 @@ public sealed class EdgeGatewayApiTests : IAsyncLifetime
                     StringComparison.OrdinalIgnoreCase))
             .Value;
 
-    private static string CreateLegacyToken()
+    private static string CreateLegacyToken(string signingKey = SigningKey)
     {
         var now = DateTimeOffset.UtcNow;
         var payload = JsonSerializer.SerializeToUtf8Bytes(new
@@ -526,7 +545,7 @@ public sealed class EdgeGatewayApiTests : IAsyncLifetime
         });
         var encodedPayload = Base64Url(payload);
         var signature = HMACSHA256.HashData(
-            Encoding.UTF8.GetBytes(SigningKey),
+            Encoding.UTF8.GetBytes(signingKey),
             Encoding.ASCII.GetBytes(encodedPayload));
         return $"{encodedPayload}.{Base64Url(signature)}";
     }
@@ -582,7 +601,8 @@ public sealed class EdgeGatewayWebApplicationFactory(
     int anonymousPermitLimit = 1000,
     long maximumBodyBytes = 1024 * 1024,
     int routeTimeoutMilliseconds = 10_000,
-    string allowedHosts = "*")
+    string allowedHosts = "*",
+    string? previousLegacyValidationKey = null)
     : WebApplicationFactory<Program>
 {
     /// <inheritdoc/>
@@ -622,6 +642,11 @@ public sealed class EdgeGatewayWebApplicationFactory(
                 ["ReverseProxy:Clusters:player-data:Destinations:primary:Address"] =
                     upstreamAddress.ToString()
             };
+            if (previousLegacyValidationKey is not null)
+            {
+                values["EdgeGateway:PlayerTokens:PreviousLegacyValidationKeys:0"] =
+                    previousLegacyValidationKey;
+            }
             configuration.AddInMemoryCollection(values);
         });
     }

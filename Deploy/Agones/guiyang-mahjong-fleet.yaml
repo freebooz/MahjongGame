@@ -20,6 +20,12 @@ spec:
         app.kubernetes.io/name: guiyang-mahjong
         app.kubernetes.io/component: game-server
         mahjong.freebooz/game: guiyang-zhua-ji
+        # 以下稳定标签由 Allocation Service 用于兼容容量选择，发布流水线替换 Build 占位值。
+        mahjong.freebooz/region: cn-southwest
+        mahjong.freebooz/server-build: REPLACE_WITH_BUILD_VERSION
+        mahjong.freebooz/ruleset-version: guiyang-zhuoji-v1
+        mahjong.freebooz/protocol-version: "1"
+        mahjong.freebooz/capacity: "4"
     spec:
       ports:
         - name: game
@@ -69,6 +75,16 @@ spec:
                       key: Allocator__JoinTicketSigningKey
                 - name: MAHJONG_MATCH_RESULT_OUTBOX_PATH
                   value: /tmp/guiyang-mahjong-match-result.json
+                - name: MAHJONG_RECOVERY_DIRECTORY
+                  value: /var/lib/guiyang-mahjong/recovery
+                - name: MAHJONG_SNAPSHOT_EVERY_ACTIONS
+                  value: "3"
+                - name: MAHJONG_SNAPSHOT_MAX_INTERVAL_SECONDS
+                  value: "10"
+                - name: MAHJONG_ALLOW_LEGACY_JOIN_TICKETS
+                  value: "false"
+                - name: MAHJONG_COMPATIBLE_CLIENT_BUILDS
+                  value: "1.0.0"
               ports:
                 - name: game
                   containerPort: 7777
@@ -85,6 +101,13 @@ spec:
                 readOnlyRootFilesystem: false
                 capabilities:
                   drop: ["ALL"]
+              volumeMounts:
+                - name: game-recovery
+                  mountPath: /var/lib/guiyang-mahjong/recovery
+          volumes:
+            - name: game-recovery
+              persistentVolumeClaim:
+                claimName: mahjong-game-recovery
 # Agones Fleet：定义贵阳麻将 Linux Dedicated Server Pod 模板、端口、探针和滚动策略。
 # 镜像必须使用不可变版本并包含已校验的 LinuxServer 制品；资源请求/限制需覆盖真实峰值。
 # 密钥通过 Secret 注入，禁止写入镜像、参数、标签或可被普通玩家查询的注解。

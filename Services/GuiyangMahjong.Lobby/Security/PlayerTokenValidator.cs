@@ -46,6 +46,7 @@ public sealed class HmacPlayerTokenValidator : IPlayerTokenValidator
     public HmacPlayerTokenValidator(IOptions<LobbyOptions> options, TimeProvider timeProvider)
     {
         validationKeys = options.Value.PreviousTokenValidationKeys
+            .Where(key => !string.IsNullOrWhiteSpace(key))
             .Prepend(options.Value.TokenSigningKey)
             .Select(Encoding.UTF8.GetBytes)
             .ToArray();
@@ -107,8 +108,15 @@ public sealed class HmacPlayerTokenValidator : IPlayerTokenValidator
                 return PlayerTokenValidationResult.Failure("登录身份字段超出限制");
             }
 
+            // 新版 Auth 令牌携带 Sid/Epoch；旧令牌仍可在迁移窗口内解析，但只能签发带 legacy 标记的票据。
             return PlayerTokenValidationResult.Success(
-                new PlayerIdentity(payload.Sub, payload.Name, payload.Provider),
+                new PlayerIdentity(
+                    payload.Sub,
+                    payload.Name,
+                    payload.Provider,
+                    string.IsNullOrWhiteSpace(payload.Sid) ? "legacy-session" : payload.Sid,
+                    payload.SessionEpoch,
+                    payload.SecurityEpoch),
                 issuedAt);
         }
         catch (JsonException)
@@ -130,7 +138,10 @@ public sealed class HmacPlayerTokenValidator : IPlayerTokenValidator
             player.DisplayName,
             player.Provider,
             issuedAt.ToUnixTimeMilliseconds(),
-            expiresAtUtc.ToUnixTimeSeconds());
+            expiresAtUtc.ToUnixTimeSeconds(),
+            player.SessionId,
+            player.SessionEpoch,
+            player.SecurityEpoch);
         var payloadBytes = JsonSerializer.SerializeToUtf8Bytes(payload);
         var encodedPayload = Base64UrlEncode(payloadBytes);
         var signature = HMACSHA256.HashData(
@@ -162,5 +173,8 @@ public sealed class HmacPlayerTokenValidator : IPlayerTokenValidator
         string Name,
         string Provider,
         long Iat,
-        long Exp);
+        long Exp,
+        string? Sid = null,
+        long SessionEpoch = 0,
+        long SecurityEpoch = 0);
 }

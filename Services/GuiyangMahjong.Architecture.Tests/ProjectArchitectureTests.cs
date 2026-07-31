@@ -319,6 +319,146 @@ public sealed class ProjectArchitectureTests
     }
 
     /// <summary>
+    /// 验证阶段 4 LobbyControl 的职责目录真实存在，并阻止 Lobby 直接引入 Kubernetes/Agones 客户端。
+    /// Allocator 仍是唯一允许执行编排操作的服务边界。
+    /// </summary>
+    [Fact]
+    public void LobbyControl_HasRequiredModuleBoundaries_AndDoesNotCallKubernetes()
+    {
+        var lobbyRoot = Path.Combine(
+            FindProjectRoot(),
+            "Services",
+            "GuiyangMahjong.Lobby");
+        var requiredModules = new[]
+        {
+            "Lobby",
+            "Rooms",
+            "Matchmaking",
+            "Reconnection",
+            "GameRouting",
+            "Administration",
+            "Infrastructure"
+        };
+        foreach (var module in requiredModules)
+        {
+            Assert.True(
+                Directory.Exists(Path.Combine(lobbyRoot, module)),
+                $"LobbyControl 缺少职责模块目录：{module}");
+        }
+
+        var projectText = File.ReadAllText(Path.Combine(
+            lobbyRoot,
+            "GuiyangMahjong.Lobby.csproj"));
+        Assert.DoesNotContain(
+            "KubernetesClient",
+            projectText,
+            StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(
+            "Agones",
+            projectText,
+            StringComparison.OrdinalIgnoreCase);
+
+        var roomContracts = File.ReadAllText(Path.Combine(
+            lobbyRoot,
+            "Rooms",
+            "RoomModuleContracts.cs"));
+        Assert.Contains("IRoomReader", roomContracts, StringComparison.Ordinal);
+        Assert.Contains("IRoomWriter", roomContracts, StringComparison.Ordinal);
+        Assert.Contains("StateVersion", roomContracts, StringComparison.Ordinal);
+        Assert.Contains("RoomEpoch", roomContracts, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 验证阶段 5 的统一 Provider 真实存在，并确保 Lobby、Admin、Auth 与 PlayerData
+    /// 既不能调用 Agones API，也不能直接启动 Dedicated Server 子进程。
+    /// </summary>
+    [Fact]
+    public void AllocationService_IsTheOnlyGameServerProviderBoundary()
+    {
+        var root = FindProjectRoot();
+        var allocatorRoot = Path.Combine(root, "Services", "GuiyangMahjong.Allocator");
+        var providerContract = File.ReadAllText(Path.Combine(
+            allocatorRoot,
+            "Providers",
+            "GameServerProviderContracts.cs"));
+        foreach (var method in new[]
+                 {
+                     "AllocateAsync", "GetStatusAsync", "DrainAsync", "TerminateAsync",
+                     "RenewLeaseAsync", "ReportReadyAsync", "ReportUnhealthyAsync"
+                 })
+        {
+            Assert.Contains(method, providerContract, StringComparison.Ordinal);
+        }
+
+        Assert.True(File.Exists(Path.Combine(
+            allocatorRoot,
+            "Providers",
+            "LocalProcessGameServerProvider.cs")));
+        Assert.True(File.Exists(Path.Combine(
+            allocatorRoot,
+            "Providers",
+            "AgonesGameServerProvider.cs")));
+
+        var forbiddenRoots = new[]
+        {
+            "GuiyangMahjong.Lobby",
+            "GuiyangMahjong.Admin",
+            "GuiyangMahjong.Auth",
+            "GuiyangMahjong.PlayerData"
+        };
+        var forbiddenMarkers = new[]
+        {
+            "IAgonesAllocationClient",
+            "allocation.agones.dev",
+            "GameServerProcessLauncher",
+            "Process.Start("
+        };
+        foreach (var project in forbiddenRoots)
+        {
+            var sources = Directory
+                .EnumerateFiles(
+                    Path.Combine(root, "Services", project),
+                    "*.cs",
+                    SearchOption.AllDirectories)
+                .Where(path => !path.Contains(
+                    $"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}",
+                    StringComparison.OrdinalIgnoreCase)
+                    && !path.Contains(
+                        $"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}",
+                        StringComparison.OrdinalIgnoreCase))
+                .Select(File.ReadAllText)
+                .ToArray();
+            foreach (var marker in forbiddenMarkers)
+                Assert.DoesNotContain(sources, source => source.Contains(marker, StringComparison.Ordinal));
+        }
+
+        var bridgeHeader = File.ReadAllText(Path.Combine(
+            root,
+            "Source",
+            "GuiyangMahjongServer",
+            "Public",
+            "Server",
+            "GuiyangGameServerBridge.h"));
+        var bridgeSource = File.ReadAllText(Path.Combine(
+            root,
+            "Source",
+            "GuiyangMahjongServer",
+            "Private",
+            "Server",
+            "GuiyangGameServerBridge.cpp"));
+        var agonesSource = File.ReadAllText(Path.Combine(
+            root,
+            "Source",
+            "GuiyangMahjongServer",
+            "Private",
+            "Server",
+            "GuiyangAgonesLifecycleSubsystem.cpp"));
+        Assert.Contains("LeaseFencingToken", bridgeHeader, StringComparison.Ordinal);
+        Assert.Contains("fencingToken", bridgeSource, StringComparison.Ordinal);
+        Assert.Contains("mahjong.freebooz/fencing-token", agonesSource, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// 验证阶段 2 Contracts/BuildingBlocks 的单向依赖图。
     /// Contracts 禁止数据库和业务实现依赖，BuildingBlocks 禁止反向依赖生产服务或 UE，
     /// Persistence 是唯一允许引用 Npgsql 的新基础项目。
@@ -473,6 +613,80 @@ public sealed class ProjectArchitectureTests
         }
 
         Assert.Empty(failures);
+    }
+
+    /// <summary>
+    /// 验证 IdentityApp 的六个模块目录和关键依赖边界已经真实建立。
+    /// Auth 不得引用房间业务表，Players 不得读取签名配置或 Refresh Token 模型。
+    /// </summary>
+    [Fact]
+    public void IdentityApp_ModulesRespectSecurityAndDataOwnershipBoundaries()
+    {
+        var identityRoot = Path.Combine(
+            FindProjectRoot(),
+            "Services",
+            "GuiyangMahjong.Auth");
+        var expectedModules = new[]
+        {
+            "Auth",
+            "Sessions",
+            "Players",
+            "Devices",
+            "Administration",
+            "Infrastructure"
+        };
+        foreach (var module in expectedModules)
+        {
+            var modulePath = Path.Combine(identityRoot, module);
+            Assert.True(
+                Directory.Exists(modulePath),
+                $"IdentityApp 缺少模块目录：{modulePath}");
+            Assert.NotEmpty(Directory.EnumerateFiles(
+                modulePath,
+                "*.cs",
+                SearchOption.AllDirectories));
+        }
+
+        var identitySources = Directory
+            .EnumerateFiles(identityRoot, "*.*", SearchOption.AllDirectories)
+            .Where(path => path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase)
+                           || path.EndsWith(".sql", StringComparison.OrdinalIgnoreCase))
+            .Where(path => !path.Contains(
+                $"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}",
+                StringComparison.OrdinalIgnoreCase)
+                && !path.Contains(
+                    $"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}",
+                    StringComparison.OrdinalIgnoreCase))
+            .Select(File.ReadAllText)
+            .ToArray();
+        var forbiddenRoomOwnershipMarkers = new[]
+        {
+            "lobby_rooms",
+            "active_player_rooms",
+            "match_results",
+            "room_event_history",
+            "player_room_history"
+        };
+        foreach (var marker in forbiddenRoomOwnershipMarkers)
+            Assert.DoesNotContain(identitySources, text => text.Contains(marker, StringComparison.OrdinalIgnoreCase));
+
+        var playerSources = Directory
+            .EnumerateFiles(
+                Path.Combine(identityRoot, "Players"),
+                "*.cs",
+                SearchOption.AllDirectories)
+            .Select(File.ReadAllText)
+            .ToArray();
+        var forbiddenCredentialDependencies = new[]
+        {
+            "TokenSigningKey",
+            "PlayerAccessTokenIssuer",
+            "RefreshSession",
+            "GuiyangMahjong.Auth.Security",
+            "AuthOptions"
+        };
+        foreach (var marker in forbiddenCredentialDependencies)
+            Assert.DoesNotContain(playerSources, text => text.Contains(marker, StringComparison.Ordinal));
     }
 
     /// <summary>

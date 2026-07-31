@@ -106,8 +106,17 @@ bool FGuiyangGameServerLaunchConfig::TryParse(const TCHAR* CommandLine, const FS
         || !GuiyangGameServerPrivate::ReadRequiredValue(
             CommandLine, TEXT("BuildVersion="), OutConfig.BuildVersion)
         || !GuiyangGameServerPrivate::ReadRequiredValue(
+            CommandLine, TEXT("RuleSetVersion="), OutConfig.RuleSetVersion)
+        || !GuiyangGameServerPrivate::ReadRequiredValue(
+            CommandLine, TEXT("ProtocolVersion="), OutConfig.ProtocolVersion)
+        || !GuiyangGameServerPrivate::ReadRequiredValue(
             CommandLine, TEXT("AdvertisedIp="), OutConfig.AdvertisedIp)
-        || !FParse::Value(CommandLine, TEXT("Port="), OutConfig.Port))
+        || !FParse::Value(CommandLine, TEXT("Port="), OutConfig.Port)
+        || !FParse::Value(CommandLine, TEXT("RoomEpoch="), OutConfig.RoomEpoch)
+        || !FParse::Value(
+            CommandLine,
+            TEXT("LeaseFencingToken="),
+            OutConfig.LeaseFencingToken))
     {
         OutError = TEXT("Managed GameServer launch arguments are incomplete");
         return false;
@@ -122,19 +131,39 @@ bool FGuiyangGameServerLaunchConfig::TryParse(const TCHAR* CommandLine, const FS
     OutConfig.RegistrationCredential = RegistrationCredential;
     OutConfig.RegistrationCredential.TrimStartAndEndInline();
     OutConfig.BuildVersion.TrimStartAndEndInline();
+    OutConfig.RuleSetVersion.TrimStartAndEndInline();
+    OutConfig.ProtocolVersion.TrimStartAndEndInline();
     OutConfig.AdvertisedIp.TrimStartAndEndInline();
     OutConfig.JoinTicketSigningKey = SigningKey;
     OutConfig.MatchResultOutboxPath = MatchResultOutboxPath.TrimStartAndEnd();
     FPaths::NormalizeFilename(OutConfig.MatchResultOutboxPath);
+    OutConfig.RecoveryDirectory = FPlatformMisc::GetEnvironmentVariable(TEXT("MAHJONG_RECOVERY_DIRECTORY"));
+    OutConfig.RecoveryDirectory.TrimStartAndEndInline();
+    // 本地旧启动脚本在兼容窗口内可回退到 Outbox 同级 recovery；Agones 仍由 Fleet 强制显式挂载。
+    if (OutConfig.RecoveryDirectory.IsEmpty())
+        OutConfig.RecoveryDirectory = FPaths::Combine(
+            FPaths::GetPath(OutConfig.MatchResultOutboxPath), TEXT("recovery"));
+    FPaths::NormalizeDirectoryName(OutConfig.RecoveryDirectory);
+    OutConfig.bAllowLegacyJoinTickets = FPlatformMisc::GetEnvironmentVariable(
+        TEXT("MAHJONG_ALLOW_LEGACY_JOIN_TICKETS")).Equals(TEXT("true"), ESearchCase::IgnoreCase);
+    FString CompatibleBuilds = FPlatformMisc::GetEnvironmentVariable(TEXT("MAHJONG_COMPATIBLE_CLIENT_BUILDS"));
+    CompatibleBuilds.ParseIntoArray(OutConfig.CompatibleClientBuilds, TEXT(","), true);
+    for (FString& Build : OutConfig.CompatibleClientBuilds) Build.TrimStartAndEndInline();
+    OutConfig.CompatibleClientBuilds.RemoveAll([](const FString& Build) { return Build.IsEmpty(); });
+    if (OutConfig.CompatibleClientBuilds.IsEmpty()) OutConfig.CompatibleClientBuilds.Add(OutConfig.BuildVersion);
     // 严格校验 GUID、网络端点、凭证强度及每实例唯一 Outbox 路径。
     FGuid ParsedGuid;
     if (!FGuid::Parse(OutConfig.RoomId, ParsedGuid)
         || !FGuid::Parse(OutConfig.MatchId, ParsedGuid)
         || !FGuid::Parse(OutConfig.ServerInstanceId, ParsedGuid)
         || OutConfig.Port < 1024 || OutConfig.Port > 65535
+        || OutConfig.RoomEpoch < 1
+        || OutConfig.LeaseFencingToken < 1
         || (!OutConfig.LobbyInternalUrl.StartsWith(TEXT("http://"))
             && !OutConfig.LobbyInternalUrl.StartsWith(TEXT("https://")))
         || OutConfig.BuildVersion.Len() > 80
+        || OutConfig.RuleSetVersion.IsEmpty() || OutConfig.RuleSetVersion.Len() > 80
+        || OutConfig.ProtocolVersion.IsEmpty() || OutConfig.ProtocolVersion.Len() > 32
         || OutConfig.AdvertisedIp.Len() > 255
         || OutConfig.RegistrationCredential.Len() < 32
         || OutConfig.JoinTicketSigningKey.Len() < 32
@@ -143,7 +172,10 @@ bool FGuiyangGameServerLaunchConfig::TryParse(const TCHAR* CommandLine, const FS
         || FPaths::IsRelative(OutConfig.MatchResultOutboxPath)
         || !FPaths::GetExtension(OutConfig.MatchResultOutboxPath).Equals(TEXT("json"), ESearchCase::IgnoreCase)
         || !FPaths::GetBaseFilename(OutConfig.MatchResultOutboxPath).Equals(
-            OutConfig.ServerInstanceId, ESearchCase::IgnoreCase))
+            OutConfig.ServerInstanceId, ESearchCase::IgnoreCase)
+        || OutConfig.RecoveryDirectory.IsEmpty()
+        || OutConfig.RecoveryDirectory.Len() > 1024
+        || FPaths::IsRelative(OutConfig.RecoveryDirectory))
     {
         OutError = TEXT("Managed GameServer launch arguments failed validation");
         return false;
@@ -372,6 +404,10 @@ void UGuiyangGameServerBridge::SendRegistration()
     Body->SetNumberField(TEXT("listenPort"), Config.Port);
     Body->SetStringField(TEXT("buildVersion"), Config.BuildVersion);
     Body->SetStringField(TEXT("registrationCredential"), Config.RegistrationCredential);
+    Body->SetNumberField(TEXT("roomEpoch"), static_cast<double>(Config.RoomEpoch));
+    Body->SetNumberField(
+        TEXT("fencingToken"),
+        static_cast<double>(Config.LeaseFencingToken));
 
     // 注册凭证放在请求体中，仅发送到受信任的 Lobby 内网端点。
     const TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = FHttpModule::Get().CreateRequest();
@@ -395,6 +431,8 @@ void UGuiyangGameServerBridge::HandleRegistrationResponse(
     const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(
         Response.IsValid() ? Response->GetContentAsString() : FString());
     bool bAccepted = false;
+    double ResponseRoomEpoch = 0.0;
+    double ResponseFencingToken = 0.0;
     // 同时校验 HTTP、JSON、接受标志及两类短期凭证，任一步失败都不开放玩家连接。
     if (!bSucceeded || !Response.IsValid() || Response->GetResponseCode() < 200
         || Response->GetResponseCode() >= 300 || !FJsonSerializer::Deserialize(Reader, Body)
@@ -402,6 +440,10 @@ void UGuiyangGameServerBridge::HandleRegistrationResponse(
         || !Body->TryGetNumberField(TEXT("heartbeatIntervalSeconds"), HeartbeatIntervalSeconds)
         || !Body->TryGetStringField(TEXT("heartbeatCredential"), HeartbeatCredential)
         || !Body->TryGetStringField(TEXT("resultCredential"), ResultCredential)
+        || !Body->TryGetNumberField(TEXT("roomEpoch"), ResponseRoomEpoch)
+        || static_cast<int64>(ResponseRoomEpoch) != Config.RoomEpoch
+        || !Body->TryGetNumberField(TEXT("fencingToken"), ResponseFencingToken)
+        || static_cast<int64>(ResponseFencingToken) != Config.LeaseFencingToken
         || HeartbeatCredential.Len() < 32 || ResultCredential.Len() < 32)
     {
         UE_LOG(LogMahjongServer, Error,
@@ -466,6 +508,9 @@ void UGuiyangGameServerBridge::SendHeartbeat()
     const FString Lifecycle = BuildHeartbeatLifecycle(RoundId);
     TArray<TSharedPtr<FJsonValue>> ConnectedPlayerIds;
     TArray<FString> AuthorizedPlayerIds;
+    bool bRecoveredAuthority = false;
+    bool bSettlementEvidenceReady = true;
+    FString AuthoritativeStateHash;
     if (const AGuiyangMahjongGameMode* GameMode =
         World->GetAuthGameMode<AGuiyangMahjongGameMode>())
     {
@@ -473,6 +518,9 @@ void UGuiyangGameServerBridge::SendHeartbeat()
         // client profile RPC runs. Counting PlayerState identities here used to
         // report zero, so Lobby reclaimed a live room after its empty timeout.
         GameMode->GetConnectedAuthorizedPlayerIds(AuthorizedPlayerIds);
+        bRecoveredAuthority = GameMode->IsRecoveredAuthority();
+        bSettlementEvidenceReady = GameMode->IsSettlementEvidenceReady();
+        AuthoritativeStateHash = GameMode->GetAuthoritativeStateHash();
     }
     for (const FString& PlayerId : AuthorizedPlayerIds)
     {
@@ -484,11 +532,19 @@ void UGuiyangGameServerBridge::SendHeartbeat()
         TEXT("telemetrySchemaVersion"),
         GuiyangGameServerPrivate::RuntimeTelemetrySchemaVersion);
     Body->SetStringField(TEXT("roomId"), Config.RoomId);
+    Body->SetNumberField(TEXT("roomEpoch"), static_cast<double>(Config.RoomEpoch));
+    Body->SetNumberField(
+        TEXT("fencingToken"),
+        static_cast<double>(Config.LeaseFencingToken));
     Body->SetStringField(TEXT("heartbeatCredential"), HeartbeatCredential);
     Body->SetNumberField(TEXT("connectedPlayers"), ConnectedPlayerIds.Num());
     Body->SetArrayField(TEXT("connectedPlayerIds"), ConnectedPlayerIds);
     Body->SetStringField(TEXT("roomLifecycle"), Lifecycle);
     Body->SetNumberField(TEXT("roundId"), RoundId);
+    Body->SetBoolField(TEXT("recoveredAuthority"), bRecoveredAuthority);
+    Body->SetBoolField(TEXT("settlementEvidenceReady"), bSettlementEvidenceReady);
+    if (!AuthoritativeStateHash.IsEmpty())
+        Body->SetStringField(TEXT("authoritativeStateHash"), AuthoritativeStateHash);
     if (Lifecycle == TEXT("Playing") && GameStartedAtUtc.GetTicks() == 0)
     {
         GameStartedAtUtc = FDateTime::UtcNow();

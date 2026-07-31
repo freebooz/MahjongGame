@@ -52,6 +52,43 @@ public static partial class LobbyEndpoints
             await lobbyService.MarkGameServerFailedAsync(request, cancellationToken);
             return Results.NoContent();
         });
+        internalApi.MapPost("/reallocate", async (
+            HttpContext context,
+            GameServerReallocationRequest request,
+            LobbyService lobbyService,
+            IIdempotencyStore idempotency,
+            IOptions<LobbyOptions> options,
+            CancellationToken cancellationToken) =>
+        {
+            if (!HasInternalCredential(
+                    context,
+                    options.Value.InternalServiceToken))
+            {
+                return Results.Unauthorized();
+            }
+            var key = RequireIdempotencyKey(context);
+            if (request.RoomId.Length is < 1 or > 80
+                || request.Reason.Trim().Length is < 5 or > 500)
+            {
+                return Results.BadRequest();
+            }
+            var result = await idempotency.ExecuteAsync(
+                $"gameserver-reallocate:{request.RoomId}:{key}",
+                async () => new IdempotentHttpResponse(
+                    StatusCodes.Status202Accepted,
+                    JsonSerializer.SerializeToElement(
+                        await lobbyService.ReallocateGameServerAsync(
+                            $"reallocate:{request.RoomId}:{key}",
+                            request.RoomId,
+                            request.Reason.Trim(),
+                            cancellationToken),
+                        new JsonSerializerOptions(
+                            JsonSerializerDefaults.Web))),
+                cancellationToken);
+            return Results.Json(
+                result.Body,
+                statusCode: result.StatusCode);
+        });
 
         app.MapPost("/internal/matches/{matchId}/result", async (
             string matchId,

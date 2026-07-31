@@ -51,8 +51,62 @@ bool UGuiyangRoomManager::CreateManagedRoom(const FGuiyangManagedRoomDefinition&
     return true;
 }
 
+bool UGuiyangRoomManager::RestoreManagedRoomState(
+    const FString& RoomCode,
+    const FMahjongRoomState& RecoveredState,
+    FString& OutError)
+{
+    FRoomRecord* Record = Rooms.Find(RoomCode);
+    if (!Record || !Record->bManagedAuthority
+        || RecoveredState.RoomInfo.RoomId != RoomCode
+        || RecoveredState.RoomInfo.MatchId != Record->PublicState.RoomInfo.MatchId
+        || RecoveredState.Seats.Num() != 4
+        || !UGuiyangRuleSnapshotLibrary::VerifySnapshot(RecoveredState.RuleSnapshot)
+        || RecoveredState.RuleSnapshot.RuleHash != Record->PublicState.RuleSnapshot.RuleHash)
+    {
+        OutError = TEXT("恢复房间状态与 Bootstrap 作用域不一致");
+        return false;
+    }
+    TSet<FString> Players;
+    TSet<int32> SeatIndices;
+    for (const FMahjongSeatInfo& Seat : RecoveredState.Seats)
+    {
+        if (Seat.SeatIndex < 0 || Seat.SeatIndex >= 4 || SeatIndices.Contains(Seat.SeatIndex))
+        {
+            OutError = TEXT("恢复房间包含无效或重复座位");
+            return false;
+        }
+        SeatIndices.Add(Seat.SeatIndex);
+        if (Seat.bOccupied && (Seat.PlayerId.IsEmpty() || Players.Contains(Seat.PlayerId)))
+        {
+            OutError = TEXT("恢复房间包含空玩家或重复玩家");
+            return false;
+        }
+        if (Seat.bOccupied) Players.Add(Seat.PlayerId);
+    }
+    // 恢复时所有旧连接均视为离线；玩家通过新 Epoch Ticket 重连后再切回在线，避免幽灵连接。
+    Record->PublicState = RecoveredState;
+    PlayerRoomCodes.Reset();
+    for (FMahjongSeatInfo& Seat : Record->PublicState.Seats)
+    {
+        if (!Seat.bOccupied) continue;
+        Seat.bOnline = false;
+        PlayerRoomCodes.Add(Seat.PlayerId, RoomCode);
+        FGuiyangPlayerConnectionTelemetry& Connection = Record->ConnectionTelemetryByPlayer.FindOrAdd(Seat.PlayerId);
+        Connection.bDisconnected = true;
+        Connection.DisconnectedAtUtc = FDateTime::UtcNow();
+        Connection.ChangedAtUtc = Connection.DisconnectedAtUtc;
+        Connection.DisconnectReason = TEXT("GameServerRecovery");
+        ++Connection.Sequence;
+        Connection.EventId = FGuid::NewGuid().ToString(EGuidFormats::DigitsWithHyphensLower);
+    }
+    OutError.Reset();
+    return true;
+}
+
 bool UGuiyangRoomManager::AdmitManagedPlayer(const FString& RoomCode, const FString& PlayerId,
-    const FString& DisplayName, FMahjongRoomState& OutState, EMahjongRoomError& OutError)
+    const FString& DisplayName, FMahjongRoomState& OutState, EMahjongRoomError& OutError,
+    const int32 ExpectedSeatIndex)
 {
     // 单活动房间反向索引阻止同一玩家同时占用多个房间座位。
     OutError = EMahjongRoomError::None;
@@ -70,7 +124,8 @@ bool UGuiyangRoomManager::AdmitManagedPlayer(const FString& RoomCode, const FStr
         }
         FRoomRecord* ExistingRecord = Rooms.Find(RoomCode);
         FMahjongSeatInfo* ExistingSeat = ExistingRecord ? FindSeat(ExistingRecord->PublicState, PlayerId) : nullptr;
-        if (!ExistingRecord || !ExistingRecord->bManagedAuthority || !ExistingSeat)
+        if (!ExistingRecord || !ExistingRecord->bManagedAuthority || !ExistingSeat
+            || (ExpectedSeatIndex != INDEX_NONE && ExistingSeat->SeatIndex != ExpectedSeatIndex))
         {
             OutError = EMahjongRoomError::NotInRoom;
             return false;
@@ -107,8 +162,14 @@ bool UGuiyangRoomManager::AdmitManagedPlayer(const FString& RoomCode, const FStr
         OutError = EMahjongRoomError::GameAlreadyStarted;
         return false;
     }
-    FMahjongSeatInfo* EmptySeat = Record->PublicState.Seats.FindByPredicate(
-        [](const FMahjongSeatInfo& Seat) { return !Seat.bOccupied; });
+    FMahjongSeatInfo* EmptySeat = ExpectedSeatIndex == INDEX_NONE
+        ? Record->PublicState.Seats.FindByPredicate(
+            [](const FMahjongSeatInfo& Seat) { return !Seat.bOccupied; })
+        : Record->PublicState.Seats.FindByPredicate(
+            [ExpectedSeatIndex](const FMahjongSeatInfo& Seat)
+            {
+                return Seat.SeatIndex == ExpectedSeatIndex && !Seat.bOccupied;
+            });
     if (!EmptySeat)
     {
         OutError = EMahjongRoomError::RoomFull;

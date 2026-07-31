@@ -38,16 +38,27 @@ public sealed class AllocatorOptions
 
     [Range(1024, 65535)] public int PortStart { get; init; } = 19000;
     [Range(1024, 65535)] public int PortEnd { get; init; } = 19099;
+    /// <summary>本地 Provider 是否在租用端口前核对操作系统 UDP 占用；生产必须保持 true。</summary>
+    public bool ValidateOperatingSystemPortAvailability { get; init; } = true;
     [Range(5, 300)] public int RegistrationTimeoutSeconds { get; init; } = 30;
+    /// <summary>Provider 创建进程或 Agones Allocation 的硬超时，单位为秒。</summary>
+    [Range(1, 120)] public int StartupTimeoutSeconds { get; init; } = 30;
     [Range(3, 300)] public int HeartbeatTimeoutSeconds { get; init; } = 15;
     [Range(1, 60)] public int HeartbeatIntervalSeconds { get; init; } = 3;
     [Range(100, 60_000)] public int MonitorIntervalMilliseconds { get; init; } = 500;
     [Range(0, 60)] public int DrainGraceSeconds { get; init; } = 3;
+    /// <summary>兼容尚未携带显式 FencingToken 的初始 Epoch DS；完成滚动升级后必须关闭。</summary>
+    public bool AllowLegacyInitialFencingToken { get; init; } = true;
     [Required] public string AdvertisedIp { get; init; } = "127.0.0.1";
     public string GameServerExecutablePath { get; init; } = string.Empty;
     public string GameServerWorkingDirectory { get; init; } = string.Empty;
     public string[] GameServerPrefixArguments { get; init; } = [];
     [Required] public string MatchResultOutboxDirectory { get; init; } = "match-result-outbox";
+    /// <summary>
+    /// Dedicated Server 权威快照和动作证据根目录；LocalProcess 必须位于持久卷，
+    /// Agones 则由 Fleet 直接挂载 RWX PVC，不能使用容器临时目录。
+    /// </summary>
+    [Required] public string RecoveryDirectory { get; init; } = "game-recovery";
     [Required] public string StateFilePath { get; init; } = "allocator-state/instances.json";
     [Range(1, 60)] public int StateCheckpointSeconds { get; init; } = 5;
     [Range(1, 300)] public int FailureNotificationRetrySeconds { get; init; } = 5;

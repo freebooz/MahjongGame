@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mahjong-game-recovery
+  namespace: guiyang-mahjong
+  labels:
+    app.kubernetes.io/name: guiyang-mahjong
+    app.kubernetes.io/component: game-recovery
+spec:
+  # 新旧 GameServer Pod 需要同时读取同一比赛目录；生产 StorageClass 必须真正支持 RWX。
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 20Gi

@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Diagnostics;
 using GuiyangMahjong.Lobby.Domain;
+using GuiyangMahjong.Lobby.GameRouting;
 using GuiyangMahjong.Lobby.Options;
 using GuiyangMahjong.Lobby.Realtime;
 using GuiyangMahjong.Lobby.Security;
@@ -48,13 +49,23 @@ public sealed partial class LobbyService
                 LobbyErrorCode.RoomNotFound, "Room was not found.", StatusCodes.Status404NotFound);
         if (room.MatchId != registration.MatchId
             || room.Lifecycle != RoomLifecycle.Allocating
-            || room.PendingServerInstanceId != registration.ServerInstanceId)
+            || room.PendingServerInstanceId != registration.ServerInstanceId
+            || !GameRoutingPolicy.AcceptsEpoch(
+                room.RoomEpoch,
+                registration.RoomEpoch,
+                options.Matchmaking.AllowLegacyInitialEpoch))
         {
             throw Invalid("GameServer registration does not match the room allocation.");
         }
 
         var acknowledgement = await allocator.ConfirmRegistrationAsync(
             requestId, registration, cancellationToken);
+        if (acknowledgement.RoomEpoch != room.RoomEpoch)
+        {
+            throw Invalid("Allocator registration acknowledgement has a stale RoomEpoch.");
+        }
+        if (acknowledgement.FencingToken != room.RoomEpoch)
+            throw Invalid("Allocator registration acknowledgement has a stale FencingToken.");
         var now = timeProvider.GetUtcNow();
         var resultCredential = CreateResultCredential();
         room = RoomStateMachine.Transition(room, RoomLifecycle.Waiting, timeProvider) with
@@ -69,9 +80,14 @@ public sealed partial class LobbyService
                 registration.ListenIp,
                 registration.ListenPort,
                 string.Empty,
-                now),
+                now,
+                room.RoomEpoch,
+                registration.BuildVersion,
+                room.RuleSetVersion,
+                options.ProtocolVersion),
             LastServerInstanceId = registration.ServerInstanceId,
-            ResultCredentialHash = HashCredential(resultCredential)
+            ResultCredentialHash = HashCredential(resultCredential),
+            BuildVersion = registration.BuildVersion
         };
         if (!await store.UpdateRoomAsync(room, cancellationToken))
         {
@@ -98,7 +114,12 @@ public sealed partial class LobbyService
                 room.PublicRoom,
                 room.AutoStart,
                 room.Password is not null,
-                CloneRuleSnapshot(room.RuleSnapshot)));
+                CloneRuleSnapshot(room.RuleSnapshot),
+                room.RoomEpoch,
+                room.RuleSetVersion,
+                options.ProtocolVersion),
+            room.RoomEpoch,
+            acknowledgement.FencingToken);
     }
 
     /// <summary>
@@ -125,7 +146,15 @@ public sealed partial class LobbyService
         }
         await allocator.RecordHeartbeatAsync(requestId, serverInstanceId, heartbeat, cancellationToken);
         var room = await store.GetRoomByIdAsync(heartbeat.RoomId, cancellationToken);
-        if (room is null || room.Route?.ServerInstanceId != serverInstanceId) return;
+        if (room is null
+            || room.Route?.ServerInstanceId != serverInstanceId
+            || !GameRoutingPolicy.AcceptsEpoch(
+                room.RoomEpoch,
+                heartbeat.RoomEpoch,
+                options.Matchmaking.AllowLegacyInitialEpoch))
+        {
+            return;
+        }
 
         var now = timeProvider.GetUtcNow();
         if (heartbeat.ConnectedPlayerIds is { } connectedPlayerIds)
@@ -244,6 +273,10 @@ public sealed partial class LobbyService
         if (room is null
             || (room.Route?.ServerInstanceId != failure.ServerInstanceId
                 && room.PendingServerInstanceId != failure.ServerInstanceId)
+            || !GameRoutingPolicy.AcceptsEpoch(
+                room.RoomEpoch,
+                failure.RoomEpoch,
+                options.Matchmaking.AllowLegacyInitialEpoch)
             || room.Lifecycle is RoomLifecycle.Closed or RoomLifecycle.Failed)
         {
             return;
@@ -261,6 +294,124 @@ public sealed partial class LobbyService
             failure.ServerInstanceId,
             failure.Reason);
         await events.PublishAsync(LobbyEventTypes.RoomClosed, ToDirectoryItem(room), cancellationToken);
+    }
+
+    /// <summary>
+    /// 为异常房间申请新一代 Dedicated Server。
+    /// 方法先以乐观并发持久化递增后的 RoomEpoch，再调用 Allocator；因此旧实例即使延迟注册也无法覆盖新路由。
+    /// </summary>
+    public async Task<RoomOperation> ReallocateGameServerAsync(
+        string requestId,
+        string roomId,
+        string reason,
+        CancellationToken cancellationToken)
+    {
+        // 重新分配是跨 Lobby/Allocator/DS 的关键控制面动作，独立跨度用于关联状态版本和实例启动失败。
+        using var activity = MahjongTelemetry.ActivitySource.StartActivity(
+            "Lobby.ReallocateGameServer",
+            ActivityKind.Internal);
+        activity?.SetTag("mahjong.request_id", requestId);
+        activity?.SetTag("mahjong.room_id", roomId);
+        if (!allocator.Enabled)
+        {
+            throw new LobbyOperationException(
+                LobbyErrorCode.BackendNotConfigured,
+                "Allocator integration is disabled.",
+                StatusCodes.Status503ServiceUnavailable);
+        }
+
+        var current = await store.GetRoomByIdAsync(roomId, cancellationToken)
+            ?? throw new LobbyOperationException(
+                LobbyErrorCode.RoomNotFound,
+                "Room was not found.",
+                StatusCodes.Status404NotFound);
+        if (current.Lifecycle is
+            RoomLifecycle.Finished
+            or RoomLifecycle.Aborted
+            or RoomLifecycle.Archived
+            or RoomLifecycle.Terminating)
+        {
+            throw new LobbyOperationException(
+                LobbyErrorCode.RoomClosed,
+                "Terminal room cannot be reallocated.",
+                StatusCodes.Status409Conflict);
+        }
+
+        var recovering = GameRoutingPolicy.BeginReallocation(
+            current,
+            timeProvider);
+        activity?.SetTag("mahjong.room_epoch", recovering.RoomEpoch);
+        if (!await store.UpdateRoomAsync(recovering, cancellationToken))
+        {
+            throw new LobbyOperationException(
+                LobbyErrorCode.RequestInProgress,
+                "Room state changed while starting recovery.",
+                StatusCodes.Status409Conflict);
+        }
+
+        logger.LogWarning(
+            "房间开始 DS 重新分配 RequestId={RequestId} RoomId={RoomId} RoomEpoch={RoomEpoch} Reason={Reason}",
+            requestId,
+            roomId,
+            recovering.RoomEpoch,
+            reason);
+
+        try
+        {
+            var allocation = await allocator.AllocateForEpochAsync(
+                requestId,
+                recovering.RoomId,
+                recovering.MatchId,
+                recovering.RoomEpoch,
+                cancellationToken);
+            if (allocation.RoomEpoch != recovering.RoomEpoch)
+            {
+                throw new HttpRequestException(
+                    "Allocator returned a stale RoomEpoch.");
+            }
+            var allocating = RoomStateMachine.Transition(
+                recovering,
+                RoomLifecycle.Allocating,
+                timeProvider) with
+            {
+                PendingServerInstanceId = allocation.ServerInstanceId
+            };
+            if (!await store.UpdateRoomAsync(allocating, cancellationToken))
+            {
+                throw new LobbyOperationException(
+                    LobbyErrorCode.RequestInProgress,
+                    "Room state changed while binding the replacement server.",
+                    StatusCodes.Status409Conflict);
+            }
+
+            await events.PublishAsync(
+                LobbyEventTypes.RoomUpdated,
+                ToDirectoryItem(allocating),
+                cancellationToken);
+            return new RoomOperation(
+                requestId,
+                allocating.RoomId,
+                allocating.RoomCode,
+                allocating.Lifecycle);
+        }
+        catch (Exception exception) when (
+            exception is HttpRequestException or TaskCanceledException)
+        {
+            var aborted = RoomStateMachine.Transition(
+                recovering,
+                RoomLifecycle.Aborted,
+                timeProvider);
+            await store.UpdateRoomAsync(aborted, cancellationToken);
+            await events.PublishAsync(
+                LobbyEventTypes.RoomClosed,
+                ToDirectoryItem(aborted),
+                cancellationToken);
+            throw new LobbyOperationException(
+                LobbyErrorCode.ServerUnavailable,
+                "Replacement GameServer could not be allocated.",
+                StatusCodes.Status503ServiceUnavailable,
+                1000);
+        }
     }
 
     /// <summary>

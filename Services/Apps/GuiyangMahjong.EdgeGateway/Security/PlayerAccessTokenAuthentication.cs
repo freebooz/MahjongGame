@@ -47,6 +47,7 @@ public sealed class LegacyPlayerTokenAuthenticationHandler(
     // 网关只使用当前密钥和受控旧密钥进行本地验证，不持久化也不输出任何密钥内容。
     private readonly byte[][] validationKeys =
         gatewayOptions.Value.PlayerTokens.PreviousLegacyValidationKeys
+            .Where(key => !string.IsNullOrWhiteSpace(key))
             .Prepend(gatewayOptions.Value.PlayerTokens.LegacySigningKey)
             .Select(Encoding.UTF8.GetBytes)
             .ToArray();

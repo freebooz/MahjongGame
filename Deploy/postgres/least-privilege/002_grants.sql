@@ -2,8 +2,15 @@
 -- 先撤销 PUBLIC，再逐表授权，避免 public schema 中 Auth 与 Lobby 互相越权。
 
 REVOKE CREATE ON SCHEMA public FROM PUBLIC;
-REVOKE ALL ON SCHEMA auth, session, player, integration, player_data, admin_monitor FROM PUBLIC;
+REVOKE ALL ON SCHEMA
+    auth, session, player, integration,
+    lobby, room, matchmaking,
+    player_data, admin_monitor
+FROM PUBLIC;
 GRANT USAGE ON SCHEMA public TO
+    mahjong_lobby_rw, mahjong_monitor_ro;
+-- LobbyControl 的新逻辑 Schema 与旧 public 表并存；运行身份只能使用对象，不能创建或变更结构。
+GRANT USAGE ON SCHEMA lobby, room, matchmaking TO
     mahjong_lobby_rw, mahjong_monitor_ro;
 GRANT USAGE ON SCHEMA auth, session, player, integration TO
     mahjong_auth_rw, mahjong_monitor_ro;
@@ -17,6 +24,9 @@ ALTER SCHEMA auth OWNER TO mahjong_migration;
 ALTER SCHEMA session OWNER TO mahjong_migration;
 ALTER SCHEMA player OWNER TO mahjong_migration;
 ALTER SCHEMA integration OWNER TO mahjong_migration;
+ALTER SCHEMA lobby OWNER TO mahjong_migration;
+ALTER SCHEMA room OWNER TO mahjong_migration;
+ALTER SCHEMA matchmaking OWNER TO mahjong_migration;
 ALTER SCHEMA player_data OWNER TO mahjong_migration;
 ALTER SCHEMA admin_monitor OWNER TO mahjong_migration;
 
@@ -25,6 +35,7 @@ REVOKE ALL ON TABLE
     room_event_history, player_room_history, player_connection_history
 FROM PUBLIC;
 REVOKE ALL ON ALL TABLES IN SCHEMA auth, session, player, integration FROM PUBLIC;
+REVOKE ALL ON ALL TABLES IN SCHEMA lobby, room, matchmaking FROM PUBLIC;
 REVOKE ALL ON ALL TABLES IN SCHEMA player_data, admin_monitor FROM PUBLIC;
 REVOKE ALL ON ALL SEQUENCES IN SCHEMA admin_monitor FROM PUBLIC;
 REVOKE ALL ON ALL FUNCTIONS IN SCHEMA admin_monitor FROM PUBLIC;
@@ -45,6 +56,7 @@ BEGIN
         FROM pg_tables
         WHERE schemaname IN (
             'auth', 'session', 'player', 'integration',
+            'lobby', 'room', 'matchmaking',
             'player_data', 'admin_monitor')
     LOOP
         EXECUTE format('ALTER TABLE %s OWNER TO mahjong_migration', object_record.object_name);
@@ -73,6 +85,11 @@ TO mahjong_auth_rw;
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE
     lobby_rooms, active_player_rooms, match_results
 TO mahjong_lobby_rw;
+GRANT SELECT, INSERT, UPDATE, DELETE
+ON TABLE matchmaking.matchmaking_tickets
+TO mahjong_lobby_rw;
+-- 房间成员、分配和状态历史由安全定义者触发器维护，运行身份只读取审计投影。
+GRANT SELECT ON ALL TABLES IN SCHEMA room TO mahjong_lobby_rw;
 -- 房间事件只允许追加；玩家历史由安全定义者触发器投影，运行身份仅负责读取调查结果。
 GRANT SELECT, INSERT ON TABLE room_event_history TO mahjong_lobby_rw;
 GRANT SELECT ON TABLE player_room_history, player_connection_history
@@ -102,6 +119,8 @@ GRANT SELECT ON TABLE
 TO mahjong_monitor_ro;
 GRANT SELECT ON ALL TABLES IN SCHEMA auth, session, player, integration
 TO mahjong_monitor_ro;
+GRANT SELECT ON ALL TABLES IN SCHEMA lobby, room, matchmaking
+TO mahjong_monitor_ro;
 GRANT SELECT ON ALL TABLES IN SCHEMA player_data, admin_monitor
 TO mahjong_monitor_ro;
 
@@ -123,6 +142,23 @@ ALTER FUNCTION project_player_connection_history()
     SET search_path = pg_catalog, public;
 REVOKE ALL ON FUNCTION project_player_connection_history() FROM PUBLIC;
 
+-- 阶段 4 房间投影同样以迁移所有者执行，避免 Lobby 运行账号获得状态历史和分配证据的任意写权限。
+ALTER FUNCTION room.project_room_members() OWNER TO mahjong_migration;
+ALTER FUNCTION room.project_room_members() SECURITY DEFINER;
+ALTER FUNCTION room.project_room_members()
+    SET search_path = pg_catalog, public, room;
+REVOKE ALL ON FUNCTION room.project_room_members() FROM PUBLIC;
+ALTER FUNCTION room.project_room_state_history() OWNER TO mahjong_migration;
+ALTER FUNCTION room.project_room_state_history() SECURITY DEFINER;
+ALTER FUNCTION room.project_room_state_history()
+    SET search_path = pg_catalog, public, room;
+REVOKE ALL ON FUNCTION room.project_room_state_history() FROM PUBLIC;
+ALTER FUNCTION room.project_room_allocation() OWNER TO mahjong_migration;
+ALTER FUNCTION room.project_room_allocation() SECURITY DEFINER;
+ALTER FUNCTION room.project_room_allocation()
+    SET search_path = pg_catalog, public, room;
+REVOKE ALL ON FUNCTION room.project_room_allocation() FROM PUBLIC;
+
 -- 后续由 migration 身份创建的对象默认不向 PUBLIC 泄露，并自动继承对应最小权限。
 ALTER DEFAULT PRIVILEGES FOR ROLE mahjong_migration IN SCHEMA player_data
     REVOKE ALL ON TABLES FROM PUBLIC;
@@ -140,6 +176,18 @@ ALTER DEFAULT PRIVILEGES FOR ROLE mahjong_migration IN SCHEMA player
     REVOKE ALL ON TABLES FROM PUBLIC;
 ALTER DEFAULT PRIVILEGES FOR ROLE mahjong_migration IN SCHEMA integration
     REVOKE ALL ON TABLES FROM PUBLIC;
+ALTER DEFAULT PRIVILEGES FOR ROLE mahjong_migration IN SCHEMA lobby
+    REVOKE ALL ON TABLES FROM PUBLIC;
+ALTER DEFAULT PRIVILEGES FOR ROLE mahjong_migration IN SCHEMA room
+    REVOKE ALL ON TABLES FROM PUBLIC;
+ALTER DEFAULT PRIVILEGES FOR ROLE mahjong_migration IN SCHEMA matchmaking
+    REVOKE ALL ON TABLES FROM PUBLIC;
+ALTER DEFAULT PRIVILEGES FOR ROLE mahjong_migration IN SCHEMA room
+    GRANT SELECT ON TABLES TO mahjong_lobby_rw, mahjong_monitor_ro;
+ALTER DEFAULT PRIVILEGES FOR ROLE mahjong_migration IN SCHEMA matchmaking
+    GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO mahjong_lobby_rw;
+ALTER DEFAULT PRIVILEGES FOR ROLE mahjong_migration IN SCHEMA matchmaking
+    GRANT SELECT ON TABLES TO mahjong_monitor_ro;
 ALTER DEFAULT PRIVILEGES FOR ROLE mahjong_migration IN SCHEMA auth
     GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO mahjong_auth_rw;
 ALTER DEFAULT PRIVILEGES FOR ROLE mahjong_migration IN SCHEMA session

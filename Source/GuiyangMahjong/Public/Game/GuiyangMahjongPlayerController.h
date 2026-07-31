@@ -100,6 +100,9 @@ public:
     UFUNCTION(Server, Reliable) void Server_RequestPlayTile(FMahjongTile Tile);
     /** 提交统一牌桌动作；局号、回合号和客户端序号共同阻止过期或重放请求。 */
     UFUNCTION(Server, Reliable) void Server_RequestAction(FMahjongActionRequest Request);
+    /** 客户端原子应用重连快照后回传控制令牌、版本和公共哈希，禁止用它提交权威结果。 */
+    UFUNCTION(Server, Reliable) void Server_ConfirmReconnectState(
+        const FString& ControlToken, int32 StateVersion, const FString& PublicStateHash);
     /** 仅供自动化集成场景模拟断线，生产 UI 不应直接调用。 */
     UFUNCTION(Server, Reliable) void Server_RequestIntegrationDisconnect();
 

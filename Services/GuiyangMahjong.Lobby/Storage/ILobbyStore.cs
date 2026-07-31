@@ -1,4 +1,5 @@
 using GuiyangMahjong.Lobby.Domain;
+using GuiyangMahjong.Lobby.Rooms;
 
 namespace GuiyangMahjong.Lobby.Storage;
 
@@ -41,7 +42,7 @@ public enum FinalizeMatchStatus
 /// 生产实现必须在事务内维护“玩家最多一个活动房间”、StateSequence 乐观更新和结果幂等，
 /// 缓存只能加速读取，不能成为覆盖 PostgreSQL 权威状态的来源。
 /// </summary>
-public interface ILobbyStore
+public interface ILobbyStore : IRoomReader, IRoomWriter
 {
     /// <summary>初始化或验证持久化结构；失败时 Lobby 不得进入就绪状态。</summary>
     Task InitializeAsync(CancellationToken cancellationToken);
@@ -50,16 +51,16 @@ public interface ILobbyStore
     Task<bool> CheckHealthAsync(CancellationToken cancellationToken);
 
     /// <summary>原子创建房间并建立活动玩家索引；房间码或玩家冲突不会留下部分记录。</summary>
-    Task<CreateRoomResult> TryCreateRoomAsync(LobbyRoom room, CancellationToken cancellationToken);
+    new Task<CreateRoomResult> TryCreateRoomAsync(LobbyRoom room, CancellationToken cancellationToken);
 
     /// <summary>按公开房间短码读取当前快照；不存在返回空。</summary>
-    Task<LobbyRoom?> GetRoomByCodeAsync(string roomCode, CancellationToken cancellationToken);
+    new Task<LobbyRoom?> GetRoomByCodeAsync(string roomCode, CancellationToken cancellationToken);
 
     /// <summary>按内部 RoomId 读取当前快照；不存在返回空。</summary>
-    Task<LobbyRoom?> GetRoomByIdAsync(string roomId, CancellationToken cancellationToken);
+    new Task<LobbyRoom?> GetRoomByIdAsync(string roomId, CancellationToken cancellationToken);
 
     /// <summary>读取玩家当前唯一活动房间；终态房间不应返回。</summary>
-    Task<LobbyRoom?> GetActiveRoomByPlayerAsync(string playerId, CancellationToken cancellationToken);
+    new Task<LobbyRoom?> GetActiveRoomByPlayerAsync(string playerId, CancellationToken cancellationToken);
     /// <summary>
     /// 批量查询玩家当前活动房间；用于监控分页，避免逐玩家查询或扫描全部房间。
     /// 返回字典只包含当前确实位于活动房间中的玩家。
@@ -69,7 +70,7 @@ public interface ILobbyStore
         CancellationToken cancellationToken);
 
     /// <summary>返回可公开发现且允许加入的房间目录快照，不包含密码哈希和加入票据。</summary>
-    Task<IReadOnlyList<LobbyRoom>> ListPublicRoomsAsync(CancellationToken cancellationToken);
+    new Task<IReadOnlyList<LobbyRoom>> ListPublicRoomsAsync(CancellationToken cancellationToken);
     /// <summary>按不可变创建时间与 RoomId 执行键集分页，避免状态更新时间变化扰动翻页边界。</summary>
     Task<IReadOnlyList<LobbyRoom>> ListRoomsForMonitoringAsync(
         int limit,
@@ -102,14 +103,14 @@ public interface ILobbyStore
         CancellationToken cancellationToken);
 
     /// <summary>原子加入玩家并递增状态序号；同玩家跨房间冲突必须返回明确状态。</summary>
-    Task<AddPlayerResult> TryAddPlayerAsync(
+    new Task<AddPlayerResult> TryAddPlayerAsync(
         string roomCode, string playerId, CancellationToken cancellationToken);
 
     /// <summary>
     /// 以 RoomId 和预期 StateSequence 语义更新房间快照。
     /// 陈旧写入返回 false，成功时同步活动玩家索引和缓存。
     /// </summary>
-    Task<bool> UpdateRoomAsync(LobbyRoom room, CancellationToken cancellationToken);
+    new Task<bool> UpdateRoomAsync(LobbyRoom room, CancellationToken cancellationToken);
 
     /// <summary>
     /// 原子保存权威比赛结果并关闭房间、释放活动玩家索引。

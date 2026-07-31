@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "Core/MahjongTypes.h"
 #include "Rules/GuiyangRuleSnapshot.h"
+#include "GuiyangFairShuffle.generated.h"
 
 /**
  * 单局洗牌公平性证明。
@@ -10,27 +11,29 @@
  * 该结构只在 Dedicated Server 与内部审计链路中流转，不复制给未结束牌局的客户端。
  * SeedHex 和 ServerNonceHex 必须等到本局结束后才能写入披露记录；开局前仅允许持久化承诺值。
  */
+USTRUCT()
 struct GUIYANGMAHJONGSERVER_API FGuiyangShuffleAuditProof
 {
+    GENERATED_BODY()
     /** 证明协议和洗牌实现版本；算法行为变化时必须升级。 */
-    FString Algorithm = TEXT("UE-FRandomStream-FisherYates-v1");
+    UPROPERTY() FString Algorithm = TEXT("UE-FRandomStream-FisherYates-v1");
     /** 本场比赛内从 1 开始连续递增的局号。 */
-    int32 RoundId = 0;
+    UPROPERTY() int32 RoundId = 0;
     /** 32 位洗牌种子的无符号小写十六进制表示，固定为 8 个字符。 */
-    FString SeedHex;
+    UPROPERTY() FString SeedHex;
     /** CSPRNG 产生的 256 位服务端随机数，固定为 64 个小写十六进制字符。 */
-    FString ServerNonceHex;
+    UPROPERTY() FString ServerNonceHex;
     /** 开局前持久化的 SHA-256 承诺，不包含可用于还原牌序的明文。 */
-    FString SeedCommitment;
+    UPROPERTY() FString SeedCommitment;
     /** 洗牌完成后按完整牌墙稳定序列计算的 SHA-256 摘要。 */
-    FString DeckOrderDigest;
+    UPROPERTY() FString DeckOrderDigest;
     /** 与本局绑定的冻结规则身份和规则内容摘要。 */
-    FString RuleId;
-    int32 RuleVersion = 0;
-    FString RuleHash;
+    UPROPERTY() FString RuleId;
+    UPROPERTY() int32 RuleVersion = 0;
+    UPROPERTY() FString RuleHash;
     /** 承诺创建时间和本局结束披露时间；均为服务器 UTC，仅用于审计排序。 */
-    FDateTime CreatedAtUtc;
-    FDateTime RevealedAtUtc;
+    UPROPERTY() FDateTime CreatedAtUtc;
+    UPROPERTY() FDateTime RevealedAtUtc;
 };
 
 /**

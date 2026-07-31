@@ -389,6 +389,13 @@ components:
           readOnly: true
           description: 短期票据，禁止日志记录
         ticketExpireAtUtc: { type: string, format: date-time }
+        roomEpoch:
+          type: integer
+          minimum: 1
+          description: 房间到 DS 路由代际；重新分配后递增，客户端不得修改。
+        buildVersion: { type: string, minLength: 1, maxLength: 80 }
+        ruleSetVersion: { type: string, minLength: 1, maxLength: 64 }
+        protocolVersion: { type: integer, minimum: 1 }
     GameServerRegistration:
       type: object
       required: [serverInstanceId, roomId, matchId, listenIp, listenPort, buildVersion, registrationCredential]
@@ -400,6 +407,10 @@ components:
         listenPort: { type: integer, minimum: 1, maximum: 65535 }
         buildVersion: { type: string, minLength: 1, maxLength: 80 }
         registrationCredential: { type: string, minLength: 32, writeOnly: true }
+        roomEpoch:
+          type: integer
+          minimum: 0
+          description: 初始兼容请求允许 0；重新分配后必须与 Lobby 当前 Epoch 完全一致。
     GameServerRegistrationAck:
       type: object
       required: [requestId, accepted, heartbeatIntervalSeconds, heartbeatCredential, resultCredential, roomBootstrap]
@@ -414,6 +425,7 @@ components:
           writeOnly: true
           description: 仅用于当前 GameServer 向 Lobby 幂等补报最终结算
         roomBootstrap: { $ref: '#/components/schemas/ManagedRoomBootstrap' }
+        roomEpoch: { type: integer, minimum: 1 }
     ManagedRoomBootstrap:
       type: object
       required: [roomId, roomCode, matchId, ownerPlayerId, roundCount, maximumPlayers, publicRoom, autoStart, passwordProtected, ruleSnapshot]
@@ -433,6 +445,9 @@ components:
           maxProperties: 64
           required: [ruleId]
           additionalProperties: true
+        roomEpoch: { type: integer, minimum: 1 }
+        ruleSetVersion: { type: string, minLength: 1, maxLength: 64 }
+        protocolVersion: { type: integer, minimum: 1 }
     GameServerHeartbeat:
       type: object
       required: [roomId, heartbeatCredential, roomLifecycle, connectedPlayers, roundId, buildVersion, sentAtUtc]
@@ -444,6 +459,10 @@ components:
           default: 1
           description: 遥测主版本；缺失时按 v1 兼容，显式未知版本由 Lobby 拒绝。
         roomId: { type: string, minLength: 1, maxLength: 80 }
+        roomEpoch:
+          type: integer
+          minimum: 0
+          description: 初始兼容心跳允许 0；重新分配后必须精确匹配。
         heartbeatCredential: { type: string, minLength: 32, writeOnly: true }
         roomLifecycle: { type: string }
         connectedPlayers: { type: integer, minimum: 0, maximum: 4 }
@@ -592,7 +611,24 @@ components:
         duplicate: { type: boolean }
     RoomLifecycle:
       type: string
-      enum: [Creating, Allocating, Waiting, Playing, Settling, Closed, Failed]
+      description: 旧值 Creating/Closed/Failed 在兼容期继续输出；其余为阶段 4 规范状态。
+      enum:
+        - Creating
+        - Created
+        - Waiting
+        - Ready
+        - Allocating
+        - Starting
+        - Playing
+        - Suspended
+        - Recovering
+        - Settling
+        - Closed
+        - Finished
+        - Terminating
+        - Failed
+        - Aborted
+        - Archived
     ApiError:
       type: object
       required: [requestId, code, message]

@@ -8,23 +8,84 @@ CREATE TABLE IF NOT EXISTS lobby_rooms (
     updated_at_utc TIMESTAMPTZ NOT NULL
 );
 
--- 旧数据从不可变快照补齐创建时间；后续写入显式维护该列，供稳定键集分页和容量索引使用。
+-- 阶段 4 保留旧表名以支持原镜像回滚，同时增加规范状态版本和 DS 路由 fencing token。
+-- state_sequence 是旧 API/快照字段；state_version 是 Room 模块权威并发列，两者在兼容期保持相同值。
 ALTER TABLE lobby_rooms
     ADD COLUMN IF NOT EXISTS created_at_utc TIMESTAMPTZ;
+ALTER TABLE lobby_rooms
+    ADD COLUMN IF NOT EXISTS state_version BIGINT;
+ALTER TABLE lobby_rooms
+    ADD COLUMN IF NOT EXISTS room_epoch BIGINT;
 UPDATE lobby_rooms
 SET created_at_utc = COALESCE(
     created_at_utc,
     (payload->>'createdAtUtc')::timestamptz,
     updated_at_utc)
 WHERE created_at_utc IS NULL;
+UPDATE lobby_rooms
+SET state_version = COALESCE(state_version, state_sequence),
+    room_epoch = COALESCE(
+        room_epoch,
+        NULLIF(payload->>'roomEpoch', '')::bigint,
+        1)
+WHERE state_version IS NULL OR room_epoch IS NULL;
+-- 升级旧 JSONB 快照：按既有 PlayerIds 顺序生成稳定座位，避免运行期首次读取出现空座位模型。
+UPDATE lobby_rooms AS room_snapshot
+SET payload = jsonb_set(
+    room_snapshot.payload,
+    '{seats}',
+    COALESCE(
+        (
+            SELECT jsonb_agg(
+                jsonb_build_object(
+                    'playerId', player.value,
+                    'seatIndex', player.ordinality - 1,
+                    'joinedAtUtc', room_snapshot.created_at_utc)
+                ORDER BY player.ordinality)
+            FROM jsonb_array_elements_text(
+                COALESCE(
+                    room_snapshot.payload->'playerIds',
+                    '[]'::jsonb))
+                WITH ORDINALITY AS player(value, ordinality)
+        ),
+        '[]'::jsonb),
+    true)
+WHERE NOT (room_snapshot.payload ? 'seats');
 ALTER TABLE lobby_rooms
     ALTER COLUMN created_at_utc SET NOT NULL;
+ALTER TABLE lobby_rooms
+    ALTER COLUMN state_version SET NOT NULL;
+ALTER TABLE lobby_rooms
+    ALTER COLUMN room_epoch SET NOT NULL;
+ALTER TABLE lobby_rooms
+    ALTER COLUMN room_epoch SET DEFAULT 1;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'ck_lobby_rooms_state_version_positive') THEN
+        ALTER TABLE lobby_rooms
+            ADD CONSTRAINT ck_lobby_rooms_state_version_positive
+            CHECK (state_version > 0);
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'ck_lobby_rooms_epoch_positive') THEN
+        ALTER TABLE lobby_rooms
+            ADD CONSTRAINT ck_lobby_rooms_epoch_positive
+            CHECK (room_epoch > 0);
+    END IF;
+END;
+$$;
 
 CREATE INDEX IF NOT EXISTS ix_lobby_rooms_monitoring_cursor_v2
     ON lobby_rooms(created_at_utc DESC, room_id DESC);
 
 CREATE INDEX IF NOT EXISTS ix_lobby_rooms_lifecycle_updated
     ON lobby_rooms(lifecycle, updated_at_utc DESC);
+CREATE INDEX IF NOT EXISTS ix_lobby_rooms_epoch
+    ON lobby_rooms(room_id, room_epoch DESC);
 
 CREATE INDEX IF NOT EXISTS ix_lobby_rooms_player_ids
     ON lobby_rooms USING GIN ((payload->'playerIds'));
@@ -41,10 +102,209 @@ CREATE TABLE IF NOT EXISTS active_player_rooms (
 CREATE INDEX IF NOT EXISTS ix_active_player_rooms_room
     ON active_player_rooms(room_id);
 
+-- 逻辑 Schema 先用于阶段 4 新增对象；旧表在兼容窗口内保留 public 名称，避免破坏旧镜像回滚。
+CREATE SCHEMA IF NOT EXISTS lobby;
+CREATE SCHEMA IF NOT EXISTS room;
+CREATE SCHEMA IF NOT EXISTS matchmaking;
+CREATE SCHEMA IF NOT EXISTS integration;
+
+-- 显式成员/座位写模型由房间快照事务维护。PlayerId 在单房间唯一，SeatIndex 在单房间唯一。
+CREATE TABLE IF NOT EXISTS room.room_members (
+    room_id VARCHAR(80) NOT NULL REFERENCES public.lobby_rooms(room_id) ON DELETE CASCADE,
+    player_id VARCHAR(80) NOT NULL,
+    seat_index SMALLINT NOT NULL CHECK (seat_index BETWEEN 0 AND 3),
+    joined_at_utc TIMESTAMPTZ NOT NULL,
+    left_at_utc TIMESTAMPTZ,
+    PRIMARY KEY (room_id, player_id)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_room_members_active_seat
+    ON room.room_members(room_id, seat_index)
+    WHERE left_at_utc IS NULL;
+
+-- 每次分配记录 RoomEpoch，使审计可以证明旧实例为何被拒绝。
+CREATE TABLE IF NOT EXISTS room.room_allocations (
+    allocation_id UUID PRIMARY KEY,
+    room_id VARCHAR(80) NOT NULL REFERENCES public.lobby_rooms(room_id),
+    room_epoch BIGINT NOT NULL CHECK (room_epoch > 0),
+    server_instance_id VARCHAR(80),
+    state VARCHAR(32) NOT NULL,
+    build_version VARCHAR(80) NOT NULL,
+    reason VARCHAR(500),
+    created_at_utc TIMESTAMPTZ NOT NULL,
+    updated_at_utc TIMESTAMPTZ NOT NULL,
+    UNIQUE (room_id, room_epoch)
+);
+
+-- 状态历史只追加；StateVersion 在单房间内唯一，防止并发命令生成两个“下一状态”。
+CREATE TABLE IF NOT EXISTS room.room_state_history (
+    event_id UUID PRIMARY KEY,
+    room_id VARCHAR(80) NOT NULL REFERENCES public.lobby_rooms(room_id),
+    from_state VARCHAR(24) NOT NULL,
+    to_state VARCHAR(24) NOT NULL,
+    state_version BIGINT NOT NULL,
+    room_epoch BIGINT NOT NULL,
+    reason VARCHAR(500) NOT NULL,
+    trace_id VARCHAR(64) NOT NULL,
+    occurred_at_utc TIMESTAMPTZ NOT NULL,
+    UNIQUE (room_id, state_version)
+);
+
+-- 基础匹配票据以 PostgreSQL 为权威；Redis 队列丢失后可从 Pending/Reserved 票据恢复。
+CREATE TABLE IF NOT EXISTS matchmaking.matchmaking_tickets (
+    ticket_id UUID PRIMARY KEY,
+    player_id VARCHAR(80) NOT NULL,
+    queue_name VARCHAR(80) NOT NULL,
+    state VARCHAR(24) NOT NULL,
+    version BIGINT NOT NULL,
+    reservation_id UUID,
+    created_at_utc TIMESTAMPTZ NOT NULL,
+    expires_at_utc TIMESTAMPTZ NOT NULL,
+    reserved_at_utc TIMESTAMPTZ,
+    consumed_at_utc TIMESTAMPTZ,
+    CONSTRAINT ck_matchmaking_ticket_state
+        CHECK (state IN ('Pending', 'Reserved', 'Consumed', 'Expired', 'Cancelled')),
+    CONSTRAINT ck_matchmaking_ticket_version CHECK (version > 0)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_matchmaking_active_player_queue
+    ON matchmaking.matchmaking_tickets(player_id, queue_name)
+    WHERE state IN ('Pending', 'Reserved');
+CREATE INDEX IF NOT EXISTS ix_matchmaking_queue_candidates
+    ON matchmaking.matchmaking_tickets(queue_name, created_at_utc, ticket_id)
+    WHERE state = 'Pending';
+
+-- 从兼容 JSONB 快照投影显式成员表。业务事务提交前触发，失败会回滚整个房间命令。
+CREATE OR REPLACE FUNCTION room.project_room_members()
+RETURNS TRIGGER LANGUAGE plpgsql AS $$
+DECLARE
+    seat_value JSONB;
+BEGIN
+    UPDATE room.room_members
+    SET left_at_utc = NEW.updated_at_utc
+    WHERE room_id = NEW.room_id
+      AND left_at_utc IS NULL
+      AND NOT EXISTS (
+          SELECT 1
+          FROM jsonb_array_elements(
+              COALESCE(NEW.payload->'seats', '[]'::jsonb)) AS seat
+          WHERE seat->>'playerId' = room_members.player_id);
+
+    FOR seat_value IN
+        SELECT value
+        FROM jsonb_array_elements(
+            COALESCE(NEW.payload->'seats', '[]'::jsonb)) AS item(value)
+    LOOP
+        INSERT INTO room.room_members(
+            room_id, player_id, seat_index, joined_at_utc, left_at_utc)
+        VALUES (
+            NEW.room_id,
+            seat_value->>'playerId',
+            (seat_value->>'seatIndex')::smallint,
+            COALESCE(
+                NULLIF(seat_value->>'joinedAtUtc', '')::timestamptz,
+                NEW.created_at_utc),
+            NULL)
+        ON CONFLICT (room_id, player_id) DO UPDATE
+        SET seat_index = EXCLUDED.seat_index,
+            left_at_utc = NULL;
+    END LOOP;
+    RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_project_room_members ON public.lobby_rooms;
+CREATE TRIGGER trg_project_room_members
+AFTER INSERT OR UPDATE OF payload ON public.lobby_rooms
+FOR EACH ROW EXECUTE FUNCTION room.project_room_members();
+
+-- 状态历史使用 RoomId+StateVersion 生成确定性事件标识，重复迁移或幂等重放不会生成两条记录。
+CREATE OR REPLACE FUNCTION room.project_room_state_history()
+RETURNS TRIGGER LANGUAGE plpgsql AS $$
+DECLARE
+    previous_state TEXT :=
+        CASE WHEN TG_OP = 'INSERT' THEN NEW.lifecycle ELSE OLD.lifecycle END;
+BEGIN
+    IF TG_OP = 'INSERT'
+       OR OLD.lifecycle IS DISTINCT FROM NEW.lifecycle
+       OR OLD.state_version IS DISTINCT FROM NEW.state_version THEN
+        INSERT INTO room.room_state_history(
+            event_id, room_id, from_state, to_state, state_version,
+            room_epoch, reason, trace_id, occurred_at_utc)
+        VALUES (
+            md5(NEW.room_id || ':' || NEW.state_version::text)::uuid,
+            NEW.room_id,
+            previous_state,
+            NEW.lifecycle,
+            NEW.state_version,
+            NEW.room_epoch,
+            CASE WHEN TG_OP = 'INSERT' THEN 'room-created' ELSE 'room-command' END,
+            COALESCE(NULLIF(NEW.payload->>'traceId', ''), 'system-generated'),
+            NEW.updated_at_utc)
+        ON CONFLICT (room_id, state_version) DO NOTHING;
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_project_room_state_history ON public.lobby_rooms;
+CREATE TRIGGER trg_project_room_state_history
+AFTER INSERT OR UPDATE OF lifecycle, state_version, room_epoch
+ON public.lobby_rooms
+FOR EACH ROW EXECUTE FUNCTION room.project_room_state_history();
+
+-- 路由分配历史按 RoomEpoch 幂等更新；旧 Epoch 记录永不删除，供事故调查验证 fencing 行为。
+CREATE OR REPLACE FUNCTION room.project_room_allocation()
+RETURNS TRIGGER LANGUAGE plpgsql AS $$
+DECLARE
+    instance_id TEXT := COALESCE(
+        NULLIF(NEW.payload->>'pendingServerInstanceId', ''),
+        NULLIF(NEW.payload->'route'->>'serverInstanceId', ''),
+        NULLIF(NEW.payload->>'lastServerInstanceId', ''));
+    allocation_state TEXT := CASE
+        WHEN COALESCE(NEW.payload->'route'->>'serverInstanceId', '') <> '' THEN 'Ready'
+        WHEN COALESCE(NEW.payload->>'pendingServerInstanceId', '') <> '' THEN 'Allocating'
+        WHEN NEW.lifecycle = 'Recovering' THEN 'Recovering'
+        ELSE NEW.lifecycle
+    END;
+BEGIN
+    IF instance_id IS NOT NULL OR NEW.lifecycle = 'Recovering' THEN
+        INSERT INTO room.room_allocations(
+            allocation_id, room_id, room_epoch, server_instance_id,
+            state, build_version, reason, created_at_utc, updated_at_utc)
+        VALUES (
+            md5(NEW.room_id || ':allocation:' || NEW.room_epoch::text)::uuid,
+            NEW.room_id,
+            NEW.room_epoch,
+            instance_id,
+            allocation_state,
+            COALESCE(NULLIF(NEW.payload->>'buildVersion', ''), 'unknown'),
+            NULL,
+            NEW.updated_at_utc,
+            NEW.updated_at_utc)
+        ON CONFLICT (room_id, room_epoch) DO UPDATE
+        SET server_instance_id = COALESCE(
+                EXCLUDED.server_instance_id,
+                room.room_allocations.server_instance_id),
+            state = EXCLUDED.state,
+            build_version = EXCLUDED.build_version,
+            updated_at_utc = EXCLUDED.updated_at_utc;
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_project_room_allocation ON public.lobby_rooms;
+CREATE TRIGGER trg_project_room_allocation
+AFTER INSERT OR UPDATE OF payload, lifecycle, room_epoch
+ON public.lobby_rooms
+FOR EACH ROW EXECUTE FUNCTION room.project_room_allocation();
+
 DELETE FROM active_player_rooms AS active
 USING lobby_rooms AS room
 WHERE active.room_id = room.room_id
-  AND (room.lifecycle NOT IN ('Allocating', 'Waiting', 'Playing', 'Settling')
+  AND (room.lifecycle NOT IN (
+        'Created', 'Creating', 'Waiting', 'Ready', 'Allocating',
+        'Starting', 'Playing', 'Suspended', 'Recovering',
+        'Settling', 'Terminating')
        OR NOT (room.payload->'playerIds' ? active.player_id));
 
 -- Upgrade existing installations deterministically. If historical data contains
@@ -54,7 +314,10 @@ SELECT DISTINCT ON (player.value)
        player.value, room.room_id, room.payload->>'matchId', room.updated_at_utc
 FROM lobby_rooms AS room
 CROSS JOIN LATERAL jsonb_array_elements_text(room.payload->'playerIds') AS player(value)
-WHERE room.lifecycle IN ('Allocating', 'Waiting', 'Playing', 'Settling')
+WHERE room.lifecycle IN (
+        'Created', 'Creating', 'Waiting', 'Ready', 'Allocating',
+        'Starting', 'Playing', 'Suspended', 'Recovering',
+        'Settling', 'Terminating')
   AND COALESCE(room.payload->>'matchId', '') <> ''
 ORDER BY player.value, room.updated_at_utc DESC
 ON CONFLICT (player_id) DO NOTHING;
@@ -177,7 +440,9 @@ BEGIN
         UPDATE player_room_history
         SET left_at_utc = observed_at,
             leave_reason = CASE
-                WHEN NEW.lifecycle IN ('Closed', 'Failed') THEN NEW.lifecycle
+                WHEN NEW.lifecycle IN (
+                    'Finished', 'Closed', 'Aborted', 'Failed', 'Archived')
+                    THEN NEW.lifecycle
                 ELSE 'LeftRoom'
             END
         WHERE player_id = player_value

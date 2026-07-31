@@ -4,6 +4,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using GuiyangMahjong.Auth.Domain;
 using GuiyangMahjong.Auth.Players;
+using GuiyangMahjong.Contracts.Events;
 using Npgsql;
 using NpgsqlTypes;
 
@@ -33,9 +34,15 @@ public sealed class PostgresAuthStore(NpgsqlDataSource postgres)
     {
         try
         {
-            await using var command = postgres.CreateCommand("SELECT 1");
-            _ = await command.ExecuteScalarAsync(cancellationToken);
-            return true;
+            await using var command = postgres.CreateCommand(
+                """
+                SELECT to_regclass('auth.auth_identities') IS NOT NULL
+                   AND to_regclass('session.auth_refresh_sessions') IS NOT NULL
+                   AND to_regclass('player.player_profiles') IS NOT NULL
+                   AND to_regclass('integration.auth_devices') IS NOT NULL
+                   AND to_regclass('integration.identity_outbox') IS NOT NULL
+                """);
+            return await command.ExecuteScalarAsync(cancellationToken) is true;
         }
         catch (NpgsqlException)
         {
@@ -250,19 +257,36 @@ public sealed class PostgresAuthStore(NpgsqlDataSource postgres)
                 """
                 UPDATE session.auth_refresh_sessions
                 SET revoked_at_utc=COALESCE(revoked_at_utc,$1),
-                    revocation_reason=CASE
-                        WHEN revoked_at_utc IS NULL THEN 'RefreshTokenReuse'
-                        ELSE revocation_reason
-                    END,
+                    revocation_reason='RefreshTokenReuse',
                     reuse_detected_at_utc=$1
                 WHERE player_id=$2 AND family_id=$3
+                RETURNING session_id
                 """,
                 connection,
                 transaction);
             revokeFamily.Parameters.AddWithValue(now);
             revokeFamily.Parameters.AddWithValue(playerId);
             revokeFamily.Parameters.AddWithValue(familyId);
-            await revokeFamily.ExecuteNonQueryAsync(cancellationToken);
+            var compromisedSessionIds = new List<string>();
+            await using (var familyReader =
+                         await revokeFamily.ExecuteReaderAsync(cancellationToken))
+            {
+                while (await familyReader.ReadAsync(cancellationToken))
+                    compromisedSessionIds.Add(familyReader.GetString(0));
+            }
+            foreach (var compromisedSessionId in compromisedSessionIds)
+            {
+                await AppendSessionRevocationOutboxAsync(
+                    connection,
+                    transaction,
+                    compromisedSessionId,
+                    playerId,
+                    "RefreshTokenReuse",
+                    now,
+                    traceId: null,
+                    correlationId: familyId,
+                    cancellationToken);
+            }
             await using var advanceEpoch = new NpgsqlCommand(
                 """
                 UPDATE auth.auth_identities
@@ -343,7 +367,12 @@ public sealed class PostgresAuthStore(NpgsqlDataSource postgres)
         await using var connection = await postgres.OpenConnectionAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
         await using var select = new NpgsqlCommand(
-            "SELECT token_hash, revoked_at_utc FROM session.auth_refresh_sessions WHERE session_id=$1 FOR UPDATE",
+            """
+            SELECT token_hash, revoked_at_utc, player_id
+            FROM session.auth_refresh_sessions
+            WHERE session_id=$1
+            FOR UPDATE
+            """,
             connection, transaction);
         select.Parameters.AddWithValue(sessionId);
         await using var reader = await select.ExecuteReaderAsync(cancellationToken);
@@ -355,6 +384,7 @@ public sealed class PostgresAuthStore(NpgsqlDataSource postgres)
         }
         var matches = reader.IsDBNull(1)
                       && FixedTimeEquals(reader.GetFieldValue<byte[]>(0), tokenHash);
+        var playerId = reader.GetString(2);
         await reader.DisposeAsync();
         if (!matches)
         {
@@ -371,6 +401,16 @@ public sealed class PostgresAuthStore(NpgsqlDataSource postgres)
         revoke.Parameters.AddWithValue(now);
         revoke.Parameters.AddWithValue(sessionId);
         await revoke.ExecuteNonQueryAsync(cancellationToken);
+        await AppendSessionRevocationOutboxAsync(
+            connection,
+            transaction,
+            sessionId,
+            playerId,
+            "Logout",
+            now,
+            traceId: null,
+            correlationId: sessionId,
+            cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return true;
     }
@@ -454,12 +494,32 @@ public sealed class PostgresAuthStore(NpgsqlDataSource postgres)
               AND created_at_utc <= $1
               AND expires_at_utc > $1
               AND revoked_at_utc IS NULL
+            RETURNING session_id
             """,
             connection,
             transaction);
         revoke.Parameters.AddWithValue(effectiveAtUtc);
         revoke.Parameters.AddWithValue(playerId);
-        var revoked = await revoke.ExecuteNonQueryAsync(cancellationToken);
+        var revokedSessionIds = new List<string>();
+        await using (var revokedReader = await revoke.ExecuteReaderAsync(cancellationToken))
+        {
+            while (await revokedReader.ReadAsync(cancellationToken))
+                revokedSessionIds.Add(revokedReader.GetString(0));
+        }
+        var revoked = revokedSessionIds.Count;
+        foreach (var revokedSessionId in revokedSessionIds)
+        {
+            await AppendSessionRevocationOutboxAsync(
+                connection,
+                transaction,
+                revokedSessionId,
+                playerId,
+                "AdministrativeRevocation",
+                effectiveAtUtc,
+                traceId: null,
+                correlationId: commandId,
+                cancellationToken);
+        }
         if (playerFound)
         {
             await using var advanceEpoch = new NpgsqlCommand(
@@ -644,13 +704,33 @@ public sealed class PostgresAuthStore(NpgsqlDataSource postgres)
                 WHERE player_id=$2
                   AND expires_at_utc > $1
                   AND revoked_at_utc IS NULL
+                RETURNING session_id
                 """,
                 connection,
                 transaction);
             revoke.Parameters.AddWithValue(effectiveAtUtc);
             revoke.Parameters.AddWithValue(playerId);
             revoke.Parameters.AddWithValue(action.ToString());
-            revoked = await revoke.ExecuteNonQueryAsync(cancellationToken);
+            var revokedSessionIds = new List<string>();
+            await using (var revokedReader = await revoke.ExecuteReaderAsync(cancellationToken))
+            {
+                while (await revokedReader.ReadAsync(cancellationToken))
+                    revokedSessionIds.Add(revokedReader.GetString(0));
+            }
+            revoked = revokedSessionIds.Count;
+            foreach (var revokedSessionId in revokedSessionIds)
+            {
+                await AppendSessionRevocationOutboxAsync(
+                    connection,
+                    transaction,
+                    revokedSessionId,
+                    playerId,
+                    action.ToString(),
+                    effectiveAtUtc,
+                    traceId,
+                    commandId,
+                    cancellationToken);
+            }
             await using var advanceEpoch = new NpgsqlCommand(
                 """
                 UPDATE auth.auth_identities
@@ -1216,6 +1296,50 @@ public sealed class PostgresAuthStore(NpgsqlDataSource postgres)
             controlEvent.AfterState,
             controlEvent.RevokedSessionCount,
             duplicate);
+
+    /// <summary>
+    /// 在撤销会话的同一数据库事务中追加版本化 SessionRevoked Outbox 事实。
+    /// Payload 只包含契约允许的标识和原因，不包含 Token、哈希、IP 或设备指纹。
+    /// </summary>
+    private static async Task AppendSessionRevocationOutboxAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        string sessionId,
+        string playerId,
+        string reasonCode,
+        DateTimeOffset revokedAt,
+        string? traceId,
+        string? correlationId,
+        CancellationToken cancellationToken)
+    {
+        var payload = JsonSerializer.Serialize(
+            new
+            {
+                session_id = sessionId,
+                player_id = playerId,
+                reason_code = reasonCode,
+                revoked_at = revokedAt
+            },
+            JsonOptions);
+        await using var command = new NpgsqlCommand(
+            """
+            INSERT INTO integration.identity_outbox(
+                event_id, event_type, schema_version, aggregate_type,
+                aggregate_id, occurred_at_utc, trace_id, correlation_id, payload)
+            VALUES ($1,$2,$3,'Session',$4,$5,$6,$7,$8)
+            """,
+            connection,
+            transaction);
+        command.Parameters.AddWithValue(Guid.NewGuid());
+        command.Parameters.AddWithValue(PlatformEventTypes.SessionRevoked);
+        command.Parameters.AddWithValue(SessionRevoked.SchemaVersion);
+        command.Parameters.AddWithValue(sessionId);
+        command.Parameters.AddWithValue(revokedAt);
+        command.Parameters.AddWithValue((object?)traceId ?? DBNull.Value);
+        command.Parameters.AddWithValue((object?)correlationId ?? DBNull.Value);
+        command.Parameters.AddWithValue(NpgsqlDbType.Jsonb, payload);
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
 
     private static bool FixedTimeEquals(byte[] left, byte[] right) =>
         left.Length == right.Length && CryptographicOperations.FixedTimeEquals(left, right);

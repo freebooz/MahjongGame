@@ -4,6 +4,7 @@
 #include "HAL/PlatformMisc.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
+#include "Misc/Paths.h"
 
 namespace
 {
@@ -60,9 +61,33 @@ bool UGuiyangAgonesLifecycleSubsystem::TryBuildLaunchConfig(
         || !ReadAnnotation(Response, TEXT("mahjong.freebooz/server-instance-id"), OutConfig.ServerInstanceId)
         || !ReadAnnotation(Response, TEXT("mahjong.freebooz/registration-credential"), OutConfig.RegistrationCredential)
         || !ReadAnnotation(Response, TEXT("mahjong.freebooz/lobby-internal-url"), OutConfig.LobbyInternalUrl)
-        || !ReadAnnotation(Response, TEXT("mahjong.freebooz/build-version"), OutConfig.BuildVersion))
+        || !ReadAnnotation(Response, TEXT("mahjong.freebooz/build-version"), OutConfig.BuildVersion)
+        || !ReadAnnotation(Response, TEXT("mahjong.freebooz/ruleset-version"), OutConfig.RuleSetVersion)
+        || !ReadAnnotation(Response, TEXT("mahjong.freebooz/protocol-version"), OutConfig.ProtocolVersion))
     {
         OutError = TEXT("AGONES_ALLOCATION_METADATA_INCOMPLETE");
+        return false;
+    }
+    FString RoomEpochText;
+    FString FencingTokenText;
+    if (!ReadAnnotation(
+            Response,
+            TEXT("mahjong.freebooz/room-epoch"),
+            RoomEpochText)
+        || !LexTryParseString(OutConfig.RoomEpoch, *RoomEpochText)
+        || OutConfig.RoomEpoch < 1)
+    {
+        OutError = TEXT("AGONES_ROOM_EPOCH_INVALID");
+        return false;
+    }
+    if (!ReadAnnotation(
+            Response,
+            TEXT("mahjong.freebooz/fencing-token"),
+            FencingTokenText)
+        || !LexTryParseString(OutConfig.LeaseFencingToken, *FencingTokenText)
+        || OutConfig.LeaseFencingToken < 1)
+    {
+        OutError = TEXT("AGONES_FENCING_TOKEN_INVALID");
         return false;
     }
     OutConfig.AdvertisedIp = Response.Status.Address.TrimStartAndEnd();
@@ -73,10 +98,26 @@ bool UGuiyangAgonesLifecycleSubsystem::TryBuildLaunchConfig(
     OutConfig.Port = GamePort ? GamePort->Port : 0;
     OutConfig.JoinTicketSigningKey = SigningKey;
     OutConfig.MatchResultOutboxPath = MatchResultOutboxPath;
+    OutConfig.RecoveryDirectory =
+        FPlatformMisc::GetEnvironmentVariable(TEXT("MAHJONG_RECOVERY_DIRECTORY")).TrimStartAndEnd();
+    if (OutConfig.RecoveryDirectory.IsEmpty())
+        OutConfig.RecoveryDirectory = FPaths::Combine(
+            FPaths::GetPath(OutConfig.MatchResultOutboxPath), TEXT("recovery"));
+    OutConfig.bAllowLegacyJoinTickets = FPlatformMisc::GetEnvironmentVariable(
+        TEXT("MAHJONG_ALLOW_LEGACY_JOIN_TICKETS")).Equals(TEXT("true"), ESearchCase::IgnoreCase);
+    FString CompatibleBuilds = FPlatformMisc::GetEnvironmentVariable(TEXT("MAHJONG_COMPATIBLE_CLIENT_BUILDS"));
+    CompatibleBuilds.ParseIntoArray(OutConfig.CompatibleClientBuilds, TEXT(","), true);
+    for (FString& Build : OutConfig.CompatibleClientBuilds) Build.TrimStartAndEndInline();
+    OutConfig.CompatibleClientBuilds.RemoveAll([](const FString& Build) { return Build.IsEmpty(); });
+    if (OutConfig.CompatibleClientBuilds.IsEmpty()) OutConfig.CompatibleClientBuilds.Add(OutConfig.BuildVersion);
     if (OutConfig.AdvertisedIp.IsEmpty() || OutConfig.Port <= 0 || OutConfig.Port > 65535
         || OutConfig.JoinTicketSigningKey.Len() < 32
         || OutConfig.RegistrationCredential.Len() < 16
-        || OutConfig.MatchResultOutboxPath.IsEmpty())
+        || OutConfig.MatchResultOutboxPath.IsEmpty()
+        || OutConfig.RuleSetVersion.IsEmpty()
+        || OutConfig.ProtocolVersion.IsEmpty()
+        || OutConfig.RecoveryDirectory.IsEmpty()
+        || FPaths::IsRelative(OutConfig.RecoveryDirectory))
     {
         OutError = TEXT("AGONES_ALLOCATION_CONFIGURATION_INVALID");
         return false;

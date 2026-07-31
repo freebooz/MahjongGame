@@ -156,3 +156,39 @@ bool UMahjongDeckManager::DealInitialHands(TArray<FMahjongHand>& OutHands, const
     UE_LOG(LogMahjongCore, Log, TEXT("初始发牌完成：庄家座位=%d，庄家14张，其余玩家13张"), DealerSeat);
     return true;
 }
+
+FMahjongDeckRecoveryState UMahjongDeckManager::ExportRecoveryState() const
+{
+    FMahjongDeckRecoveryState State;
+    State.Deck = Deck;
+    State.ClockwiseDrawStartIndex = ClockwiseDrawStartIndex;
+    State.WallBreakSide = WallBreakSide;
+    State.WallBreakStackFromRight = WallBreakStackFromRight;
+    State.ClockwiseDrawOffset = ClockwiseDrawOffset;
+    return State;
+}
+
+bool UMahjongDeckManager::RestoreRecoveryState(const FMahjongDeckRecoveryState& State)
+{
+    // 完整牌墙必须满足 108/136 张规则上限且游标位于有效区间；失败时保持当前对象不变。
+    if ((State.Deck.Num() != 108 && State.Deck.Num() != 136)
+        || State.ClockwiseDrawStartIndex < 0 || State.ClockwiseDrawStartIndex >= State.Deck.Num()
+        || State.ClockwiseDrawOffset < 0 || State.ClockwiseDrawOffset > State.Deck.Num()
+        || State.WallBreakSide < 0 || State.WallBreakSide >= 4
+        || State.WallBreakStackFromRight < 1)
+    {
+        return false;
+    }
+    TSet<int32> UniqueTileIds;
+    for (const FMahjongTile& Tile : State.Deck)
+    {
+        if (!Tile.IsValid() || UniqueTileIds.Contains(Tile.UniqueId)) return false;
+        UniqueTileIds.Add(Tile.UniqueId);
+    }
+    Deck = State.Deck;
+    ClockwiseDrawStartIndex = State.ClockwiseDrawStartIndex;
+    WallBreakSide = State.WallBreakSide;
+    WallBreakStackFromRight = State.WallBreakStackFromRight;
+    ClockwiseDrawOffset = State.ClockwiseDrawOffset;
+    return true;
+}

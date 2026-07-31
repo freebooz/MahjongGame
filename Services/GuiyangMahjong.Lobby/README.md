@@ -1,5 +1,9 @@
 # 贵阳捉鸡麻将独立大厅服务
 
+> 阶段 4 已将单部署单元内部划分为 Lobby、Rooms、Matchmaking、Reconnection、
+> GameRouting、Administration 和 Infrastructure。详细设计、迁移与验收结果见
+> `Docs/architecture/stage-4-lobby-control-app.md`。
+
 该应用是 UE 客户端与一桌一服 GameServer 之间的控制面，不参与洗牌、手牌、出牌裁决或计分。
 
 ## 已实现范围
@@ -62,4 +66,3 @@ dotnet run --project Services/GuiyangMahjong.Lobby/GuiyangMahjong.Lobby.csproj -
 dotnet build Services/GuiyangMahjong.Lobby.Tests/GuiyangMahjong.Lobby.Tests.csproj -c Release
 dotnet test Services/GuiyangMahjong.Lobby.Tests/GuiyangMahjong.Lobby.Tests.csproj -c Release --no-build
 ```
-

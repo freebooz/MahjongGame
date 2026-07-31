@@ -146,7 +146,11 @@ public sealed class InMemoryAuthStore : IAuthStore, IPlayerProfileReader
                                      .ToArray())
                             identitiesByInstallation[pair.Key] = advanced;
                     }
-                    sessions[currentSessionId] = current with { ReuseDetectedAtUtc = now };
+                    sessions[currentSessionId] = current with
+                    {
+                        RevocationReason = "RefreshTokenReuse",
+                        ReuseDetectedAtUtc = now
+                    };
                     return Task.FromResult(new RefreshRotationResult(
                         RefreshRotationStatus.ReuseDetected,
                         null));

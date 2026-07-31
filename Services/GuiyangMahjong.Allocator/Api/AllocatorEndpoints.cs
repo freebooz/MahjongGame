@@ -3,9 +3,8 @@
 using GuiyangMahjong.Allocator.Domain;
 using GuiyangMahjong.Allocator.Services;
 using GuiyangMahjong.Allocator.Options;
+using GuiyangMahjong.Allocator.Providers;
 using Microsoft.Extensions.Options;
-using System.Net;
-using System.Net.Sockets;
 
 namespace GuiyangMahjong.Allocator.Api;
 
@@ -26,63 +25,38 @@ public static class AllocatorEndpoints
         app.MapGet("/health/live", () => Results.Ok(new { status = "live" }));
         app.MapGet("/health/ready", async (
             GameServerInstanceManager manager,
-            GameServerProcessLauncher launcher,
-            PortLeasePool portLeasePool,
-            IAgonesAllocationClient agones,
+            IGameServerProvider provider,
             IOptions<AllocatorOptions> options,
             CancellationToken cancellationToken) =>
         {
-            var agonesMode = options.Value.Backend == AllocatorBackendMode.Agones;
-            var executableReady = false;
-            var workingDirectoryReady = false;
-            if (!agonesMode) try
-            {
-                executableReady = GameServerProcessLauncher.IsExecutable(launcher.GetResolvedExecutablePath());
-                workingDirectoryReady = Directory.Exists(launcher.GetResolvedWorkingDirectory());
-            }
-            catch (Exception exception) when (exception is IOException
-                                               or UnauthorizedAccessException
-                                               or InvalidOperationException)
-            {
-                // Readiness reports the condition without leaking server paths to callers.
-            }
-
             var stateDirectoryReady = IsWritableDirectory(GetParentDirectory(options.Value.StateFilePath));
             var outboxDirectoryReady = IsWritableDirectory(
                 MatchResultOutboxPaths.GetDirectory(options.Value));
-            var gamePortReady = agonesMode || HasBindableUdpPort(portLeasePool);
-            var orchestratorReady = !agonesMode || await agones.CheckReadyAsync(cancellationToken);
+            var providerReady = await provider.CheckReadyAsync(cancellationToken);
             var ready = manager.IsInitialized
-                        && (agonesMode || executableReady)
-                        && (agonesMode || workingDirectoryReady)
                         && stateDirectoryReady
                         && outboxDirectoryReady
-                        && gamePortReady
-                        && orchestratorReady;
+                        && providerReady;
             return ready
                 ? Results.Ok(new
                 {
                     status = "ready",
                     stateReconciled = true,
-                    backend = options.Value.Backend.ToString(),
-                    orchestrator = orchestratorReady ? "ready" : "unavailable",
-                    gameServerExecutable = agonesMode ? "not-applicable" : "ready",
-                    gameServerWorkingDirectory = agonesMode ? "not-applicable" : "ready",
+                    provider = provider.Mode.ToString(),
+                    providerStatus = "ready",
                     allocatorState = "writable",
                     matchResultOutbox = "writable",
-                    gamePortCapacity = "available"
+                    orphanProcessCount = manager.OrphanProcessIds.Count
                 })
                 : Results.Json(new
                 {
                     status = "not-ready",
                     stateReconciled = manager.IsInitialized,
-                    backend = options.Value.Backend.ToString(),
-                    orchestrator = orchestratorReady ? "ready" : "unavailable",
-                    gameServerExecutable = agonesMode ? "not-applicable" : executableReady ? "ready" : "unavailable",
-                    gameServerWorkingDirectory = agonesMode ? "not-applicable" : workingDirectoryReady ? "ready" : "unavailable",
+                    provider = provider.Mode.ToString(),
+                    providerStatus = providerReady ? "ready" : "unavailable",
                     allocatorState = stateDirectoryReady ? "writable" : "unavailable",
                     matchResultOutbox = outboxDirectoryReady ? "writable" : "unavailable",
-                    gamePortCapacity = gamePortReady ? "available" : "exhausted-or-occupied"
+                    orphanProcessCount = manager.OrphanProcessIds.Count
                 }, statusCode: StatusCodes.Status503ServiceUnavailable);
         });
         app.MapGet("/openapi/v1.yaml", async (HttpContext context) =>
@@ -97,8 +71,31 @@ public static class AllocatorEndpoints
             HttpContext context,
             AllocationRequest request,
             GameServerInstanceManager manager,
-            CancellationToken cancellationToken) => Results.Accepted(value: await manager.AllocateAsync(
-                GetRequestId(context), request, cancellationToken)));
+            CancellationToken cancellationToken) =>
+        {
+            var requestId = GetRequestId(context);
+            var idempotencyKey = context.Request.Headers["Idempotency-Key"].ToString().Trim();
+            var normalized = request with
+            {
+                AllocationId = string.IsNullOrWhiteSpace(request.AllocationId)
+                    ? requestId
+                    : request.AllocationId,
+                IdempotencyKey = string.IsNullOrWhiteSpace(request.IdempotencyKey)
+                    ? string.IsNullOrWhiteSpace(idempotencyKey) ? requestId : idempotencyKey
+                    : request.IdempotencyKey
+            };
+            return Results.Accepted(value: await manager.AllocateAsync(
+                requestId,
+                normalized,
+                cancellationToken));
+        });
+
+        internalApi.MapGet("/allocations/{allocationId}", (
+            string allocationId,
+            GameServerInstanceManager manager) =>
+            manager.GetByAllocationId(allocationId) is { } allocation
+                ? Results.Ok(allocation)
+                : Results.NotFound());
 
         internalApi.MapGet("/instances", (GameServerInstanceManager manager) => Results.Ok(manager.List()));
         internalApi.MapGet("/instances/{serverInstanceId}", (
@@ -185,28 +182,6 @@ public static class AllocatorEndpoints
         {
             return false;
         }
-    }
-
-    private static bool HasBindableUdpPort(PortLeasePool portLeasePool)
-    {
-        foreach (var port in portLeasePool.GetAvailablePorts())
-        {
-            try
-            {
-                using var socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp)
-                {
-                    ExclusiveAddressUse = true
-                };
-                socket.Bind(new IPEndPoint(IPAddress.Any, port));
-                return true;
-            }
-            catch (SocketException)
-            {
-                // Try the next logically available port; another OS process may own this one.
-            }
-        }
-
-        return false;
     }
 
     private static string GetRequestId(HttpContext context)

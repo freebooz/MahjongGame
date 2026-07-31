@@ -2,17 +2,31 @@ using System.Text.Json.Serialization;
 
 namespace GuiyangMahjong.Lobby.Domain;
 
-/// <summary>房间生命周期状态机的稳定线协议值；迁移规则由 RoomStateMachine 集中维护。</summary>
-[JsonConverter(typeof(JsonStringEnumConverter<RoomLifecycle>))]
+/// <summary>
+/// 房间控制面状态机的稳定协议值。
+/// 状态值描述 Room 模块而非 Dedicated Server 内的麻将局面；迁移规则由 RoomStateMachine 集中维护。
+/// </summary>
+[JsonConverter(typeof(RoomLifecycleJsonConverter))]
 public enum RoomLifecycle
 {
-    Creating,
-    Allocating,
-    Waiting,
-    Playing,
-    Settling,
-    Closed,
-    Failed
+    Created = 0,
+    Waiting = 1,
+    Ready = 2,
+    Allocating = 3,
+    Starting = 4,
+    Playing = 5,
+    Suspended = 6,
+    Recovering = 7,
+    Settling = 8,
+    Finished = 9,
+    Terminating = 10,
+    Aborted = 11,
+    Archived = 12,
+
+    // 以下别名只用于读取升级前 JSON/调用方源码，新的状态写入统一使用上方规范名称。
+    Creating = Created,
+    Closed = Finished,
+    Failed = Aborted
 }
 
 /// <summary>Lobby 可预期错误分类；API 通过稳定机器码映射，不能把内部异常直接替代该枚举。</summary>
@@ -36,8 +50,20 @@ public enum LobbyErrorCode
     InternalError
 }
 
-/// <summary>从 Auth 令牌解析出的最小玩家身份；不包含访问令牌、设备或网络地址。</summary>
-public sealed record PlayerIdentity(string PlayerId, string DisplayName, string Provider);
+/// <summary>
+/// 从 Auth 访问令牌解析出的最小玩家调用身份。
+/// SessionId 与两个 Epoch 只保存经过签名验证的会话水位，供 Join Ticket 绑定和撤销判断；
+/// 不包含访问令牌、刷新令牌、设备原始标识或网络地址。
+/// </summary>
+public sealed record PlayerIdentity(
+    string PlayerId,
+    string DisplayName,
+    string Provider,
+    string SessionId = "legacy-session",
+    long SessionEpoch = 0,
+    long SecurityEpoch = 0,
+    string ClientBuild = "legacy",
+    string ProtocolVersion = "0");
 
 /// <summary>房间密码的 PBKDF2 持久化值；Salt/Hash 使用 Base64，Iterations 是创建时冻结的迭代次数。</summary>
 public sealed record ProtectedPassword(string SaltBase64, string HashBase64, int Iterations);
@@ -55,7 +81,11 @@ public sealed record GameServerRoute(
     string ServerIp,
     int ServerPort,
     string JoinTicket,
-    DateTimeOffset TicketExpireAtUtc);
+    DateTimeOffset TicketExpireAtUtc,
+    long RoomEpoch = 1,
+    string BuildVersion = "",
+    string RuleSetVersion = "",
+    int ProtocolVersion = 1);
 
 /// <summary>
 /// Lobby 房间聚合的不可变快照。
@@ -76,9 +106,10 @@ public sealed record LobbyRoom
     public required int MaximumPlayers { get; init; }
     public required Dictionary<string, object?> RuleSnapshot { get; init; }
 
-    // 生命周期和玩家数组共同表示当前权威房间状态；玩家标识去重且最多 MaximumPlayers 个。
+    // 生命周期、玩家和座位共同表示当前权威房间状态；玩家标识去重且最多 MaximumPlayers 个。
     public required RoomLifecycle Lifecycle { get; init; }
     public required string[] PlayerIds { get; init; }
+    public Rooms.RoomSeat[] Seats { get; init; } = [];
 
     // 敏感/路由字段：密码和结果凭据只保存哈希，Route 仅包含当前有效加入路由。
     public ProtectedPassword? Password { get; init; }
@@ -87,9 +118,15 @@ public sealed record LobbyRoom
     public string? ResultCredentialHash { get; init; }
     public string? PendingServerInstanceId { get; init; }
 
-    // MatchId 每场分配唯一；StateSequence 单调递增，时间均使用服务端 UTC。
+    // MatchId 每场分配唯一；StateSequence 是旧接口名，StateVersion 是同一乐观并发版本的规范只读别名。
     public string MatchId { get; init; } = Guid.Empty.ToString();
     public long StateSequence { get; init; }
+    public long StateVersion => StateSequence;
+
+    // RoomEpoch 是 DS 路由 fencing token；初始为 1，每次重新分配先递增再写入新路由。
+    public long RoomEpoch { get; init; } = 1;
+    public string RuleSetVersion { get; init; } = "legacy-v1";
+    public string BuildVersion { get; init; } = "unassigned";
     public DateTimeOffset CreatedAtUtc { get; init; }
     public DateTimeOffset UpdatedAtUtc { get; init; }
     public DateTimeOffset? EmptySinceUtc { get; init; }
@@ -175,7 +212,9 @@ public sealed record GameServerRegistration(
     string ListenIp,
     int ListenPort,
     string BuildVersion,
-    string RegistrationCredential);
+    string RegistrationCredential,
+    long RoomEpoch = 0,
+    long FencingToken = 0);
 
 /// <summary>
 /// 注册成功回执。
@@ -187,7 +226,9 @@ public sealed record GameServerRegistrationAck(
     int HeartbeatIntervalSeconds,
     string HeartbeatCredential,
     string ResultCredential,
-    ManagedRoomBootstrap RoomBootstrap);
+    ManagedRoomBootstrap RoomBootstrap,
+    long RoomEpoch = 1,
+    long FencingToken = 1);
 
 /// <summary>游戏服启动所需房间规则快照；PasswordProtected 只表明策略，不下发密码或哈希。</summary>
 public sealed record ManagedRoomBootstrap(
@@ -200,7 +241,10 @@ public sealed record ManagedRoomBootstrap(
     bool PublicRoom,
     bool AutoStart,
     bool PasswordProtected,
-    Dictionary<string, object?> RuleSnapshot);
+    Dictionary<string, object?> RuleSnapshot,
+    long RoomEpoch = 1,
+    string RuleSetVersion = "legacy-v1",
+    int ProtocolVersion = 1);
 
 /// <summary>
 /// Dedicated Server 发往 Lobby 的房间运行心跳。
@@ -229,6 +273,8 @@ public sealed record ManagedRoomBootstrap(
 /// <param name="ProcessCpuSampleWindowMilliseconds">CPU 利用率所覆盖的最近采样窗口，单位毫秒。</param>
 /// <param name="RpcMethods">固定白名单 RPC 方法的累计调用、异常与延迟分位统计。</param>
 /// <param name="Settlement">Dedicated Server 当前观察到的显式结算投影。</param>
+/// <param name="RoomEpoch">DS 启动时获得的路由代际；重新分配后必须与房间当前值完全一致。</param>
+/// <param name="FencingToken">Allocator 实例租约令牌；当前与 RoomEpoch 同步递增，旧实例不得续租。</param>
 public sealed record GameServerHeartbeat(
     string RoomId,
     string HeartbeatCredential,
@@ -250,7 +296,9 @@ public sealed record GameServerHeartbeat(
     int TelemetrySchemaVersion = 1,
     double? ProcessCpuSampleWindowMilliseconds = null,
     RpcMethodTelemetry[]? RpcMethods = null,
-    SettlementRuntimeTelemetry? Settlement = null);
+    SettlementRuntimeTelemetry? Settlement = null,
+    long RoomEpoch = 0,
+    long FencingToken = 0);
 
 /// <summary>
 /// 单个固定 RPC 方法自进程启动以来的有界累计指标；MethodName 只能来自代码白名单，
@@ -427,6 +475,15 @@ public sealed record AdminUpdateRoomControlResult(
 /// <summary>Allocator 通知的实例故障；原因必须脱敏，Lobby 据此迁移关联房间并写时间线。</summary>
 public sealed record GameServerFailure(
     string ServerInstanceId,
+    string RoomId,
+    string Reason,
+    long RoomEpoch = 0);
+
+/// <summary>
+/// 内部 DS 重新分配命令。
+/// Reason 进入结构化审计；RoomId 必须由受信控制面提供，普通玩家不能调用该命令。
+/// </summary>
+public sealed record GameServerReallocationRequest(
     string RoomId,
     string Reason);
 

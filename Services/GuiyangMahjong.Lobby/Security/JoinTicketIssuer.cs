@@ -17,8 +17,7 @@ public interface IJoinTicketIssuer
     /// 调用前房间必须已分配且玩家具备加入资格。
     /// </summary>
     (string Ticket, DateTimeOffset ExpiresAtUtc) Issue(
-        string playerId,
-        string displayName,
+        PlayerIdentity player,
         LobbyRoom room,
         string serverInstanceId);
 }
@@ -36,19 +35,36 @@ public sealed class HmacJoinTicketIssuer(
 
     /// <inheritdoc/>
     public (string Ticket, DateTimeOffset ExpiresAtUtc) Issue(
-        string playerId,
-        string displayName,
+        PlayerIdentity player,
         LobbyRoom room,
         string serverInstanceId)
     {
-        var expiresAt = timeProvider.GetUtcNow().AddSeconds(30);
+        var issuedAt = timeProvider.GetUtcNow();
+        var expiresAt = issuedAt.AddSeconds(30);
+        var seat = room.Seats.SingleOrDefault(item =>
+            string.Equals(item.PlayerId, player.PlayerId, StringComparison.Ordinal));
+        if (seat is null)
+        {
+            throw new InvalidOperationException("Join Ticket 只能为已分配座位的房间成员签发。");
+        }
+        // ticketId 用于跨日志关联，nonce 用于一次性消费；两者不能互相替代。
         var payload = Base64Url(JsonSerializer.SerializeToUtf8Bytes(new
         {
-            playerId,
-            displayName,
+            ticketId = Guid.NewGuid().ToString("N"),
+            playerId = player.PlayerId,
+            displayName = player.DisplayName,
             roomId = room.RoomId,
             matchId = room.MatchId,
+            seatId = seat.SeatIndex,
+            sessionId = player.SessionId,
+            sessionEpoch = player.SessionEpoch,
+            securityEpoch = player.SecurityEpoch,
             serverInstanceId,
+            roomEpoch = room.RoomEpoch,
+            clientBuild = player.ClientBuild,
+            protocolVersion = int.Parse(player.ProtocolVersion, System.Globalization.CultureInfo.InvariantCulture),
+            ruleSetVersion = room.RuleSetVersion,
+            issuedAtUnixSeconds = issuedAt.ToUnixTimeSeconds(),
             expiresAtUnixSeconds = expiresAt.ToUnixTimeSeconds(),
             nonce = Guid.NewGuid().ToString("N")
         }));

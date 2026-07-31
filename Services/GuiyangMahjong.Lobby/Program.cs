@@ -1,6 +1,10 @@
 using GuiyangMahjong.Lobby.Api;
+using GuiyangMahjong.Lobby.Lobby;
+using GuiyangMahjong.Lobby.Matchmaking;
 using GuiyangMahjong.Lobby.Options;
 using GuiyangMahjong.Lobby.Realtime;
+using GuiyangMahjong.Lobby.Reconnection;
+using GuiyangMahjong.Lobby.Rooms;
 using GuiyangMahjong.Lobby.Security;
 using GuiyangMahjong.Lobby.Services;
 using GuiyangMahjong.Lobby.Storage;
@@ -22,7 +26,8 @@ builder.Services
     .Bind(builder.Configuration.GetSection(LobbyOptions.SectionName))
     .ValidateDataAnnotations()
     .Validate(
-        options => options.PreviousTokenValidationKeys.All(key => key.Length >= 32)
+        options => options.PreviousTokenValidationKeys.All(
+            key => key is { Length: >= 32 })
                    && options.PreviousTokenValidationKeys
                        .Append(options.TokenSigningKey)
                        .Distinct(StringComparer.Ordinal)
@@ -117,6 +122,21 @@ builder.Services.AddSingleton<ILobbyStore>(provider =>
 
     return ActivatorUtilities.CreateInstance<RedisPostgresLobbyStore>(provider);
 });
+// 模块化端口暂由兼容聚合存储适配，后续调用方可以逐步停止依赖 ILobbyStore 大接口。
+builder.Services.AddSingleton<IRoomReader>(
+    provider => provider.GetRequiredService<ILobbyStore>());
+builder.Services.AddSingleton<IRoomWriter>(
+    provider => provider.GetRequiredService<ILobbyStore>());
+builder.Services.AddSingleton<LobbyReadService>();
+builder.Services.AddSingleton<ReconnectionService>();
+builder.Services.AddSingleton<IMatchmakingTicketStore>(provider =>
+    provider.GetRequiredService<IOptions<LobbyOptions>>().Value.Persistence.Mode
+        .Equals("RedisPostgres", StringComparison.OrdinalIgnoreCase)
+        ? ActivatorUtilities.CreateInstance<PostgresMatchmakingTicketStore>(provider)
+        : ActivatorUtilities.CreateInstance<InMemoryMatchmakingTicketStore>(provider));
+builder.Services.AddSingleton<
+    IMatchmakingExpansionPolicy,
+    FixedMatchmakingExpansionPolicy>();
 builder.Services.AddSingleton<IRoomMonitoringStore>(provider =>
     provider.GetRequiredService<IOptions<LobbyOptions>>().Value.Persistence.Mode
         .Equals("RedisPostgres", StringComparison.OrdinalIgnoreCase)

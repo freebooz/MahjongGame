@@ -5,6 +5,7 @@ using System.Net;
 using GuiyangMahjong.Allocator.Api;
 using GuiyangMahjong.Allocator.Domain;
 using GuiyangMahjong.Allocator.Options;
+using GuiyangMahjong.Allocator.Providers;
 using GuiyangMahjong.Allocator.Security;
 using GuiyangMahjong.Allocator.Services;
 using GuiyangMahjong.Observability;
@@ -76,6 +77,15 @@ builder.Services.AddSingleton<IAgonesAllocationClient>(provider =>
     provider.GetRequiredService<IOptions<AllocatorOptions>>().Value.Backend == AllocatorBackendMode.Agones
         ? ActivatorUtilities.CreateInstance<KubernetesAgonesAllocationClient>(provider)
         : new DisabledAgonesAllocationClient());
+builder.Services.AddSingleton<IGameServerProvider>(provider =>
+    provider.GetRequiredService<IOptions<AllocatorOptions>>().Value.Backend switch
+    {
+        AllocatorBackendMode.LocalProcess =>
+            ActivatorUtilities.CreateInstance<LocalProcessGameServerProvider>(provider),
+        AllocatorBackendMode.Agones =>
+            ActivatorUtilities.CreateInstance<AgonesGameServerProvider>(provider),
+        _ => throw new InvalidOperationException("Unsupported Allocator provider mode.")
+    });
 builder.Services.AddSingleton<IInstanceFailureNotifier, LobbyInstanceFailureNotifier>();
 builder.Services.AddSingleton<IAllocatorStateStore, JsonAllocatorStateStore>();
 builder.Services.AddSingleton<MatchResultOutboxRecovery>();

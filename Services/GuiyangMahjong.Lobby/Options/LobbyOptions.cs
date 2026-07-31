@@ -41,6 +41,27 @@ public sealed class LobbyOptions
     [Required] public LobbyPersistenceOptions Persistence { get; init; } = new();
     [Required] public AllocatorClientOptions Allocator { get; init; } = new();
     [Required] public TopologyRegistrationOptions TopologyRegistration { get; init; } = new();
+    /// <summary>基础匹配与重连窗口配置；环境变量使用 Lobby__Matchmaking__* 覆盖。</summary>
+    [Required] public MatchmakingOptions Matchmaking { get; init; } = new();
+}
+
+/// <summary>
+/// LobbyControl 内置基础匹配配置。
+/// 当前只支持单地域普通队列；复杂段位、赛事和跨区扩圈不属于阶段 4。
+/// </summary>
+public sealed class MatchmakingOptions
+{
+    /// <summary>活动匹配票据有效期，单位秒；过期后 PostgreSQL 权威记录转为 Expired。</summary>
+    [Range(10, 3600)] public int TicketTtlSeconds { get; init; } = 120;
+
+    /// <summary>DS 路由丢失后允许玩家查询恢复上下文的窗口，单位秒。</summary>
+    [Range(15, 600)] public int ReconnectionWindowSeconds { get; init; } = 120;
+
+    /// <summary>
+    /// 是否允许初始 RoomEpoch 接受未携带 Epoch 的旧版 DS。
+    /// 重新分配后的 Epoch 始终要求精确匹配，此开关不能放宽 fencing。
+    /// </summary>
+    public bool AllowLegacyInitialEpoch { get; init; } = true;
 }
 
 /// <summary>Lobby 向 Admin 动态拓扑目录刷新短租约所需的最小配置；注册凭据不得复用监控读取凭据。</summary>
@@ -66,6 +87,16 @@ public sealed class AllocatorClientOptions
     public string ServiceToken { get; init; } = string.Empty;
     [Range(1, 30)] public int TimeoutSeconds { get; init; } = 5;
     [Required] public string GameServerBuildVersion { get; init; } = "unreal-linux";
+    /// <summary>Allocator Fleet/Provider 调度使用的稳定游戏类型，不得来自客户端输入。</summary>
+    [Required] public string GameType { get; init; } = "guiyang-zhua-ji";
+    /// <summary>期望部署地域；必须与 Allocation Service 的可用 Provider 容量标签一致。</summary>
+    [Required] public string Region { get; init; } = "local";
+    /// <summary>服务端规则集版本，用于阻止错误规则镜像承载房间。</summary>
+    [Required] public string RuleSetVersion { get; init; } = "guiyang-zhuoji-v1";
+    /// <summary>Dedicated Server 网络协议版本；不等同于 HTTP API 版本。</summary>
+    [Required] public string ProtocolVersion { get; init; } = "1";
+    /// <summary>单实例请求席位容量；当前贵阳麻将有效范围为 1 至 4。</summary>
+    [Range(1, 4)] public int RequestedCapacity { get; init; } = 4;
 }
 
 /// <summary>

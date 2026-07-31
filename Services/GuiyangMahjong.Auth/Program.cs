@@ -69,7 +69,6 @@ builder.Services.AddOptions<SessionPolicyOptions>()
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<PlayerAccessTokenIssuer>();
 builder.Services.AddSingleton<LocalPlayerNameGenerator>();
-builder.Services.AddSingleton<AuthService>();
 builder.Services.AddSingleton<IAuthStore>(provider =>
 {
     var options = provider.GetRequiredService<IOptions<AuthOptions>>().Value;
@@ -93,6 +92,15 @@ builder.Services.AddSingleton<IPlayerDirectoryReader>(provider =>
     provider.GetRequiredService<IAuthStore>());
 builder.Services.AddSingleton<IIdentityStorageLifecycle>(provider =>
     provider.GetRequiredService<IAuthStore>());
+builder.Services.AddSingleton<AuthService>(provider => new AuthService(
+    provider.GetRequiredService<IIdentityRepository>(),
+    provider.GetRequiredService<ISessionRepository>(),
+    provider.GetRequiredService<IDeviceAuditWriter>(),
+    provider.GetRequiredService<PlayerAccessTokenIssuer>(),
+    provider.GetRequiredService<LocalPlayerNameGenerator>(),
+    provider.GetRequiredService<IOptions<AuthOptions>>(),
+    provider.GetRequiredService<IOptions<SessionPolicyOptions>>(),
+    provider.GetRequiredService<TimeProvider>()));
 builder.Services.AddHostedService<AuthStoreInitializer>();
 builder.Services.AddRateLimiter(options => options.AddPolicy("auth", context =>
     RateLimitPartition.GetFixedWindowLimiter(

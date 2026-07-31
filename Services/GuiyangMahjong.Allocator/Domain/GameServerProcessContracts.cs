@@ -17,7 +17,11 @@ public sealed record GameServerLaunchSpec(
     string JoinTicketSigningKey,
     string BuildVersion,
     string AdvertisedIp,
-    string MatchResultOutboxPath);
+    string MatchResultOutboxPath,
+    long RoomEpoch = 1,
+    long FencingToken = 1,
+    string RuleSetVersion = "guiyang-zhuoji-v1",
+    string ProtocolVersion = "1");
 
 /// <summary>
 /// 可由 Allocator 管理的游戏服进程抽象。
@@ -59,4 +63,19 @@ public interface IGameServerProcessLauncher
         int processId,
         DateTimeOffset expectedStartedAtUtc,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// 枚举与已配置 Dedicated Server 可执行文件匹配的进程，用于反向发现状态文件之外的疑似孤儿。
+    /// 默认返回空集合以兼容测试替身；生产实现不得因此直接终止进程。
+    /// </summary>
+    Task<IReadOnlyList<ManagedGameServerProcessObservation>> ListManagedProcessesAsync(
+        CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<ManagedGameServerProcessObservation>>([]);
 }
+
+/// <summary>
+/// 进程清单的脱敏观察值；只包含本节点 PID 和启动时间，不包含命令行、凭据或玩家数据。
+/// </summary>
+public sealed record ManagedGameServerProcessObservation(
+    int ProcessId,
+    DateTimeOffset StartedAtUtc);

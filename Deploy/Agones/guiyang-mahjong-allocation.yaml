@@ -9,6 +9,11 @@ spec:
     - matchLabels:
         agones.dev/fleet: guiyang-mahjong
         mahjong.freebooz/game: guiyang-zhua-ji
+        mahjong.freebooz/region: cn-southwest
+        mahjong.freebooz/server-build: REPLACE_WITH_BUILD_VERSION
+        mahjong.freebooz/ruleset-version: guiyang-zhuoji-v1
+        mahjong.freebooz/protocol-version: "1"
+        mahjong.freebooz/capacity: "4"
   metadata:
     labels:
       mahjong.freebooz/allocation-source: lobby
@@ -16,6 +21,8 @@ spec:
       # The allocator must replace these values for each room allocation.
       mahjong.freebooz/room-id: REPLACE_WITH_ROOM_ID
       mahjong.freebooz/match-id: REPLACE_WITH_MATCH_ID
+      mahjong.freebooz/room-epoch: "1"
+      mahjong.freebooz/fencing-token: "1"
 # Agones GameServerAllocation 请求模板：按 Fleet 标签申请一个可用贵阳麻将 Dedicated Server。
 # 该文件用于人工/测试分配，不是常驻控制器；命名空间、选择器和调度策略必须与 Fleet 一致。
 # 不得写入玩家信息、房间密码或服务凭据，实际房间绑定由 Allocator/Lobby 完成。

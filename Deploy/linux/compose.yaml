@@ -132,6 +132,11 @@ services:
       Observability__Enabled: ${OBSERVABILITY_ENABLED:-false}
       Observability__OtlpEndpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT_GAME_NODE:-http://127.0.0.1:4317}
       Observability__TraceSampleRatio: ${OTEL_TRACE_SAMPLE_RATIO:-0.1}
+      # Compose 明确使用本地进程 Provider；Lobby 仍只访问统一 Allocation Service HTTP 契约。
+      Allocator__Backend: LocalProcess
+      Allocator__StartupTimeoutSeconds: ${GAME_SERVER_STARTUP_TIMEOUT_SECONDS:-30}
+      Allocator__AllowLegacyInitialFencingToken: ${ALLOW_LEGACY_INITIAL_FENCING_TOKEN:-true}
+      Allocator__ValidateOperatingSystemPortAvailability: "true"
       Allocator__PortStart: ${GAME_PORT_START:-19000}
       Allocator__PortEnd: ${GAME_PORT_END:-19099}
       Allocator__AdvertisedIp: ${ADVERTISED_IP:?ADVERTISED_IP is required}
@@ -139,6 +144,7 @@ services:
       Allocator__GameServerWorkingDirectory: /opt/guiyang-mahjong/server
       Allocator__GameServerPrefixArguments__0: ${GAME_SERVER_MAP:?GAME_SERVER_MAP is required}
       Allocator__MatchResultOutboxDirectory: /var/lib/guiyang-mahjong/outbox
+      Allocator__RecoveryDirectory: /var/lib/guiyang-mahjong/recovery
       Allocator__StateFilePath: /var/lib/guiyang-mahjong/state/instances.json
       # Allocator 与 Lobby 通过 Compose 服务名通信，避免依赖 Docker Desktop 宿主机网关地址。
       Allocator__LobbyInternalUrl: http://lobby:8080
@@ -217,6 +223,11 @@ services:
       Lobby__Allocator__BaseUrl: http://game-node:${ALLOCATOR_PORT:-18081}
       Lobby__Allocator__ServiceToken: ${ALLOCATOR_SERVICE_TOKEN:?ALLOCATOR_SERVICE_TOKEN is required}
       Lobby__Allocator__GameServerBuildVersion: ${MAHJONG_VERSION:-dev}
+      Lobby__Allocator__GameType: guiyang-zhua-ji
+      Lobby__Allocator__Region: ${MAHJONG_REGION_ID:-local}
+      Lobby__Allocator__RuleSetVersion: ${MAHJONG_RULESET_VERSION:-guiyang-zhuoji-v1}
+      Lobby__Allocator__ProtocolVersion: ${MAHJONG_GAME_PROTOCOL_VERSION:-1}
+      Lobby__Allocator__RequestedCapacity: 4
     depends_on:
       postgres-migration: {condition: service_completed_successfully}
       redis: {condition: service_healthy}

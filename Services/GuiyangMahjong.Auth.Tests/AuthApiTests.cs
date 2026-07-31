@@ -55,6 +55,10 @@ public sealed class AuthApiTests(AuthWebApplicationFactory factory)
         Assert.Equal(
             session.AccessTokenExpiresAtUtc.ToUnixTimeSeconds(),
             payload.RootElement.GetProperty("Exp").GetInt64());
+        Assert.False(string.IsNullOrWhiteSpace(
+            payload.RootElement.GetProperty("Sid").GetString()));
+        Assert.Equal(0, payload.RootElement.GetProperty("SessionEpoch").GetInt64());
+        Assert.Equal(0, payload.RootElement.GetProperty("SecurityEpoch").GetInt64());
     }
 
     [Fact]
@@ -72,6 +76,32 @@ public sealed class AuthApiTests(AuthWebApplicationFactory factory)
         var replay = await client.PostAsJsonAsync(
             "/v1/auth/refresh", new RefreshSessionRequest(login.RefreshToken));
         Assert.Equal(HttpStatusCode.Unauthorized, replay.StatusCode);
+        // 旧 Token 重放被识别为泄漏后，刚轮换出的同族 Token 也必须失效。
+        var compromisedFamily = await client.PostAsJsonAsync(
+            "/v1/auth/refresh", new RefreshSessionRequest(rotated.RefreshToken));
+        Assert.Equal(HttpStatusCode.Unauthorized, compromisedFamily.StatusCode);
+    }
+
+    /// <summary>
+    /// 验证配置发布端点只向内部只读身份暴露算法和 KeyId，
+    /// 响应中不得包含当前或历史 HMAC 密钥。
+    /// </summary>
+    [Fact]
+    public async Task TokenValidationMetadata_IsAuthorizedAndContainsNoSecret()
+    {
+        using var client = factory.CreateClient();
+        Assert.Equal(
+            HttpStatusCode.Unauthorized,
+            (await client.GetAsync("/internal/identity/token-validation-config")).StatusCode);
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            AuthWebApplicationFactory.MonitoringToken);
+        using var response = await client.GetAsync(
+            "/internal/identity/token-validation-config");
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains("\"activeKeyId\":\"primary\"", body, StringComparison.Ordinal);
+        Assert.DoesNotContain(AuthWebApplicationFactory.SigningKey, body, StringComparison.Ordinal);
     }
 
     [Fact]

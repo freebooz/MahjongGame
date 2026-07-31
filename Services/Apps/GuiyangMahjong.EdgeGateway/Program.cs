@@ -38,7 +38,7 @@ builder.Services
     .ValidateDataAnnotations()
     .Validate(
         options => options.PlayerTokens.PreviousLegacyValidationKeys.All(
-            key => key.Length >= 32)
+            key => key is { Length: >= 32 })
             && options.PlayerTokens.PreviousLegacyValidationKeys
                 .Append(options.PlayerTokens.LegacySigningKey)
                 .Distinct(StringComparer.Ordinal)

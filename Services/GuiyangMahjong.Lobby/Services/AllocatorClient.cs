@@ -15,7 +15,10 @@ public sealed record AllocatorAllocation(
     string RoomId,
     string ServerInstanceId,
     int Port,
-    string State);
+    string State,
+    long RoomEpoch = 1,
+    string? AllocationId = null,
+    long FencingToken = 1);
 
 /// <summary>Allocator 接受实例注册后的回执；心跳凭据只能转交目标 Dedicated Server。</summary>
 public sealed record AllocatorRegistrationAck(
@@ -23,7 +26,9 @@ public sealed record AllocatorRegistrationAck(
     string ServerInstanceId,
     bool Accepted,
     int HeartbeatIntervalSeconds,
-    string HeartbeatCredential);
+    string HeartbeatCredential,
+    long RoomEpoch = 1,
+    long FencingToken = 1);
 
 /// <summary>
 /// Lobby 调用 Allocator 的最小客户端契约。
@@ -43,6 +48,17 @@ public interface IAllocatorClient
         string roomId,
         string matchId,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// 为指定 RoomEpoch 申请实例；默认实现兼容旧测试替身，但生产 HTTP 实现必须向 Allocator 传播 Epoch。
+    /// </summary>
+    Task<AllocatorAllocation> AllocateForEpochAsync(
+        string requestId,
+        string roomId,
+        string matchId,
+        long roomEpoch,
+        CancellationToken cancellationToken) =>
+        AllocateAsync(requestId, roomId, matchId, cancellationToken);
 
     /// <summary>转发 Dedicated Server 注册并返回心跳配置；凭据不得记录。</summary>
     Task<AllocatorRegistrationAck> ConfirmRegistrationAsync(
@@ -124,10 +140,38 @@ public sealed class HttpAllocatorClient(
         string requestId,
         string roomId,
         string matchId,
+        CancellationToken cancellationToken) =>
+        await AllocateForEpochAsync(
+            requestId,
+            roomId,
+            matchId,
+            1,
+            cancellationToken);
+
+    /// <inheritdoc/>
+    public async Task<AllocatorAllocation> AllocateForEpochAsync(
+        string requestId,
+        string roomId,
+        string matchId,
+        long roomEpoch,
         CancellationToken cancellationToken)
     {
         using var request = CreateRequest(HttpMethod.Post, "/internal/allocations", requestId);
-        request.Content = JsonContent.Create(new { roomId, matchId, buildVersion = options.GameServerBuildVersion });
+        request.Content = JsonContent.Create(new
+        {
+            allocationId = requestId,
+            roomId,
+            matchId,
+            buildVersion = options.GameServerBuildVersion,
+            roomEpoch,
+            options.GameType,
+            options.Region,
+            options.RuleSetVersion,
+            options.ProtocolVersion,
+            options.RequestedCapacity,
+            idempotencyKey = requestId
+        });
+        request.Headers.Add("Idempotency-Key", requestId);
         return await SendAsync<AllocatorAllocation>(request, cancellationToken);
     }
 
@@ -147,7 +191,9 @@ public sealed class HttpAllocatorClient(
             registration.ListenIp,
             registration.ListenPort,
             registration.BuildVersion,
-            registration.RegistrationCredential
+            registration.RegistrationCredential,
+            registration.RoomEpoch,
+            registration.FencingToken
         });
         return await SendAsync<AllocatorRegistrationAck>(request, cancellationToken);
     }

@@ -25,14 +25,27 @@ struct GUIYANGMAHJONGSERVER_API FGuiyangGameServerLaunchConfig
     FString RegistrationCredential;
     /** 当前服务端构建版本，用于拒绝不兼容客户端。 */
     FString BuildVersion;
+    /** 当前分配允许的规则集和网络协议版本；Join Ticket 必须与两者完全一致。 */
+    FString RuleSetVersion;
+    FString ProtocolVersion;
+    /** 允许接入当前服务构建的客户端版本白名单；来源为受控环境变量，不接受 Ticket 自行声明扩展。 */
+    TArray<FString> CompatibleClientBuilds;
     /** 返回给客户端的可连接 IP。 */
     FString AdvertisedIp;
     /** 校验一次性入场票据的签名密钥。 */
     FString JoinTicketSigningKey;
     /** 比赛结果发送失败时使用的本地 Outbox 文件。 */
     FString MatchResultOutboxPath;
+    /** 权威动作与快照的持久化根目录；Agones 模式必须挂载可跨 Pod 读取的 RWX 卷。 */
+    FString RecoveryDirectory;
+    /** 仅用于滚动升级/紧急回滚的旧票据兼容开关；生产完成升级后必须保持 false。 */
+    bool bAllowLegacyJoinTickets = false;
     /** 游戏监听端口。 */
     int32 Port = 0;
+    /** Lobby 房间路由代际；重新分配后递增，用于拒绝旧实例和旧 Join Ticket。 */
+    int64 RoomEpoch = 1;
+    /** Allocation Service 租约 fencing token；旧实例即使延迟回调也不得覆盖当前分配。 */
+    int64 LeaseFencingToken = 1;
 
     /** 解析并校验命令行参数；失败时通过 OutError 返回面向运维的原因。 */
     static bool TryParse(const TCHAR* CommandLine, const FString& SigningKey,

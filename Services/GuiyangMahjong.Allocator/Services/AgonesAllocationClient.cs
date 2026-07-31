@@ -20,7 +20,14 @@ public sealed record AgonesAllocationSpec(
     string ServerInstanceId,
     string RegistrationCredential,
     string LobbyInternalUrl,
-    string BuildVersion);
+    string BuildVersion,
+    long RoomEpoch = 1,
+    string GameType = "guiyang-zhua-ji",
+    string Region = "local",
+    string RuleSetVersion = "guiyang-zhuoji-v1",
+    string ProtocolVersion = "1",
+    int RequestedCapacity = 4,
+    long FencingToken = 1);
 
 /// <summary>Agones 分配结果；名称用于后续状态/关闭，地址和端口是客户端可达入口。</summary>
 public sealed record AgonesAllocationResult(string GameServerName, string Address, int Port);
@@ -91,7 +98,15 @@ public sealed class KubernetesAgonesAllocationClient : IAgonesAllocationClient, 
             ["mahjong.freebooz/server-instance-id"] = spec.ServerInstanceId,
             ["mahjong.freebooz/registration-credential"] = spec.RegistrationCredential,
             ["mahjong.freebooz/lobby-internal-url"] = spec.LobbyInternalUrl,
-            ["mahjong.freebooz/build-version"] = spec.BuildVersion
+            ["mahjong.freebooz/build-version"] = spec.BuildVersion,
+            ["mahjong.freebooz/room-epoch"] =
+                spec.RoomEpoch.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            ["mahjong.freebooz/fencing-token"] =
+                spec.FencingToken.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            ["mahjong.freebooz/ruleset-version"] = spec.RuleSetVersion,
+            ["mahjong.freebooz/protocol-version"] = spec.ProtocolVersion,
+            ["mahjong.freebooz/requested-capacity"] =
+                spec.RequestedCapacity.ToString(System.Globalization.CultureInfo.InvariantCulture)
         };
         var body = new
         {
@@ -104,7 +119,13 @@ public sealed class KubernetesAgonesAllocationClient : IAgonesAllocationClient, 
                 selectors = new[] { new { matchLabels = new Dictionary<string, string>
                 {
                     ["agones.dev/fleet"] = options.Agones.FleetName,
-                    ["mahjong.freebooz/game"] = "guiyang-zhua-ji"
+                    ["mahjong.freebooz/game"] = spec.GameType,
+                    ["mahjong.freebooz/region"] = spec.Region,
+                    ["mahjong.freebooz/server-build"] = spec.BuildVersion,
+                    ["mahjong.freebooz/ruleset-version"] = spec.RuleSetVersion,
+                    ["mahjong.freebooz/protocol-version"] = spec.ProtocolVersion,
+                    ["mahjong.freebooz/capacity"] =
+                        spec.RequestedCapacity.ToString(System.Globalization.CultureInfo.InvariantCulture)
                 } } },
                 metadata = new { labels = new Dictionary<string, string>
                 {
@@ -124,7 +145,8 @@ public sealed class KubernetesAgonesAllocationClient : IAgonesAllocationClient, 
         using var document = JsonDocument.Parse(payload);
         var status = document.RootElement.GetProperty("status");
         if (!string.Equals(status.GetProperty("state").GetString(), "Allocated", StringComparison.Ordinal))
-            throw new InvalidOperationException("Agones did not allocate a GameServer.");
+            throw new GuiyangMahjong.Allocator.Domain.AllocatorOperationException(
+                "Agones has no compatible Ready GameServer capacity.", 503);
         var name = status.GetProperty("gameServerName").GetString();
         var address = status.GetProperty("address").GetString();
         var port = status.GetProperty("ports").EnumerateArray()

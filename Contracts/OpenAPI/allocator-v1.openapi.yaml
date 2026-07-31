@@ -11,7 +11,9 @@ paths:
   /internal/allocations:
     post:
       operationId: allocateGameServer
-      parameters: [{ $ref: '#/components/parameters/RequestId' }]
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+        - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
         required: true
         content:
@@ -24,6 +26,21 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/AllocationResponse' }
         default: { $ref: '#/components/responses/Error' }
+  /internal/allocations/{allocationId}:
+    get:
+      operationId: getAllocationById
+      parameters:
+        - name: allocationId
+          in: path
+          required: true
+          schema: { type: string, minLength: 8, maxLength: 128 }
+      responses:
+        '200':
+          description: Stable allocation result used after an uncertain client response.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/InstanceSnapshot' }
+        '404': { description: Allocation not found. }
   /internal/instances:
     get:
       operationId: listGameServerInstances
@@ -104,6 +121,12 @@ components:
       in: path
       required: true
       schema: { type: string, format: uuid }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      description: Stable allocation command key; legacy callers fall back to X-Request-Id.
+      schema: { type: string, minLength: 8, maxLength: 128 }
   responses:
     Error:
       description: Stable allocator error.
@@ -121,9 +144,17 @@ components:
       type: object
       required: [roomId, matchId, buildVersion]
       properties:
+        allocationId: { type: string, minLength: 8, maxLength: 128 }
         roomId: { type: string, format: uuid }
         matchId: { type: string, format: uuid }
         buildVersion: { type: string, minLength: 1, maxLength: 80 }
+        roomEpoch: { type: integer, format: int64, minimum: 1, default: 1 }
+        gameType: { type: string, minLength: 1, maxLength: 80, default: guiyang-zhua-ji }
+        region: { type: string, minLength: 1, maxLength: 80, default: local }
+        ruleSetVersion: { type: string, minLength: 1, maxLength: 80, default: guiyang-zhuoji-v1 }
+        protocolVersion: { type: string, minLength: 1, maxLength: 40, default: '1' }
+        requestedCapacity: { type: integer, minimum: 1, maximum: 16, default: 4 }
+        idempotencyKey: { type: string, minLength: 8, maxLength: 128 }
     AllocationResponse:
       type: object
       required: [requestId, roomId, serverInstanceId, port, state]
@@ -133,6 +164,9 @@ components:
         serverInstanceId: { type: string, format: uuid }
         port: { type: integer, minimum: 1024, maximum: 65535 }
         state: { $ref: '#/components/schemas/InstanceState' }
+        roomEpoch: { type: integer, format: int64, minimum: 1 }
+        allocationId: { type: string }
+        fencingToken: { type: integer, format: int64, minimum: 1 }
     RegistrationRequest:
       type: object
       required: [roomId, listenIp, listenPort, buildVersion, registrationCredential]
@@ -142,6 +176,8 @@ components:
         listenPort: { type: integer, minimum: 1024, maximum: 65535 }
         buildVersion: { type: string }
         registrationCredential: { type: string, writeOnly: true, minLength: 32 }
+        roomEpoch: { type: integer, format: int64, minimum: 0 }
+        fencingToken: { type: integer, format: int64, minimum: 0 }
     RegistrationResponse:
       type: object
       required: [requestId, serverInstanceId, accepted, heartbeatIntervalSeconds, heartbeatCredential]
@@ -151,6 +187,8 @@ components:
         accepted: { type: boolean }
         heartbeatIntervalSeconds: { type: integer, minimum: 1, maximum: 60 }
         heartbeatCredential: { type: string, writeOnly: true, minLength: 32 }
+        roomEpoch: { type: integer, format: int64, minimum: 1 }
+        fencingToken: { type: integer, format: int64, minimum: 1 }
     HeartbeatRequest:
       type: object
       required: [roomId, heartbeatCredential, connectedPlayers, roomLifecycle, roundId, buildVersion, sentAtUtc]
@@ -162,6 +200,8 @@ components:
         roundId: { type: integer, minimum: 0 }
         buildVersion: { type: string }
         sentAtUtc: { type: string, format: date-time }
+        roomEpoch: { type: integer, format: int64, minimum: 0 }
+        fencingToken: { type: integer, format: int64, minimum: 0 }
     InstanceSnapshot:
       type: object
       required: [serverInstanceId, roomId, matchId, port, advertisedIp, state, startedAtUtc, buildVersion]
@@ -178,6 +218,10 @@ components:
         lastHeartbeatAtUtc: { type: [string, 'null'], format: date-time }
         buildVersion: { type: string }
         failureReason: { type: [string, 'null'] }
+        roomEpoch: { type: integer, format: int64, minimum: 1 }
+        allocationId: { type: [string, 'null'] }
+        provider: { type: string, enum: [LocalProcess, Agones] }
+        fencingToken: { type: integer, format: int64, minimum: 1 }
     InstanceState:
       type: string
       enum: [Starting, Ready, Allocated, Draining, Stopped, Failed]
