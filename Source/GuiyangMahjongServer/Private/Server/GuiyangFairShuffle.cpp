@@ -1,8 +1,12 @@
 #include "Server/GuiyangFairShuffle.h"
 
+// OpenSSL 1.1.1 将 UI 声明为全局类型，而 UE 5.8 已使用同名全局命名空间；
+// 仅在第三方头展开期间重命名该未使用类型，避免污染 UE 符号且不改变加密实现。
+#define UI OPENSSL_UI
 #include "openssl/crypto.h"
 #include "openssl/rand.h"
 #include "openssl/sha.h"
+#undef UI
 
 namespace GuiyangFairShufflePrivate
 {

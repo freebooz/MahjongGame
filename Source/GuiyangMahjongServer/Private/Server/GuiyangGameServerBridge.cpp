@@ -26,8 +26,12 @@
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
 #include "TimerManager.h"
+// OpenSSL 1.1.1 的全局 UI 类型与 UE 5.8 的 UI 命名空间冲突；此局部宏只影响
+// 第三方声明，不会进入项目头文件或改变 HMAC/SHA 的运行语义。
+#define UI OPENSSL_UI
 #include "openssl/hmac.h"
 #include "openssl/sha.h"
+#undef UI
 
 namespace GuiyangGameServerPrivate
 {
