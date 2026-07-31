@@ -3,6 +3,7 @@
 using System.Text.Json;
 using GuiyangMahjong.Admin.Domain;
 using GuiyangMahjong.Admin.Storage;
+using GuiyangMahjong.Admin.Security;
 using Npgsql;
 
 namespace GuiyangMahjong.Admin.Tests;
@@ -52,7 +53,12 @@ public sealed class AdminExternalPersistenceTests
             before,
             AdminActionStatus.AwaitingConfirmation,
             null,
-            1);
+            1,
+            null,
+            "INCIDENT_RESPONSE",
+            "验证 PostgreSQL 能完整保存阶段10结构化管理证据",
+            null,
+            "external-idempotency-key");
         var requestedAudit = CreateAudit(
             action, now, "external-operator", "ActionRequested", null,
             JsonSerializer.SerializeToElement(action), null);
@@ -61,6 +67,9 @@ public sealed class AdminExternalPersistenceTests
         await using var storeB = CreateStore();
         await storeA.InitializeAsync(CancellationToken.None);
         await storeA.CreateAsync(action, requestedAudit, CancellationToken.None);
+        var persistedRequested = await storeB.GetAsync(actionId, CancellationToken.None);
+        Assert.Equal("INCIDENT_RESPONSE", persistedRequested?.ReasonCode);
+        Assert.Equal("external-idempotency-key", persistedRequested?.IdempotencyKey);
 
         var approval = new AdminActionApproval(
             Guid.NewGuid().ToString(),
@@ -181,6 +190,43 @@ public sealed class AdminExternalPersistenceTests
                 now.AddMinutes(1),
                 CancellationToken.None);
         }
+    }
+
+    [AdminExternalPersistenceFact]
+    [Trait("Category", "ExternalPersistence")]
+    public async Task PostgreSql_AdminBrowserSessionIsSharedRevocableAndAudited()
+    {
+        await using var storeA = new PostgresAdminBrowserSessionStore(
+            NpgsqlDataSource.Create(ConnectionString));
+        await using var storeB = new PostgresAdminBrowserSessionStore(
+            NpgsqlDataSource.Create(ConnectionString));
+        await storeA.InitializeAsync(CancellationToken.None);
+        var now = DateTimeOffset.UtcNow;
+        var session = new AdminBrowserSessionRecord(
+            new string('a', 64),
+            new string('b', 64),
+            new AdminPrincipal(
+                "external-admin",
+                new HashSet<string>([AdminRoles.RoomViewer], StringComparer.Ordinal),
+                new HashSet<string>(["local"], StringComparer.Ordinal),
+                new HashSet<string>(StringComparer.Ordinal),
+                "shift-a",
+                true),
+            new string('c', 64),
+            new string('d', 64),
+            now,
+            now.AddMinutes(10),
+            null);
+        await storeA.CreateAsync(session, CancellationToken.None);
+        var shared = await storeB.GetAsync(session.SessionHash, CancellationToken.None);
+        Assert.Equal("external-admin", shared?.Principal.OperatorId);
+
+        await storeB.RecordLoginEventAsync(new AdminLoginSecurityEvent(
+            Guid.NewGuid().ToString(), "external-admin", "Succeeded", "SESSION_CREATED",
+            session.DeviceHash, session.IpNetworkHash, now, "trace-external-session"), CancellationToken.None);
+        await storeA.RevokeAsync(session.SessionHash, now.AddSeconds(1), CancellationToken.None);
+        var revoked = await storeB.GetAsync(session.SessionHash, CancellationToken.None);
+        Assert.NotNull(revoked?.RevokedAtUtc);
     }
 
     [AdminExternalPersistenceFact]

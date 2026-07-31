@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading.Channels;
 using GuiyangMahjong.Lobby.Domain;
+using GuiyangMahjong.Lobby.Matchmaking;
 using GuiyangMahjong.Lobby.Options;
 using GuiyangMahjong.Lobby.Realtime;
 using GuiyangMahjong.Lobby.Services;
@@ -26,6 +27,68 @@ public sealed class ExternalPersistenceFactAttribute : FactAttribute
 
 public sealed class ExternalPersistenceIntegrationTests
 {
+    [ExternalPersistenceFact]
+    [Trait("Category", "ExternalPersistence")]
+    public async Task PostgreSql_Stage4ProjectionsAndMatchmakingRemainTransactional()
+    {
+        var options = CreateOptions();
+        await using var connections = new LobbyPersistenceConnections(options);
+        var store = CreateStore(options, connections);
+        await store.InitializeAsync(CancellationToken.None);
+        var room = NewRoom(
+            $"stage4-owner-{Guid.NewGuid():N}",
+            RandomRoomCode());
+
+        Assert.Equal(
+            CreateRoomStatus.Created,
+            (await store.TryCreateRoomAsync(room, CancellationToken.None)).Status);
+        await using (var projection = connections.Postgres.CreateCommand(
+                         """
+                         SELECT
+                           (SELECT COUNT(*) FROM room.room_members WHERE room_id=$1),
+                           (SELECT COUNT(*) FROM room.room_state_history WHERE room_id=$1)
+                         """))
+        {
+            projection.Parameters.AddWithValue(room.RoomId);
+            await using var reader = await projection.ExecuteReaderAsync();
+            Assert.True(await reader.ReadAsync());
+            Assert.Equal(1L, reader.GetInt64(0));
+            Assert.Equal(1L, reader.GetInt64(1));
+        }
+
+        var matchmaking = new PostgresMatchmakingTicketStore(
+            connections,
+            TimeProvider.System);
+        var tickets = new List<MatchmakingTicket>();
+        for (var index = 0; index < 4; index++)
+        {
+            tickets.Add(await matchmaking.CreateAsync(
+                $"stage4-match-{Guid.NewGuid():N}-{index}",
+                "standard",
+                TimeSpan.FromMinutes(2),
+                CancellationToken.None));
+        }
+        var reservationId = Guid.NewGuid();
+        var reserved = await matchmaking.ReserveAsync(
+            "standard",
+            4,
+            reservationId,
+            CancellationToken.None);
+        var consumed = await matchmaking.ConsumeAsync(
+            tickets[0].TicketId,
+            reservationId,
+            CancellationToken.None);
+        var duplicate = await matchmaking.ConsumeAsync(
+            tickets[0].TicketId,
+            reservationId,
+            CancellationToken.None);
+
+        Assert.Equal(4, reserved.Count);
+        Assert.True(consumed.Accepted);
+        Assert.False(consumed.Duplicate);
+        Assert.True(duplicate.Duplicate);
+    }
+
     [ExternalPersistenceFact]
     [Trait("Category", "ExternalPersistence")]
     public async Task PostgreSql_AllowsOnlyOneActiveRoomAcrossStoreInstances()

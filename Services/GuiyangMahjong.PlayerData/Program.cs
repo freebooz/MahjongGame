@@ -46,8 +46,11 @@ builder.Services
             && options.AdminCommandToken.Length >= 32
             && options.ChatGatewayToken.Length >= 32
             && options.MonitoringToken.Length >= 32
-            && options.AuthMonitoringToken.Length >= 32
-            && options.ProjectionEnabled
+            && options.CommunityLegacyChatToken.Length >= 32
+            && options.GameDataLegacyReplayToken.Length >= 32
+            && options.EconomySourceToken.Length >= 32
+            && options.EconomyAdminToken.Length >= 32
+            && options.EconomyMonitoringToken.Length >= 32
             && options.AdminEvidenceIngestionToken.Length >= 32),
         "Production PlayerData requires PostgreSQL and all dedicated credentials.")
     .Validate(options =>
@@ -57,8 +60,10 @@ builder.Services
             options.AdminCommandToken,
             options.ChatGatewayToken,
             options.MonitoringToken,
-            options.AuthMonitoringToken,
-            options.AdminEvidenceIngestionToken
+            options.CommunityLegacyChatToken,
+            options.AdminEvidenceIngestionToken,
+            options.GameDataLegacyReplayToken
+            ,options.EconomySourceToken, options.EconomyAdminToken, options.EconomyMonitoringToken
         }
         .Where(value => !string.IsNullOrEmpty(value))
         .Distinct(StringComparer.Ordinal)
@@ -70,8 +75,10 @@ builder.Services
             options.AdminCommandToken,
             options.ChatGatewayToken,
             options.MonitoringToken,
-            options.AuthMonitoringToken,
-            options.AdminEvidenceIngestionToken
+            options.CommunityLegacyChatToken,
+            options.AdminEvidenceIngestionToken,
+            options.GameDataLegacyReplayToken
+            ,options.EconomySourceToken, options.EconomyAdminToken, options.EconomyMonitoringToken
         }.Count(value => !string.IsNullOrEmpty(value)),
         "PlayerData credentials must all be distinct.")
     .ValidateOnStart();
@@ -80,12 +87,17 @@ builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.ConfigureHttpJsonOptions(options =>
     options.SerializerOptions.Converters.Add(
         new JsonStringEnumConverter()));
-builder.Services.AddHttpClient(
-    nameof(HttpChatPolicyClient),
-    client => client.Timeout = TimeSpan.FromSeconds(5));
+builder.Services.AddHttpClient(nameof(HttpLegacyCommunityChatClient),
+    client => client.Timeout = TimeSpan.FromSeconds(8));
+builder.Services.AddHttpClient(nameof(HttpLegacyAdminEvidenceClient),
+    client => client.Timeout = TimeSpan.FromSeconds(8));
 builder.Services.AddHttpClient(
     nameof(ProjectionDispatcher),
     client => client.Timeout = TimeSpan.FromSeconds(5));
+builder.Services.AddHttpClient(
+    nameof(HttpLegacyReplayEvidenceClient),
+    client => client.Timeout = TimeSpan.FromSeconds(5));
+builder.Services.AddHttpClient(nameof(HttpLegacyEconomyClient), client => client.Timeout = TimeSpan.FromSeconds(8));
 builder.Services.AddSingleton<IPlayerDataStore>(provider =>
 {
     var options = provider
@@ -97,7 +109,10 @@ builder.Services.AddSingleton<IPlayerDataStore>(provider =>
                 options.PostgresConnectionString))
         : new InMemoryPlayerDataStore();
 });
-builder.Services.AddSingleton<IChatPolicyClient, HttpChatPolicyClient>();
+builder.Services.AddSingleton<ILegacyCommunityChatClient, HttpLegacyCommunityChatClient>();
+builder.Services.AddSingleton<ILegacyAdminEvidenceClient, HttpLegacyAdminEvidenceClient>();
+builder.Services.AddSingleton<ILegacyReplayEvidenceClient, HttpLegacyReplayEvidenceClient>();
+builder.Services.AddSingleton<ILegacyEconomyClient, HttpLegacyEconomyClient>();
 builder.Services.AddSingleton<ProjectionDispatcher>();
 builder.Services.AddHostedService<PlayerDataStoreInitializer>();
 builder.Services.AddHostedService<ProjectionDispatcherService>();

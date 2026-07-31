@@ -383,7 +383,13 @@ public sealed class PlayerMonitoringService(
             player.ControlVersion,
             player.FrozenUntilUtc,
             player.MutedUntilUtc,
-            player.RiskLabels);
+            player.RiskLabels,
+            runtime?.PacketLossPercent,
+            runtime?.ReconnectCount,
+            runtime?.Trustee,
+            runtime?.IllegalActionCount,
+            runtime?.ConnectionState,
+            runtime?.DisconnectedAtUtc);
 
     private static RoomMonitorSnapshot? FindCurrentRoom(
         IEnumerable<RoomMonitorSnapshot> rooms, string playerId) =>

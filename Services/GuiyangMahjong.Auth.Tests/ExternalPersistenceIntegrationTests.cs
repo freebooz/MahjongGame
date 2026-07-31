@@ -66,7 +66,7 @@ public sealed class ExternalPersistenceIntegrationTests
         await using var command = inspector.CreateCommand(
             """
             SELECT COUNT(*), COUNT(*) FILTER (WHERE revoked_at_utc IS NOT NULL)
-            FROM auth_refresh_sessions WHERE player_id=$1
+            FROM session.auth_refresh_sessions WHERE player_id=$1
             """);
         command.Parameters.AddWithValue(login.PlayerId);
         await using var reader = await command.ExecuteReaderAsync(CancellationToken.None);

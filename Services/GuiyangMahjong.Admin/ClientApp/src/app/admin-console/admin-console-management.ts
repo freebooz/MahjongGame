@@ -3,7 +3,7 @@
  * 所有写操作仍通过后端二次确认、审批、幂等键和审计约束，本模块不提供修改对局结果的入口。
  */
 import {
-  actionNames,byId,date,esc,hasRole,reliabilityHtml,request,requestRefresh,setConnection,state
+  actionNames,adminHeaders,byId,date,esc,hasRole,reliabilityHtml,request,requestRefresh,setConnection,state
 } from "./admin-console-state";
 
 // 通过临时对象 URL 下载已授权结果，完成后立即释放浏览器内存。
@@ -18,7 +18,7 @@ export async function openCaseResult(kind,roomId,caseId){
     if(kind==="logs"){
       const response=await fetch(
         `/admin/v1/rooms/${encodeURIComponent(roomId)}/log-exports/${encodeURIComponent(caseId)}`,
-        {headers:{Authorization:`Bearer ${state.token}`,"X-Trace-Id":crypto.randomUUID()}});
+        {credentials:"same-origin",headers:adminHeaders({trace:true})});
       if(!response.ok)throw new Error(`日志导出失败（${response.status}）`);
       saveBlob(await response.blob(),`room-${roomId}-logs-${caseId}.json`);
       return;
@@ -79,7 +79,8 @@ export function renderAssetOperations(items){
 // 加载房间详情和来源新鲜度；降级遥测以未知值展示，不转换为零。
 export async function showRoom(roomId){
   try{
-    const detail=await request(`/admin/v1/rooms/${encodeURIComponent(roomId)}`),r=detail.summary;
+    const trustView=await request(`/admin/operations/v1/trust-safety/rooms/${encodeURIComponent(roomId)}`);
+    const detail=trustView.detail,r=detail.summary;
     const runtime=detail.runtime||{},players=runtime.players||[],events=detail.timeline||[];
     // 速率只在 Lobby 判断相邻样本同源且计数器单调时存在；null 必须显示为未知，不能伪装成零流量。
     const ingressRate=runtime.networkIngressBytesPerSecond;
@@ -91,6 +92,10 @@ export async function showRoom(roomId){
       <div class="detail-grid">
       <div><span>状态</span>${esc(r.lifecycle)}</div><div><span>玩法</span>${esc(r.gameMode)}</div>
       <div><span>MatchId</span><b class="mono">${esc(r.matchId)}</b></div><div><span>状态序号</span>${r.stateSequence}</div>
+      <div><span>Room Epoch</span>${trustView.roomEpoch}</div><div><span>动作 / 状态版本</span>${runtime.actionSequence??"—"} / ${trustView.stateVersion}</div>
+      <div><span>Fleet / Provider</span>${esc(trustView.fleet||"—")} / ${esc(trustView.provider)}</div><div><span>Build / RuleSet</span>${esc(trustView.buildVersion)} / ${esc(trustView.ruleSetVersion)}</div>
+      <div><span>快照版本 / 年龄</span>${runtime.snapshotVersion??"—"} / ${trustView.snapshotAgeSeconds!=null?`${trustView.snapshotAgeSeconds.toFixed(1)} 秒`:"—"}</div>
+      <div><span>恢复状态 / Trace</span>${esc(runtime.recoveryState||"—")} / <b class="mono">${esc(runtime.lastTraceId||"—")}</b></div>
       <div><span>玩家</span>${detail.playerIds.map(esc).join("<br>")||"—"}</div>
       <div><span>服务实例</span><b class="mono">${esc(r.serverInstanceId||"—")}</b></div>
       <div><span>创建时间</span>${date(r.createdAtUtc)}</div><div><span>最后更新</span>${date(r.updatedAtUtc)}</div>
@@ -104,7 +109,8 @@ export async function showRoom(roomId){
       <div><span>结算确认</span>${settlement?date(settlement.confirmedAtUtc):"—"}</div>
       </div>
       ${canManage?'<div class="manage-actions"><button id="createRoomAction">创建管理申请</button></div>':""}
-      <h2>玩家连接</h2><p class="mono">${players.length?players.map(p=>`${esc(p.playerId)} · ${esc(p.connectionState)} · ${p.latencyMilliseconds?.toFixed(0)??"—"} ms · 托管 ${p.trustee===null||p.trustee===undefined?"—":p.trustee?"是":"否"} · ${esc(p.disconnectReason||"—")}`).join("<br>"):"等待遥测"}</p>
+      <h2>玩家连接</h2><p class="mono">${players.length?players.map(p=>`${esc(p.playerId)} · 座位 ${p.seatIndex} · ${esc(p.connectionState)} · ${p.latencyMilliseconds?.toFixed(0)??"—"} ms · 丢包 ${p.packetLossPercent?.toFixed(2)??"—"}% · 重连 ${p.reconnectCount??"—"} · 非法动作 ${p.illegalActionCount??"—"} · 托管 ${p.trustee===null||p.trustee===undefined?"—":p.trustee?"是":"否"} · ${esc(p.disconnectReason||"—")}`).join("<br>"):"等待遥测"}</p>
+      <h2>风险事件</h2><p class="mono">${trustView.riskSignals.length?trustView.riskSignals.map(x=>`${date(x.observedAtUtc)} · ${esc(x.severity)} · ${esc(x.code)} · Trace ${esc(x.traceId)}`).join("<br>"):"暂无风险事件"}</p>
       <h2>RPC 分类</h2><p class="mono">${rpcMethods.length?rpcMethods.map(m=>`${esc(m.methodName)} · 收到 ${m.receivedCount} · 拒绝 ${m.rejectedCount} · 失败 ${m.failedCount} · 超时 ${m.timeoutCount} · P95/P99 ${m.p95DurationMilliseconds?.toFixed(2)??"—"}/${m.p99DurationMilliseconds?.toFixed(2)??"—"} ms`).join("<br>"):"等待遥测"}</p>
       <h2>事件时间线</h2><p class="mono">${events.length?events.map(e=>`${date(e.occurredAtUtc)} · ${esc(e.eventType)} · ${esc(JSON.stringify(e.data))}`).join("<br>"):"暂无事件"}</p>
       <h2>房间规则</h2><p class="mono">${esc(JSON.stringify(detail.rules))}</p>`;
@@ -145,6 +151,7 @@ export function openActionDialog(target){
     ?"目标玩家 ID":target.kind==="server"?"Dedicated Server ID":"目标房间 ID";
   byId("actionTarget").value=target.targetId;
   byId("actionTicket").value="";byId("actionReason").value="";byId("actionConfirmation").value="";
+  byId("actionReasonCode").value="OPERATOR_REQUEST";byId("actionDescription").value="";
   byId("assetCode").value="";byId("assetAmount").value="";byId("rewardGrantId").value="";
   byId("originalSanctionCommandId").value="";
   byId("confirmationStep").hidden=true;byId("actionSubmit").textContent="创建申请";
@@ -190,7 +197,9 @@ export async function submitAction(){
       state.pendingAction=await request("/admin/v1/action-requests",{
         method:"POST",trace:true,idempotent:true,body:JSON.stringify({
           actionType,targetId:state.currentTarget.targetId,
-          reason:byId("actionReason").value,ticketId:byId("actionTicket").value,
+          reason:byId("actionReason").value,reasonCode:byId("actionReasonCode").value,
+          operationDescription:byId("actionDescription").value,
+          ticketId:byId("actionTicket").value,
           expectedStateSequence:state.currentTarget.expectedStateSequence,parameters
         })
       });
@@ -232,6 +241,8 @@ export async function showPlayer(playerId){
       <div><span>当前设备</span><b class="mono">${esc(p.currentDeviceId||"—")}</b></div><div><span>IP 网段</span>${esc(p.currentMaskedIp||"—")}</div>
       <div><span>当前大厅</span>${esc(p.lobbyId||"—")}</div><div><span>当前房间 / 实例</span>${esc(p.roomCode||"—")} / <b class="mono">${esc(p.serverInstanceId||"—")}</b></div>
       <div><span>延迟</span>${p.latencyMilliseconds!=null?`${p.latencyMilliseconds.toFixed(0)} ms`:"—"}</div><div><span>活跃会话</span>${p.activeSessionCount}</div>
+      <div><span>丢包 / 重连</span>${p.packetLossPercent?.toFixed(2)??"—"}% / ${p.reconnectCount??"—"}</div><div><span>连接 / 托管</span>${esc(p.connectionState||"—")} / ${p.trustee===null||p.trustee===undefined?"—":p.trustee?"是":"否"}</div>
+      <div><span>掉线开始</span>${date(p.disconnectedAtUtc)}</div><div><span>非法动作</span>${p.illegalActionCount??"—"}</div>
       <div><span>控制版本</span>${p.controlVersion}</div><div><span>冻结到期</span>${date(p.frozenUntilUtc)}</div>
       <div><span>禁言到期</span>${date(p.mutedUntilUtc)}</div><div><span>风险标签</span>${riskLabels.length?riskLabels.map(esc).join(" / "):"—"}</div>
       </div>

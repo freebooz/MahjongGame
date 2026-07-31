@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Text.Json;
 using GuiyangMahjong.Lobby.Domain;
+using GuiyangMahjong.Lobby.Rooms;
 
 namespace GuiyangMahjong.Lobby.Storage;
 
@@ -47,6 +48,7 @@ public sealed class InMemoryLobbyStore : ILobbyStore
                 }
             }
 
+            room = NormalizeSeats(room);
             roomsByCode[room.RoomCode] = room;
             codeById[room.RoomId] = room.RoomCode;
             SynchronizeActivePlayersUnsafe(room);
@@ -116,7 +118,12 @@ public sealed class InMemoryLobbyStore : ILobbyStore
     {
         cancellationToken.ThrowIfCancellationRequested();
         IReadOnlyList<LobbyRoom> rooms = roomsByCode.Values
-            .Where(room => room.PublicRoom && room.Lifecycle is RoomLifecycle.Allocating or RoomLifecycle.Waiting)
+            .Where(room => room.PublicRoom && room.Lifecycle is
+                RoomLifecycle.Created
+                or RoomLifecycle.Waiting
+                or RoomLifecycle.Ready
+                or RoomLifecycle.Allocating
+                or RoomLifecycle.Starting)
             .OrderByDescending(room => room.CreatedAtUtc)
             .Take(100)
             .ToArray();
@@ -190,7 +197,12 @@ public sealed class InMemoryLobbyStore : ILobbyStore
         lock (mutationGate)
         {
             if (!roomsByCode.TryGetValue(roomCode, out var room)
-                || room.Lifecycle is not RoomLifecycle.Allocating and not RoomLifecycle.Waiting)
+                || room.Lifecycle is not (
+                    RoomLifecycle.Created
+                    or RoomLifecycle.Waiting
+                    or RoomLifecycle.Ready
+                    or RoomLifecycle.Allocating
+                    or RoomLifecycle.Starting))
             {
                 return Task.FromResult(room);
             }
@@ -226,6 +238,7 @@ public sealed class InMemoryLobbyStore : ILobbyStore
                     ? room.OwnerPlayerId
                     : retained[0],
                 PlayerIds = retained,
+                Seats = NormalizeSeats(room with { PlayerIds = retained }).Seats,
                 StateSequence = room.StateSequence + 1,
                 UpdatedAtUtc = observedAtUtc
             };
@@ -278,7 +291,12 @@ public sealed class InMemoryLobbyStore : ILobbyStore
                     AddPlayerStatus.AlreadyInAnotherRoom,
                     GetRoomByIdUnsafe(activeRoomId)));
             }
-            if (room.Lifecycle is RoomLifecycle.Closed or RoomLifecycle.Failed or RoomLifecycle.Playing or RoomLifecycle.Settling)
+            if (room.Lifecycle is not (
+                RoomLifecycle.Created
+                or RoomLifecycle.Waiting
+                or RoomLifecycle.Ready
+                or RoomLifecycle.Allocating
+                or RoomLifecycle.Starting))
             {
                 return Task.FromResult(new AddPlayerResult(AddPlayerStatus.RoomClosed, room));
             }
@@ -296,6 +314,16 @@ public sealed class InMemoryLobbyStore : ILobbyStore
             var updated = room with
             {
                 PlayerIds = [.. room.PlayerIds, playerId],
+                Seats =
+                [
+                    .. NormalizeSeats(room).Seats,
+                    new RoomSeat(
+                        playerId,
+                        Enumerable.Range(0, room.MaximumPlayers)
+                            .First(index => !NormalizeSeats(room).Seats
+                                .Any(seat => seat.SeatIndex == index)),
+                        DateTimeOffset.UtcNow)
+                ],
                 StateSequence = room.StateSequence + 1,
                 UpdatedAtUtc = DateTimeOffset.UtcNow
             };
@@ -314,10 +342,12 @@ public sealed class InMemoryLobbyStore : ILobbyStore
         {
             if (!roomsByCode.TryGetValue(room.RoomCode, out var current)
                 || room.StateSequence != current.StateSequence + 1
+                || room.RoomEpoch < current.RoomEpoch
                 || HasActivePlayerConflictUnsafe(room))
             {
                 return Task.FromResult(false);
             }
+            room = NormalizeSeats(room);
             roomsByCode[room.RoomCode] = room;
             codeById[room.RoomId] = room.RoomCode;
             SynchronizeActivePlayersUnsafe(room);
@@ -396,5 +426,46 @@ public sealed class InMemoryLobbyStore : ILobbyStore
     }
 
     private static bool IsActive(RoomLifecycle lifecycle) => lifecycle is
-        RoomLifecycle.Allocating or RoomLifecycle.Waiting or RoomLifecycle.Playing or RoomLifecycle.Settling;
+        RoomLifecycle.Created
+        or RoomLifecycle.Waiting
+        or RoomLifecycle.Ready
+        or RoomLifecycle.Allocating
+        or RoomLifecycle.Starting
+        or RoomLifecycle.Playing
+        or RoomLifecycle.Suspended
+        or RoomLifecycle.Recovering
+        or RoomLifecycle.Settling
+        or RoomLifecycle.Terminating;
+
+    /// <summary>
+    /// 为旧快照补齐显式座位，并保留仍有效且不冲突的既有座位。
+    /// 该方法只操作不可变副本，调用方仍负责在同一临界区提交玩家和座位。
+    /// </summary>
+    private static LobbyRoom NormalizeSeats(LobbyRoom room)
+    {
+        var assigned = room.Seats
+            .Where(seat => room.PlayerIds.Contains(seat.PlayerId, StringComparer.Ordinal))
+            .Where(seat => seat.SeatIndex >= 0 && seat.SeatIndex < room.MaximumPlayers)
+            .GroupBy(seat => seat.PlayerId, StringComparer.Ordinal)
+            .Select(group => group.First())
+            .GroupBy(seat => seat.SeatIndex)
+            .Select(group => group.First())
+            .ToList();
+        foreach (var playerId in room.PlayerIds)
+        {
+            if (assigned.Any(seat => seat.PlayerId == playerId))
+            {
+                continue;
+            }
+
+            var seatIndex = Enumerable.Range(0, room.MaximumPlayers)
+                .First(index => assigned.All(seat => seat.SeatIndex != index));
+            assigned.Add(new RoomSeat(playerId, seatIndex, room.CreatedAtUtc));
+        }
+
+        return room with
+        {
+            Seats = assigned.OrderBy(seat => seat.SeatIndex).ToArray()
+        };
+    }
 }

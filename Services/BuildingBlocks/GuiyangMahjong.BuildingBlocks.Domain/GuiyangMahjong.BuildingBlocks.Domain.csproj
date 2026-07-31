@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <!-- Domain 不得依赖 ASP.NET Core、数据库驱动或具体业务模块。 -->
+    <Description>领域聚合版本与领域事件暂存基础构件。</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\Contracts\GuiyangMahjong.Contracts.Common\GuiyangMahjong.Contracts.Common.csproj" />
+    <ProjectReference Include="..\..\Contracts\GuiyangMahjong.Contracts.Events\GuiyangMahjong.Contracts.Events.csproj" />
+  </ItemGroup>
+</Project>

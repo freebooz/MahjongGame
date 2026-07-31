@@ -2,11 +2,13 @@
  * 管理控制台共享状态、HTTP 边界和安全渲染工具。
  * 令牌仅驻留页面内存；模块不持久化凭据，也不推导服务端游标或授权结果。
  */
+import {authenticationFailureMessage,requiresCsrf} from "./admin-security";
+import {settlePanel} from "./panel-degradation";
 // 管理台仍需操作大量历史对话框节点；统一入口在迁移期提供受控 DOM 访问，后续组件化时逐步收窄类型。
 export const byId=(id:string):any=>document.getElementById(id);
 export const state:any={
-  // 管理令牌只保存在当前页面内存，刷新或关闭页面即清除，避免 XSS 后跨会话持久窃取。
-  token:"",
+  // 企业令牌仅在会话交换调用栈中短暂存在；成功后只保留内存 CSRF 和 HttpOnly Cookie。
+  legacyBearer:"",csrfToken:"",authenticated:false,deviceId:crypto.randomUUID(),
   timer:null,me:null,pendingAction:null,currentTarget:null,actions:[],cases:[],
   safeForHighRiskActions:false,
   // 三类列表分别维护键集游标历史；切换过滤条件时必须重置，避免跨查询复用游标。
@@ -41,12 +43,33 @@ export const actionNames={
 };
 
 // 所有 Admin API 请求统一在此附加短期凭据、TraceId 与幂等键，并转换为安全中文错误。
-export async function request(path:string,options:any={}){
-  const headers={Authorization:`Bearer ${state.token}`,...(options.body?{"Content-Type":"application/json"}:{})};
+export function adminHeaders(options:any={}){
+  const headers:any={"X-Admin-Device-Id":state.deviceId,...(options.body?{"Content-Type":"application/json"}:{})};
+  if(state.legacyBearer)headers.Authorization=`Bearer ${state.legacyBearer}`;
+  if(state.csrfToken&&requiresCsrf(options.method||"GET"))
+    headers["X-Admin-CSRF"]=state.csrfToken;
   if(options.trace)headers["X-Trace-Id"]=crypto.randomUUID();
   if(options.idempotent)headers["Idempotency-Key"]=crypto.randomUUID();
-  const response=await fetch(path,{...options,headers:{...headers,...options.headers}});
-  if(response.status===401)throw new Error("管理凭证无效或已失效");
+  return headers;
+}
+// 使用企业短期 Bearer 建立 BFF 会话；令牌不会写入 state、Web Storage、URL 或日志。
+export async function establishBrowserSession(token:string){
+  const response=await fetch("/admin/bff/v1/session",{
+    method:"POST",credentials:"same-origin",
+    headers:{Authorization:`Bearer ${token}`,"X-Admin-Device-Id":state.deviceId}
+  });
+  if(response.status===404){
+    // 服务端关闭 BFF 时进入显式兼容模式；令牌仍仅驻留当前页面内存。
+    state.legacyBearer=token;state.authenticated=true;return;
+  }
+  if(!response.ok)throw new Error(authenticationFailureMessage(response.status));
+  const session=await response.json();
+  state.csrfToken=session.csrfToken;state.legacyBearer="";state.authenticated=true;
+}
+export async function request(path:string,options:any={}){
+  const headers=adminHeaders(options);
+  const response=await fetch(path,{...options,credentials:"same-origin",headers:{...headers,...options.headers}});
+  if(response.status===401){state.authenticated=false;throw new Error("管理会话无效、已撤销或设备/网络发生异常");}
   if(!response.ok){
     let message=`管理服务返回 ${response.status}`;
     try{message=(await response.json()).message||message;}catch{}
@@ -65,9 +88,7 @@ export function emptyOverview(){
 }
 // 把单个面板请求转换为可降级结果，避免任一依赖失败造成整页白屏。
 export async function settle(enabled,operation,fallback){
-  if(!enabled)return {value:fallback,error:null};
-  try{return {value:await operation(),error:null};}
-  catch(error){return {value:fallback,error:error.message};}
+  return settlePanel(enabled,operation,fallback);
 }
 // 生成服务端游标分页查询；页大小仅是请求值，最终上限始终由 Admin API 强制执行。
 export function withPage(query:URLSearchParams,pageKey:string){

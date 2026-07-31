@@ -7,8 +7,9 @@ param(
     [string]$ClientExecutable = '',
     [ValidateRange(1, 4)]
     [int]$ClientCount = 4,
-    [string]$AuthBaseUrl = 'http://127.0.0.1:18082',
-    [string]$LobbyBaseUrl = 'http://127.0.0.1:18080',
+    [string]$ApiBaseUrl = 'http://127.0.0.1:18085',
+    [string]$RealtimeBaseUrl = '',
+    [string]$PatchBaseUrl = '',
     [int]$WindowWidth = 1920,
     [int]$WindowHeight = 1080,
     [string]$SessionRoot = ''
@@ -31,7 +32,10 @@ function Test-LoopbackHttpUrl([string]$Value) {
     return $uri.Host -in @('localhost', '127.0.0.1', '::1')
 }
 
-foreach ($endpoint in @($AuthBaseUrl, $LobbyBaseUrl)) {
+if ([string]::IsNullOrWhiteSpace($RealtimeBaseUrl)) {
+    $RealtimeBaseUrl = $ApiBaseUrl
+}
+foreach ($endpoint in @($ApiBaseUrl, $RealtimeBaseUrl) + @($PatchBaseUrl | Where-Object { $_ })) {
     $uri = $null
     if (![Uri]::TryCreate($endpoint, [UriKind]::Absolute, [ref]$uri)) {
         throw "Invalid service endpoint: $endpoint"
@@ -56,7 +60,7 @@ $positions = @(
     @(0, $WindowHeight),
     @($WindowWidth, $WindowHeight)
 )
-$allowLocalReviewHttp = Test-LoopbackHttpUrl $AuthBaseUrl
+$allowLocalReviewHttp = Test-LoopbackHttpUrl $ApiBaseUrl
 $started = @()
 for ($index = 0; $index -lt $ClientCount; ++$index) {
     $number = $index + 1
@@ -73,16 +77,19 @@ for ($index = 0; $index -lt $ClientCount; ++$index) {
         '-Multiprocess',
         "-UserDir=$userDirectory",
         '-MahjongAuthMode=RemoteAuth',
-        "-MahjongAuthBaseUrl=$AuthBaseUrl",
         '-MahjongLobbyBackend=RemoteLobby',
-        "-MahjongLobbyBaseUrl=$LobbyBaseUrl",
+        "-MahjongApiBaseUrl=$ApiBaseUrl",
+        "-MahjongRealtimeBaseUrl=$RealtimeBaseUrl",
         '-log',
         "-AbsLog=$absoluteLog"
     )
     if ($allowLocalReviewHttp) {
         # Shipping clients require this explicit opt-in for local manual review.
         # The runtime still rejects every non-loopback HTTP endpoint.
-        $arguments += '-MahjongAllowInsecureLoopbackAuth'
+        $arguments += '-MahjongAllowInsecureLoopbackApi'
+    }
+    if (![string]::IsNullOrWhiteSpace($PatchBaseUrl)) {
+        $arguments += "-MahjongPatchBaseUrl=$PatchBaseUrl"
     }
     $process = Start-Process -FilePath $ClientExecutable -ArgumentList $arguments -PassThru
     $started += [pscustomobject]@{

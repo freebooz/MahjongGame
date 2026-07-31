@@ -4,6 +4,7 @@
 #include "Lobby/GuiyangLobbySubsystem.h"
 #include "Lobby/GuiyangLobbyTypes.h"
 #include "Lobby/GuiyangRemoteLobbyBackend.h"
+#include "Config/GuiyangPlatformEndpointSettings.h"
 #include "Network/MahjongNetworkTypes.h"
 #include "Dom/JsonObject.h"
 #include "Serialization/JsonReader.h"
@@ -71,6 +72,22 @@ bool FGuiyangRemoteLobbyCodecTest::RunTest(const FString& Parameters)
         FGuiyangRemoteLobbyCodec::NormalizeBaseUrl(TEXT("http://192.168.1.8:18080"), BaseUrl));
     TestFalse(TEXT("带用户信息的 URL 必须拒绝"),
         FGuiyangRemoteLobbyCodec::NormalizeBaseUrl(TEXT("https://user@lobby.example.com"), BaseUrl));
+
+    FGuiyangPlatformEndpointSettings EdgeSettings;
+    EdgeSettings.ApiBaseUrl = TEXT("https://api.example.com");
+    TestEqual(
+        TEXT("大厅外部路径必须增加 /api 前缀"),
+        EdgeSettings.BuildApiUrl(TEXT("/v1/lobby/bootstrap")),
+        FString(TEXT("https://api.example.com/api/v1/lobby/bootstrap")));
+    TestEqual(
+        TEXT("重连路径必须映射到外部 game 分组"),
+        EdgeSettings.BuildApiUrl(TEXT("/v1/reconnect/route")),
+        FString(TEXT("https://api.example.com/api/v1/game/reconnect/route")));
+    EdgeSettings.bUsingLegacyDirectEndpoint = true;
+    TestEqual(
+        TEXT("旧直连回滚路径必须保持原 v1 契约"),
+        EdgeSettings.BuildApiUrl(TEXT("/v1/reconnect/route")),
+        FString(TEXT("https://api.example.com/v1/reconnect/route")));
 
     FMahjongCreateRoomRequest Request;
     Request.RoundCount = 8;

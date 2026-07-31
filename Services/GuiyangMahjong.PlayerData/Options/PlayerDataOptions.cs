@@ -19,12 +19,21 @@ public sealed class PlayerDataOptions
     public string AdminCommandToken { get; init; } = string.Empty;
     public string ChatGatewayToken { get; init; } = string.Empty;
     public string MonitoringToken { get; init; } = string.Empty;
-    [Required, Url] public string AuthBaseUrl { get; init; } =
-        "http://127.0.0.1:18082";
-    public string AuthMonitoringToken { get; init; } = string.Empty;
+    /// <summary>阶段 8.4 Community 权威聊天授权地址；旧 PlayerData URL 只负责兼容转发。</summary>
+    [Required, Url] public string CommunityBaseUrl { get; init; } = "http://127.0.0.1:18087";
+    public string CommunityLegacyChatToken { get; init; } = string.Empty;
     [Required, Url] public string AdminProjectionBaseUrl { get; init; } =
         "http://127.0.0.1:18083";
     public string AdminEvidenceIngestionToken { get; init; } = string.Empty;
+    /// <summary>阶段8.2 GameData 回放索引兼容写入口；PlayerData 不再持久化 Replay 类型。</summary>
+    [Required, Url] public string GameDataBaseUrl { get; init; } = "http://127.0.0.1:18085";
+    /// <summary>仅授权写入 GameData 旧回放索引的用途隔离凭据。</summary>
+    public string GameDataLegacyReplayToken { get; init; } = string.Empty;
+    /// <summary>阶段 8.3 Economy 权威入口；旧 PlayerData URL 仅在兼容期转发。</summary>
+    [Required, Url] public string EconomyBaseUrl { get; init; } = "http://127.0.0.1:18086";
+    public string EconomySourceToken { get; init; } = string.Empty;
+    public string EconomyAdminToken { get; init; } = string.Empty;
+    public string EconomyMonitoringToken { get; init; } = string.Empty;
     public bool ProjectionEnabled { get; init; }
     [Range(100, 60000)] public int ProjectionPollMilliseconds { get; init; } =
         1000;

@@ -1,0 +1,28 @@
+{
+  "name": "MAHJONG_PLATFORM_EVENTS",
+  "description": "贵阳麻将首批版本化平台事件",
+  "subjects": [
+    "identity.session.created.v1",
+    "identity.session.revoked.v1",
+    "room.created.v1",
+    "room.state.changed.v1",
+    "allocation.requested.v1",
+    "gameserver.allocated.v1",
+    "gameserver.ready.v1",
+    "player.connected.v1",
+    "player.disconnected.v1",
+    "match.started.v1",
+    "match.finished.v1",
+    "settlement.committed.v1",
+    "room.terminated.v1",
+    "configuration.published.v1",
+    "platform.failed.v1"
+  ],
+  "retention": "limits",
+  "storage": "file",
+  "num_replicas": 3,
+  "max_age": 1209600000000000,
+  "max_bytes": 10737418240,
+  "max_msg_size": 1048576,
+  "duplicate_window": 600000000000
+}

@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.Json;
 using GuiyangMahjong.Lobby.Domain;
 using GuiyangMahjong.Lobby.Options;
+using GuiyangMahjong.Lobby.Services;
 using Microsoft.Extensions.Options;
 
 namespace GuiyangMahjong.Lobby.Security;
@@ -17,8 +18,7 @@ public interface IJoinTicketIssuer
     /// 调用前房间必须已分配且玩家具备加入资格。
     /// </summary>
     (string Ticket, DateTimeOffset ExpiresAtUtc) Issue(
-        string playerId,
-        string displayName,
+        PlayerIdentity player,
         LobbyRoom room,
         string serverInstanceId);
 }
@@ -36,19 +36,53 @@ public sealed class HmacJoinTicketIssuer(
 
     /// <inheritdoc/>
     public (string Ticket, DateTimeOffset ExpiresAtUtc) Issue(
-        string playerId,
-        string displayName,
+        PlayerIdentity player,
         LobbyRoom room,
         string serverInstanceId)
     {
-        var expiresAt = timeProvider.GetUtcNow().AddSeconds(30);
+        var issuedAt = timeProvider.GetUtcNow();
+        var expiresAt = issuedAt.AddSeconds(30);
+        var seat = room.Seats.SingleOrDefault(item =>
+            string.Equals(item.PlayerId, player.PlayerId, StringComparison.Ordinal));
+        if (seat is null)
+        {
+            throw new InvalidOperationException("Join Ticket 只能为已分配座位的房间成员签发。");
+        }
+        var allocatedProtocol = (room.Route?.ProtocolVersion ?? 0)
+            .ToString(System.Globalization.CultureInfo.InvariantCulture);
+        var legacyContext = player.ProtocolVersion == "0"
+                            && string.Equals(player.ClientBuild, "legacy", StringComparison.OrdinalIgnoreCase);
+        if ((!string.Equals(player.ProtocolVersion, allocatedProtocol, StringComparison.Ordinal)
+                || string.Equals(player.ClientBuild, "legacy", StringComparison.OrdinalIgnoreCase))
+            && !(legacyContext && options.Value.AllowLegacyClientVersionContext))
+        {
+            throw new LobbyOperationException(
+                LobbyErrorCode.VersionMismatch,
+                "客户端版本上下文与已分配服务器不兼容",
+                StatusCodes.Status426UpgradeRequired);
+        }
+        var effectiveClientBuild = legacyContext ? room.BuildVersion : player.ClientBuild;
+        var effectiveProtocolVersion = legacyContext
+            ? room.Route?.ProtocolVersion ?? 0
+            : int.Parse(player.ProtocolVersion, System.Globalization.CultureInfo.InvariantCulture);
+        // ticketId 用于跨日志关联，nonce 用于一次性消费；两者不能互相替代。
         var payload = Base64Url(JsonSerializer.SerializeToUtf8Bytes(new
         {
-            playerId,
-            displayName,
+            ticketId = Guid.NewGuid().ToString("N"),
+            playerId = player.PlayerId,
+            displayName = player.DisplayName,
             roomId = room.RoomId,
             matchId = room.MatchId,
+            seatId = seat.SeatIndex,
+            sessionId = player.SessionId,
+            sessionEpoch = player.SessionEpoch,
+            securityEpoch = player.SecurityEpoch,
             serverInstanceId,
+            roomEpoch = room.RoomEpoch,
+            clientBuild = effectiveClientBuild,
+            protocolVersion = effectiveProtocolVersion,
+            ruleSetVersion = room.RuleSetVersion,
+            issuedAtUnixSeconds = issuedAt.ToUnixTimeSeconds(),
             expiresAtUnixSeconds = expiresAt.ToUnixTimeSeconds(),
             nonce = Guid.NewGuid().ToString("N")
         }));

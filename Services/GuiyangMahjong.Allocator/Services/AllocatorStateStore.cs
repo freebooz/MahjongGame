@@ -35,7 +35,18 @@ public sealed record PersistedGameServerInstance(
     bool FailureNotified,
     DateTimeOffset? FailureNotificationAttemptedAtUtc,
     bool PortReleased,
-    string? OrchestratorResourceName = null);
+    string? OrchestratorResourceName = null,
+    long RoomEpoch = 1,
+    string? AllocationId = null,
+    string? IdempotencyKey = null,
+    string? RequestFingerprint = null,
+    string Provider = "LocalProcess",
+    string GameType = "guiyang-zhua-ji",
+    string Region = "local",
+    string RuleSetVersion = "guiyang-zhuoji-v1",
+    string ProtocolVersion = "1",
+    int RequestedCapacity = 4,
+    long FencingToken = 1);
 
 /// <summary>Allocator 状态文件根文档；SchemaVersion 控制兼容读取，更新时间统一为 UTC。</summary>
 public sealed record AllocatorStateDocument(

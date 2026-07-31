@@ -8,6 +8,8 @@ public sealed class LobbyOptions
     public const string SectionName = "Lobby";
 
     [Range(1, 1)] public int ProtocolVersion { get; init; } = 1;
+    /// <summary>仅供旧直连自动化/紧急回滚；生产 false 时没有网关版本上下文就不得签发 Join Ticket。</summary>
+    public bool AllowLegacyClientVersionContext { get; init; }
     [Range(10, 1000)] public int RoomCodeRetryLimit { get; init; } = 100;
     [Range(1, 4)] public int MaximumPlayersPerRoom { get; init; } = 4;
     [Range(1, 20)] public int PasswordFailureLimit { get; init; } = 5;
@@ -18,6 +20,11 @@ public sealed class LobbyOptions
     [Range(60, 604800)] public int IdempotencyTtlSeconds { get; init; } = 86400;
     [Range(5, 120)] public int IdempotencyLockSeconds { get; init; } = 30;
     [MinLength(32)] public string TokenSigningKey { get; init; } = string.Empty;
+    /// <summary>
+    /// Auth 密钥轮换期间仍可验证的旧 HMAC 密钥。数组只通过密钥管理系统或环境变量注入，
+    /// 不得写入日志；完成最长 Access Token 生命周期的重叠窗口后应删除。
+    /// </summary>
+    public string[] PreviousTokenValidationKeys { get; init; } = [];
     [MinLength(32)] public string JoinTicketSigningKey { get; init; } = string.Empty;
     [MinLength(32)] public string InternalServiceToken { get; init; } = string.Empty;
     public string MonitoringReadOnlyToken { get; init; } = string.Empty;
@@ -36,6 +43,40 @@ public sealed class LobbyOptions
     [Required] public LobbyPersistenceOptions Persistence { get; init; } = new();
     [Required] public AllocatorClientOptions Allocator { get; init; } = new();
     [Required] public TopologyRegistrationOptions TopologyRegistration { get; init; } = new();
+    /// <summary>基础匹配与重连窗口配置；环境变量使用 Lobby__Matchmaking__* 覆盖。</summary>
+    [Required] public MatchmakingOptions Matchmaking { get; init; } = new();
+    /// <summary>阶段 7 结算迁移配置；生产切流后使用 GameData，Legacy 仅作为受控回滚入口。</summary>
+    [Required] public SettlementIntegrationOptions Settlement { get; init; } = new();
+}
+
+/// <summary>Lobby 与 GameData 的职责切换配置；不会改变玩家 HTTP 或 UE 游戏网络路径。</summary>
+public sealed class SettlementIntegrationOptions
+{
+    /// <summary>Legacy、Shadow 或 GameData；GameData 模式禁止旧 Lobby 最终结算写入。</summary>
+    [Required] public string Mode { get; init; } = "Legacy";
+    /// <summary>GameData 内网地址，Shadow 对比和正式切流共用。</summary>
+    [Required, Url] public string GameDataBaseUrl { get; init; } = "http://127.0.0.1:18085";
+    /// <summary>GameData 调用 Lobby 权威校验/关闭回调的用途隔离凭据。</summary>
+    public string AuthorityToken { get; init; } = string.Empty;
+}
+
+/// <summary>
+/// LobbyControl 内置基础匹配配置。
+/// 当前只支持单地域普通队列；复杂段位、赛事和跨区扩圈不属于阶段 4。
+/// </summary>
+public sealed class MatchmakingOptions
+{
+    /// <summary>活动匹配票据有效期，单位秒；过期后 PostgreSQL 权威记录转为 Expired。</summary>
+    [Range(10, 3600)] public int TicketTtlSeconds { get; init; } = 120;
+
+    /// <summary>DS 路由丢失后允许玩家查询恢复上下文的窗口，单位秒。</summary>
+    [Range(15, 600)] public int ReconnectionWindowSeconds { get; init; } = 120;
+
+    /// <summary>
+    /// 是否允许初始 RoomEpoch 接受未携带 Epoch 的旧版 DS。
+    /// 重新分配后的 Epoch 始终要求精确匹配，此开关不能放宽 fencing。
+    /// </summary>
+    public bool AllowLegacyInitialEpoch { get; init; } = true;
 }
 
 /// <summary>Lobby 向 Admin 动态拓扑目录刷新短租约所需的最小配置；注册凭据不得复用监控读取凭据。</summary>
@@ -61,6 +102,16 @@ public sealed class AllocatorClientOptions
     public string ServiceToken { get; init; } = string.Empty;
     [Range(1, 30)] public int TimeoutSeconds { get; init; } = 5;
     [Required] public string GameServerBuildVersion { get; init; } = "unreal-linux";
+    /// <summary>Allocator Fleet/Provider 调度使用的稳定游戏类型，不得来自客户端输入。</summary>
+    [Required] public string GameType { get; init; } = "guiyang-zhua-ji";
+    /// <summary>期望部署地域；必须与 Allocation Service 的可用 Provider 容量标签一致。</summary>
+    [Required] public string Region { get; init; } = "local";
+    /// <summary>服务端规则集版本，用于阻止错误规则镜像承载房间。</summary>
+    [Required] public string RuleSetVersion { get; init; } = "guiyang-zhuoji-v1";
+    /// <summary>Dedicated Server 网络协议版本；不等同于 HTTP API 版本。</summary>
+    [Required] public string ProtocolVersion { get; init; } = "1";
+    /// <summary>单实例请求席位容量；当前贵阳麻将有效范围为 1 至 4。</summary>
+    [Range(1, 4)] public int RequestedCapacity { get; init; } = 4;
 }
 
 /// <summary>

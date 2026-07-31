@@ -54,7 +54,7 @@ source revision.
   control history. Those fields are disclosed independently according to the
   operator's duties.
 - Separate read-only credentials for Admin-to-Lobby and Admin-to-Allocator calls.
-- Independent Auth, Lobby, Allocator, and PlayerData hard timeouts with
+- Independent Auth, Lobby, and Allocator hard timeouts with
   cancellation propagation, bounded/versioned last-success snapshots, source
   circuit breakers, safe Chinese error summaries, and low-cardinality timeout
   metrics. Room and player reads return partial data instead of failing the
@@ -163,13 +163,9 @@ Admin__MonitoringReliability__MaxSnapshotEntries=128
 Admin__Auth__TimeoutSeconds=5
 Admin__Lobby__TimeoutSeconds=5
 Admin__Allocators__0__TimeoutSeconds=5
-Admin__PlayerData__Enabled=true
-Admin__PlayerData__BaseUrl=http://mahjong-player-data:8080
-Admin__PlayerData__MonitoringToken=<dedicated PlayerData monitoring token>
-Admin__PlayerData__TimeoutSeconds=5
 Admin__Wallet__Enabled=true
-Admin__Wallet__BaseUrl=http://mahjong-player-data:8080
-Admin__Wallet__CommandToken=<dedicated PlayerData admin command token>
+Admin__Wallet__BaseUrl=http://mahjong-economy:8080
+Admin__Wallet__CommandToken=<dedicated Economy admin command token>
 Admin__Principals__0__OperatorId=<stable enterprise operator id>
 Admin__Principals__0__AccessToken=<32+ operator token>
 Admin__Principals__0__Roles__0=room.viewer
@@ -251,10 +247,9 @@ monitoring credentials can only read explicitly scoped internal monitoring
 endpoints; attempts to use them for mutation operations are rejected.
 
 Account state and player controls are sourced from the Auth control ledger.
-PlayerData is the authoritative append-only wallet/reward ledger and the
-ingress boundary for sanitized payment, report, and replay source events.
-Admin stores only their monitoring projections. Chat content remains outside
-Admin; the PlayerData chat policy gateway checks Auth mute state and fails
+Economy is the authoritative append-only wallet/reward ledger; GameData owns
+replay evidence and Admin/TrustSafety owns sanitized investigation projections.
+Chat content remains outside Admin; the Community chat policy gateway checks Auth mute state and fails
 closed before a chat transport publishes a message.
 
 The deployment configuration keeps management disabled by default. PostgreSQL

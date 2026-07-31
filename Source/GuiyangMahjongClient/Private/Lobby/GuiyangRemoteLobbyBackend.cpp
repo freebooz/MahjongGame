@@ -434,11 +434,14 @@ namespace GuiyangRemoteLobbyPrivate
             FResponseHandler&& Handler) const
         {
             const TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = FHttpModule::Get().CreateRequest();
-            Request->SetURL(Settings.BaseUrl + Path);
+            Request->SetURL(
+                Settings.PlatformEndpoints.BuildApiUrl(Path));
             Request->SetVerb(Verb);
             Request->SetHeader(TEXT("Accept"), TEXT("application/json"));
             Request->SetHeader(TEXT("Authorization"), TEXT("Bearer ") + Token);
-            Request->SetHeader(TEXT("X-Request-Id"), RequestId);
+            Settings.PlatformEndpoints.ApplyStandardHeaders(
+                Request.Get(),
+                RequestId);
             if (bIdempotent) Request->SetHeader(TEXT("Idempotency-Key"), RequestId);
             if (!Body.IsEmpty())
             {
@@ -516,25 +519,11 @@ namespace GuiyangRemoteLobbyPrivate
 
 bool FGuiyangRemoteLobbyCodec::NormalizeBaseUrl(const FString& Value, FString& OutBaseUrl)
 {
-    // 仅允许 HTTP(S) 根地址并移除尾斜杠，禁止把用户输入直接拼成任意协议 URL。
-    OutBaseUrl = Value.TrimStartAndEnd();
-    while (OutBaseUrl.EndsWith(TEXT("/"))) OutBaseUrl.LeftChopInline(1);
-    const bool bHttps = OutBaseUrl.StartsWith(TEXT("https://"), ESearchCase::IgnoreCase);
-    const bool bHttp = OutBaseUrl.StartsWith(TEXT("http://"), ESearchCase::IgnoreCase);
-    if (!bHttps && !bHttp) return false;
-    const FString Authority = OutBaseUrl.RightChop(bHttps ? 8 : 7);
-    if (Authority.IsEmpty() || Authority.Contains(TEXT("/")) || Authority.Contains(TEXT("?"))
-        || Authority.Contains(TEXT("#")) || Authority.Contains(TEXT("@")) || Authority.Contains(TEXT(" ")))
-        return false;
-    if (bHttp)
-    {
-        const FString Host = Authority.ToLower();
-        const bool bLoopback = Host == TEXT("localhost") || Host.StartsWith(TEXT("localhost:"))
-            || Host == TEXT("127.0.0.1") || Host.StartsWith(TEXT("127.0.0.1:"))
-            || Host == TEXT("[::1]") || Host.StartsWith(TEXT("[::1]:"));
-        if (!bLoopback) return false;
-    }
-    return true;
+    // 测试入口与生产统一使用同一 HTTPS/loopback HTTP 校验，防止两套规则长期漂移。
+    return FGuiyangPlatformEndpointSettings::NormalizeHttpBaseUrl(
+        Value,
+        false,
+        OutBaseUrl);
 }
 
 FString FGuiyangRemoteLobbyCodec::SerializeCreateRoom(const FMahjongCreateRoomRequest& Request)

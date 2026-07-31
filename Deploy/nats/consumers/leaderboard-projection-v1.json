@@ -1,0 +1,12 @@
+{
+  "durable_name": "leaderboard-projection-v1",
+  "name": "leaderboard-projection-v1",
+  "description": "排行榜投影；SettlementCommitted 重投不会重复加分",
+  "ack_policy": "explicit",
+  "filter_subject": "settlement.committed.v1",
+  "ack_wait": 30000000000,
+  "max_deliver": 12,
+  "backoff": [1000000000, 5000000000, 30000000000, 120000000000],
+  "max_ack_pending": 512
+}
+

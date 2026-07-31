@@ -11,13 +11,20 @@ public static partial class AdminEndpoints
     public static void MapAdminEndpoints(this WebApplication app)
     {
         MapInfrastructureEndpoints(app);
-        var api = app.MapGroup("/admin/v1");
+        MapOperationsGroup(app.MapGroup("/admin/v1"));
+        // 新路径明确表达 BFF 后方的受控 Operations API；旧路径保留一个兼容周期，响应契约完全一致。
+        MapOperationsGroup(app.MapGroup("/admin/operations/v1"));
+    }
+
+    /// <summary>把同一组受控运营能力映射到新旧前缀，避免复制处理器后产生授权策略漂移。</summary>
+    private static void MapOperationsGroup(RouteGroupBuilder api)
+    {
         MapIdentityEndpoints(api);
         MapMonitoringEndpoints(api);
         MapPlayerEndpoints(api);
         MapActionEndpoints(api);
         MapInvestigationEndpoints(api);
         MapAuditEndpoints(api);
+        MapConfigurationEndpoints(api);
     }
 }
-

@@ -1,0 +1,32 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mahjong-configuration
+  labels: {app: mahjong-configuration, config-version: {{ .Values.configuration.configVersion | quote }}}
+spec:
+  replicas: {{ .Values.configuration.replicas }}
+  selector: {matchLabels: {app: mahjong-configuration}}
+  template:
+    metadata:
+      labels: {app: mahjong-configuration, config-version: {{ .Values.configuration.configVersion | quote }}}
+    spec:
+      automountServiceAccountToken: false
+      securityContext: {runAsNonRoot: true, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: configuration
+          image: {{ printf "%s@%s" .Values.configuration.image .Values.configuration.digest | quote }}
+          ports: [{name: http, containerPort: 8080}]
+          envFrom:
+            - configMapRef: {name: mahjong-services}
+            - secretRef: {name: mahjong-secrets}
+          readinessProbe: {httpGet: {path: /health/ready, port: http}}
+          livenessProbe: {httpGet: {path: /health/live, port: http}}
+          resources: {{ toYaml .Values.configuration.resources | nindent 12 }}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: mahjong-configuration}
+spec:
+  selector: {app: mahjong-configuration}
+  ports: [{name: http, port: 8080, targetPort: http}]

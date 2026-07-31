@@ -1,8 +1,10 @@
 using System.Security.Claims;
+using System.Net;
 using GuiyangMahjong.Admin.Options;
 using GuiyangMahjong.Admin.Security;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace GuiyangMahjong.Admin.Tests;
 
@@ -12,13 +14,12 @@ public sealed class AdminEnterpriseAuthenticationTests
     public async Task EnterpriseIdentityRequiresMfaAndMapsOnlyKnownRoles()
     {
         AdminPrincipal? resolved = null;
-        var middleware = new AdminAuthenticationMiddleware(
+        var middleware = CreateMiddleware(
             context =>
             {
                 resolved = AdminPrincipalContext.Get(context);
                 return Task.CompletedTask;
-            },
-            CreateOptions());
+            });
         var context = CreateContext(
             new Claim("sub", "enterprise-operator"),
             new Claim("roles", "player.viewer player.operator unknown.role"));
@@ -45,9 +46,7 @@ public sealed class AdminEnterpriseAuthenticationTests
     [Fact]
     public async Task EnterpriseIdentityRejectsTokenOlderThanRevocationSla()
     {
-        var middleware = new AdminAuthenticationMiddleware(
-            _ => Task.CompletedTask,
-            CreateOptions());
+        var middleware = CreateMiddleware(_ => Task.CompletedTask);
         var context = CreateContext(
             new Claim("sub", "departed-operator"),
             new Claim("roles", "player.viewer"),
@@ -68,6 +67,33 @@ public sealed class AdminEnterpriseAuthenticationTests
         await middleware.InvokeAsync(context);
 
         Assert.Equal(StatusCodes.Status401Unauthorized, context.Response.StatusCode);
+    }
+
+    [Fact]
+    public async Task BrowserSessionCannotOutliveEnterpriseCredential()
+    {
+        var options = CreateOptions();
+        var sessions = new AdminBrowserSessionService(
+            new InMemoryAdminBrowserSessionStore(),
+            options,
+            TimeProvider.System,
+            NullLogger<AdminBrowserSessionService>.Instance);
+        var context = new DefaultHttpContext();
+        context.Connection.RemoteIpAddress = IPAddress.Parse("10.20.30.40");
+        context.Request.Headers["X-Admin-Device-Id"] = "enterprise-device-a";
+        var credentialExpiry = DateTimeOffset.UtcNow.AddSeconds(30);
+        context.Items["GuiyangMahjong.AdminCredentialExpiresAtUtc"] = credentialExpiry;
+
+        var created = await sessions.CreateAsync(
+            new AdminPrincipal(
+                "enterprise-operator",
+                new HashSet<string>([AdminRoles.RoomViewer], StringComparer.Ordinal),
+                MfaSatisfied: true),
+            context,
+            CancellationToken.None);
+
+        Assert.True(created.Record.ExpiresAtUtc <= credentialExpiry);
+        Assert.True(created.Record.ExpiresAtUtc > created.Record.CreatedAtUtc);
     }
 
     private static DefaultHttpContext CreateContext(
@@ -102,4 +128,16 @@ public sealed class AdminEnterpriseAuthenticationTests
                 RequireMfa = true
             }
         });
+
+    /// <summary>为中间件提供进程内 BFF 会话依赖，使企业 Bearer 单元测试不依赖数据库。</summary>
+    private static AdminAuthenticationMiddleware CreateMiddleware(RequestDelegate next)
+    {
+        var options = CreateOptions();
+        var sessions = new AdminBrowserSessionService(
+            new InMemoryAdminBrowserSessionStore(),
+            options,
+            TimeProvider.System,
+            NullLogger<AdminBrowserSessionService>.Instance);
+        return new AdminAuthenticationMiddleware(next, options, sessions);
+    }
 }

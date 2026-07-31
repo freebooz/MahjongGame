@@ -1,0 +1,19 @@
+# PlayerData退役必须在停写窗口执行；该声明只描述流程，不包含任何生产凭据。
+stage: "8.6"
+owner: "platform-database"
+# 冻结而不立即删除历史Schema，保证审计保留与紧急回滚能力。
+mode: "stop-write-freeze-retain"
+preconditions:
+  - "兼容入口调用量在约定观察窗口内为零"
+  - "stage-8.6-player-data-decommission-validation.sql返回零行"
+  - "PlayerData projection_outbox无未完成记录"
+steps:
+  - "停止PlayerData实例并关闭旧入口流量"
+  - "执行stage-8.6-player-data-decommission.sql撤销运行身份"
+  - "部署不包含PlayerData的新编排和网关配置"
+  - "观察Economy、GameData、Community和Admin错误率"
+rollback:
+  - "恢复上一版本编排和旧镜像"
+  - "从密钥系统重新注入PlayerData登录密码"
+  - "执行stage-8.6-player-data-decommission-rollback.sql"
+retention: "历史Schema保持只读；物理删除必须在保留期届满后单独审批"

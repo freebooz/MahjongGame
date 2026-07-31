@@ -3,13 +3,14 @@
  * 这里只注册 DOM 事件和启动策略，业务请求、渲染和实时同步分别位于独立 TypeScript 模块。
  */
 import {
-  byId,configureRefreshHandler,resetPage,setConnection,state
+  byId,configureRefreshHandler,establishBrowserSession,resetPage,setConnection,state
 } from "./admin-console-state";
 import {refresh} from "./admin-console-dashboard";
 import {
   submitAction,submitApproval,updateActionParameterFields
 } from "./admin-console-management";
 import {connectRealtime} from "./admin-console-realtime";
+import {disposeConfigurationGovernance,initializeConfigurationGovernance} from './configuration-governance';
 
 /**
  * 完成首轮数据加载后选择实时推送或兼容轮询通道。
@@ -34,8 +35,12 @@ async function bootstrapMonitoring(){
  */
 export function initializeAdminConsole(){
   configureRefreshHandler(refresh);
-  byId("credentialButton").onclick=()=>{byId("credential").value=state.token;byId("credentialDialog").showModal();};
-  byId("saveCredential").onclick=()=>{state.token=byId("credential").value.trim();setTimeout(bootstrapMonitoring);};
+  byId("credentialButton").onclick=()=>{byId("credential").value="";byId("credentialDialog").showModal();};
+  byId("saveCredential").onclick=async()=>{
+    const input=byId("credential"),token=input.value.trim();input.value="";
+    try{await establishBrowserSession(token);await bootstrapMonitoring();}
+    catch(error){state.authenticated=false;setConnection(false,error.message);}
+  };
   byId("refreshButton").onclick=refresh;
   byId("lifecycle").onchange=()=>{resetPage("rooms");void refresh();};
   for(const filterId of ["regionFilter","clusterFilter","lobbyFilter","nodeFilter"]){
@@ -48,6 +53,7 @@ export function initializeAdminConsole(){
   byId("actionSubmit").onclick=submitAction;
   byId("actionType").onchange=updateActionParameterFields;
   byId("approvalSubmit").onclick=submitApproval;
+  initializeConfigurationGovernance();
   void bootstrapMonitoring();
 }
 
@@ -56,6 +62,7 @@ export function disposeAdminConsole(){
   if(state.timer)clearInterval(state.timer);
   state.timer=null;
   state.eventAbort?.abort();state.eventAbort=null;
+  disposeConfigurationGovernance();
 }
 
 

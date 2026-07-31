@@ -44,12 +44,14 @@ public static partial class AdminEndpoints
             IPlayerAssetOperationStore assetOperationStore,
             IPlayerEvidenceStore evidenceStore,
             IAuditArchiveOutboxStore auditArchiveStore,
+            IAdminBrowserSessionStore browserSessionStore,
             CancellationToken cancellationToken) =>
             await store.CheckHealthAsync(cancellationToken)
             && await caseStore.CheckHealthAsync(cancellationToken)
             && await assetOperationStore.CheckHealthAsync(cancellationToken)
             && await evidenceStore.CheckHealthAsync(cancellationToken)
             && await auditArchiveStore.CheckHealthAsync(cancellationToken)
+            && await browserSessionStore.CheckHealthAsync(cancellationToken)
                 ? Results.Ok(new { status = "ready", mode = "monitored-management" })
                 : Results.Json(
                     new { status = "not-ready", managementStore = "unavailable" },
@@ -77,4 +79,3 @@ public static partial class AdminEndpoints
         return valid;
     }
 }
-

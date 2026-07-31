@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <!-- Economy 独占资产、奖励和交易流水 Schema；构建产物必须使用隔离目录。 -->
+    <MahjongSchemaServiceName>Economy</MahjongSchemaServiceName>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Npgsql" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\GuiyangMahjong.Observability\GuiyangMahjong.Observability.csproj" />
+  </ItemGroup>
+</Project>

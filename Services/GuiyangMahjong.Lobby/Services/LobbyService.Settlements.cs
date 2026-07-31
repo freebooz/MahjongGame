@@ -48,6 +48,15 @@ public sealed partial class LobbyService
         bool trustedRecovery,
         CancellationToken cancellationToken)
     {
+        if (!trustedRecovery
+            && string.Equals(options.Settlement.Mode, "GameData", StringComparison.Ordinal))
+        {
+            // 正式切流后旧入口不再持久化结果；DS 必须使用 GameData 强信封，回滚时显式改回 Legacy。
+            throw new LobbyOperationException(
+                LobbyErrorCode.VersionMismatch,
+                "最终结算已迁移到 GameData，请升级 Dedicated Server",
+                StatusCodes.Status426UpgradeRequired);
+        }
         ValidateMatchResult(matchId, report);
         var room = await store.GetRoomByIdAsync(report.RoomId, cancellationToken)
             ?? throw new LobbyOperationException(
@@ -78,9 +87,11 @@ public sealed partial class LobbyService
         var expectedPlayers = room.PlayerIds.Order(StringComparer.Ordinal).ToArray();
         var reportedPlayers = report.Players.Select(player => player.PlayerId).Order(StringComparer.Ordinal).ToArray();
         if (report.CompletedRounds != room.RoundCount
-            || !expectedPlayers.SequenceEqual(reportedPlayers, StringComparer.Ordinal))
+            || !expectedPlayers.SequenceEqual(reportedPlayers, StringComparer.Ordinal)
+            || !ShuffleFairnessVerifier.Verify(report, room))
         {
-            throw Invalid("结算局数或玩家集合与权威房间不一致");
+            // 公平性证明与结算结果处于同一事务门禁；证明无效时不得先保存结果再异步补审。
+            throw Invalid("结算局数、玩家集合或洗牌公平性证明与权威房间不一致");
         }
 
         var closedRoom = room.Lifecycle == RoomLifecycle.Closed
@@ -181,10 +192,12 @@ public sealed partial class LobbyService
             || report.Players.Any(player => string.IsNullOrWhiteSpace(player.PlayerId)
                 || player.PlayerId.Length > 80
                 || player.SeatIndex is < 0 or > 3
-                || player.Rank is < 1 or > 4))
+                || player.Rank is < 1 or > 4)
+            || report.ShuffleProofs is null
+            || report.ShuffleProofs.Length != report.CompletedRounds
+            || string.IsNullOrWhiteSpace(report.EventChainDigest))
         {
             throw Invalid("结算结果格式无效");
         }
     }
 }
-

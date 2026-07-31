@@ -11,6 +11,73 @@ namespace GuiyangMahjong.Architecture.Tests;
 /// </summary>
 public sealed class ProjectArchitectureTests
 {
+    /// <summary>阶段8.6保证PlayerData不再进入解决方案、镜像矩阵、网关路由或运行编排。</summary>
+    [Fact]
+    public void PlayerDataIsAbsentFromAllRuntimeEntryPoints()
+    {
+        var root = FindProjectRoot();
+        var solution = File.ReadAllText(Path.Combine(root, "Services", "GuiyangMahjong.Services.slnx"));
+        var compose = File.ReadAllText(Path.Combine(root, "Deploy", "linux", "compose.yaml"));
+        var gateway = File.ReadAllText(Path.Combine(root, "Services", "Apps",
+            "GuiyangMahjong.EdgeGateway", "appsettings.json"));
+        var workflow = File.ReadAllText(Path.Combine(root, ".github", "workflows", "services-ci.yml"));
+        Assert.DoesNotContain("GuiyangMahjong.PlayerData", solution, StringComparison.Ordinal);
+        Assert.DoesNotContain("  player-data:", compose, StringComparison.Ordinal);
+        Assert.DoesNotContain("player-data-v1", gateway, StringComparison.Ordinal);
+        Assert.DoesNotContain("GuiyangMahjong.PlayerData/Dockerfile", workflow, StringComparison.Ordinal);
+        var grants = File.ReadAllText(Path.Combine(root, "Deploy", "postgres", "least-privilege", "002_grants.sql"));
+        Assert.Contains("REVOKE ALL ON ALL TABLES IN SCHEMA player_data", grants, StringComparison.Ordinal);
+    }
+    /// <summary>阶段 8.4 保证聊天授权由 Community 承担，PlayerData 仅保留无策略逻辑的兼容转发。</summary>
+    [Fact]
+    public void CommunityOwnsChatAuthorization_AndPlayerDataNoLongerQueriesIdentity()
+    {
+        var root = FindProjectRoot();
+        var communityProject = File.ReadAllText(Path.Combine(root, "Services", "Apps",
+            "GuiyangMahjong.Community", "GuiyangMahjong.Community.csproj"));
+        Assert.DoesNotContain("GuiyangMahjong.Auth", communityProject, StringComparison.Ordinal);
+        Assert.DoesNotContain("GuiyangMahjong.PlayerData", communityProject, StringComparison.Ordinal);
+        var endpoints = File.ReadAllText(Path.Combine(root, "Services", "GuiyangMahjong.PlayerData",
+            "Api", "PlayerDataEndpoints.cs"));
+        Assert.Contains("ILegacyCommunityChatClient", endpoints, StringComparison.Ordinal);
+        var services = File.ReadAllText(Path.Combine(root, "Services", "GuiyangMahjong.PlayerData",
+            "Services", "PlayerDataServices.cs"));
+        Assert.DoesNotContain("HttpChatPolicyClient", services, StringComparison.Ordinal);
+        Assert.DoesNotContain("/internal/monitoring/players/", services, StringComparison.Ordinal);
+    }
+    /// <summary>阶段 8.3 保证 Economy 是资产唯一实现边界，且旧 PlayerData API 只依赖兼容客户端。</summary>
+    [Fact]
+    public void EconomyOwnsWalletWrites_AndPlayerDataUsesAdapterOnly()
+    {
+        var root = FindProjectRoot();
+        var economyProject = File.ReadAllText(Path.Combine(root, "Services", "Apps",
+            "GuiyangMahjong.Economy", "GuiyangMahjong.Economy.csproj"));
+        Assert.DoesNotContain("GuiyangMahjong.PlayerData", economyProject, StringComparison.Ordinal);
+        Assert.DoesNotContain("GuiyangMahjong.Admin", economyProject, StringComparison.Ordinal);
+        var endpoints = File.ReadAllText(Path.Combine(root, "Services", "GuiyangMahjong.PlayerData",
+            "Api", "PlayerDataEndpoints.cs"));
+        Assert.Contains("ILegacyEconomyClient", endpoints, StringComparison.Ordinal);
+        Assert.DoesNotContain("store.RecordRewardClaimAsync", endpoints, StringComparison.Ordinal);
+        Assert.DoesNotContain("store.ApplyWalletOperationAsync", endpoints, StringComparison.Ordinal);
+        var schema = File.ReadAllText(Path.Combine(root, "Services", "GuiyangMahjong.PlayerData", "Storage", "schema.sql"));
+        Assert.Contains("reject_legacy_economy_write", schema, StringComparison.Ordinal);
+    }
+    /// <summary>阶段 7 GameData 必须保持模块目录与跨服务依赖边界，不得引用 Lobby、PlayerData 或 Admin 实现。</summary>
+    [Fact]
+    public void GameData_HasRequiredModules_AndNoBusinessImplementationReferences()
+    {
+        var root = Path.Combine(FindProjectRoot(), "Services", "Apps", "GuiyangMahjong.GameData");
+        foreach (var module in new[]
+                 { "Settlement", "GameRecords", "ReplayEvidence", "Leaderboards", "Administration", "Infrastructure" })
+            Assert.True(Directory.Exists(Path.Combine(root, module)), $"GameData 缺少职责模块目录：{module}");
+        var project = XDocument.Load(Path.Combine(root, "GuiyangMahjong.GameData.csproj"));
+        var references = project.Descendants("ProjectReference")
+            .Select(node => node.Attribute("Include")?.Value ?? string.Empty).ToArray();
+        Assert.DoesNotContain(references, value => value.Contains("GuiyangMahjong.Lobby", StringComparison.Ordinal));
+        Assert.DoesNotContain(references, value => value.Contains("GuiyangMahjong.PlayerData", StringComparison.Ordinal));
+        Assert.DoesNotContain(references, value => value.Contains("GuiyangMahjong.Admin", StringComparison.Ordinal));
+    }
+
     /// <summary>
     /// 参与依赖方向约束的业务服务名称；Observability 等横切基础设施不在此集合。
     /// </summary>
@@ -19,12 +86,11 @@ public sealed class ProjectArchitectureTests
         "GuiyangMahjong.Admin",
         "GuiyangMahjong.Allocator",
         "GuiyangMahjong.Auth",
-        "GuiyangMahjong.Lobby",
-        "GuiyangMahjong.PlayerData"
+        "GuiyangMahjong.Lobby"
     ];
 
     /// <summary>
-    /// 同时引用四个数据库服务后检查唯一目标和代表性表名，
+    /// 同时引用三个在役数据库服务后检查唯一目标和代表性表名，
     /// 防止增量构建把一个服务的 Schema 静默覆盖到另一个服务。
     /// </summary>
     [Fact]
@@ -34,7 +100,6 @@ public sealed class ProjectArchitectureTests
         {
             ["Auth"] = "auth_identities",
             ["Lobby"] = "lobby_rooms",
-            ["PlayerData"] = "player_data.wallet_balances",
             ["Admin"] = "admin_monitor"
         };
         var resolvedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -106,7 +171,6 @@ public sealed class ProjectArchitectureTests
         {
             "Auth",
             "Lobby",
-            "PlayerData",
             "Admin"
         };
         var declaredServiceNames = new HashSet<string>(
@@ -170,7 +234,6 @@ public sealed class ProjectArchitectureTests
         {
             "Auth",
             "Lobby",
-            "PlayerData",
             "Admin"
         };
 
@@ -319,6 +382,298 @@ public sealed class ProjectArchitectureTests
     }
 
     /// <summary>
+    /// 验证阶段 4 LobbyControl 的职责目录真实存在，并阻止 Lobby 直接引入 Kubernetes/Agones 客户端。
+    /// Allocator 仍是唯一允许执行编排操作的服务边界。
+    /// </summary>
+    [Fact]
+    public void LobbyControl_HasRequiredModuleBoundaries_AndDoesNotCallKubernetes()
+    {
+        var lobbyRoot = Path.Combine(
+            FindProjectRoot(),
+            "Services",
+            "GuiyangMahjong.Lobby");
+        var requiredModules = new[]
+        {
+            "Lobby",
+            "Rooms",
+            "Matchmaking",
+            "Reconnection",
+            "GameRouting",
+            "Administration",
+            "Infrastructure"
+        };
+        foreach (var module in requiredModules)
+        {
+            Assert.True(
+                Directory.Exists(Path.Combine(lobbyRoot, module)),
+                $"LobbyControl 缺少职责模块目录：{module}");
+        }
+
+        var projectText = File.ReadAllText(Path.Combine(
+            lobbyRoot,
+            "GuiyangMahjong.Lobby.csproj"));
+        Assert.DoesNotContain(
+            "KubernetesClient",
+            projectText,
+            StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(
+            "Agones",
+            projectText,
+            StringComparison.OrdinalIgnoreCase);
+
+        var roomContracts = File.ReadAllText(Path.Combine(
+            lobbyRoot,
+            "Rooms",
+            "RoomModuleContracts.cs"));
+        Assert.Contains("IRoomReader", roomContracts, StringComparison.Ordinal);
+        Assert.Contains("IRoomWriter", roomContracts, StringComparison.Ordinal);
+        Assert.Contains("StateVersion", roomContracts, StringComparison.Ordinal);
+        Assert.Contains("RoomEpoch", roomContracts, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 验证阶段 5 的统一 Provider 真实存在，并确保 Lobby、Admin、Auth 与 PlayerData
+    /// 既不能调用 Agones API，也不能直接启动 Dedicated Server 子进程。
+    /// </summary>
+    [Fact]
+    public void AllocationService_IsTheOnlyGameServerProviderBoundary()
+    {
+        var root = FindProjectRoot();
+        var allocatorRoot = Path.Combine(root, "Services", "GuiyangMahjong.Allocator");
+        var providerContract = File.ReadAllText(Path.Combine(
+            allocatorRoot,
+            "Providers",
+            "GameServerProviderContracts.cs"));
+        foreach (var method in new[]
+                 {
+                     "AllocateAsync", "GetStatusAsync", "DrainAsync", "TerminateAsync",
+                     "RenewLeaseAsync", "ReportReadyAsync", "ReportUnhealthyAsync"
+                 })
+        {
+            Assert.Contains(method, providerContract, StringComparison.Ordinal);
+        }
+
+        Assert.True(File.Exists(Path.Combine(
+            allocatorRoot,
+            "Providers",
+            "LocalProcessGameServerProvider.cs")));
+        Assert.True(File.Exists(Path.Combine(
+            allocatorRoot,
+            "Providers",
+            "AgonesGameServerProvider.cs")));
+
+        var forbiddenRoots = new[]
+        {
+            "GuiyangMahjong.Lobby",
+            "GuiyangMahjong.Admin",
+            "GuiyangMahjong.Auth",
+            "GuiyangMahjong.PlayerData"
+        };
+        var forbiddenMarkers = new[]
+        {
+            "IAgonesAllocationClient",
+            "allocation.agones.dev",
+            "GameServerProcessLauncher",
+            "Process.Start("
+        };
+        foreach (var project in forbiddenRoots)
+        {
+            var sources = Directory
+                .EnumerateFiles(
+                    Path.Combine(root, "Services", project),
+                    "*.cs",
+                    SearchOption.AllDirectories)
+                .Where(path => !path.Contains(
+                    $"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}",
+                    StringComparison.OrdinalIgnoreCase)
+                    && !path.Contains(
+                        $"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}",
+                        StringComparison.OrdinalIgnoreCase))
+                .Select(File.ReadAllText)
+                .ToArray();
+            foreach (var marker in forbiddenMarkers)
+                Assert.DoesNotContain(sources, source => source.Contains(marker, StringComparison.Ordinal));
+        }
+
+        var bridgeHeader = File.ReadAllText(Path.Combine(
+            root,
+            "Source",
+            "GuiyangMahjongServer",
+            "Public",
+            "Server",
+            "GuiyangGameServerBridge.h"));
+        var bridgeSource = File.ReadAllText(Path.Combine(
+            root,
+            "Source",
+            "GuiyangMahjongServer",
+            "Private",
+            "Server",
+            "GuiyangGameServerBridge.cpp"));
+        var agonesSource = File.ReadAllText(Path.Combine(
+            root,
+            "Source",
+            "GuiyangMahjongServer",
+            "Private",
+            "Server",
+            "GuiyangAgonesLifecycleSubsystem.cpp"));
+        Assert.Contains("LeaseFencingToken", bridgeHeader, StringComparison.Ordinal);
+        Assert.Contains("fencingToken", bridgeSource, StringComparison.Ordinal);
+        Assert.Contains("mahjong.freebooz/fencing-token", agonesSource, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 验证阶段 2 Contracts/BuildingBlocks 的单向依赖图。
+    /// Contracts 禁止数据库和业务实现依赖，BuildingBlocks 禁止反向依赖生产服务或 UE，
+    /// Persistence 是唯一允许引用 Npgsql 的新基础项目。
+    /// </summary>
+    [Fact]
+    public void ContractsAndBuildingBlocks_RespectDependencyDirection()
+    {
+        var servicesRoot = Path.Combine(FindProjectRoot(), "Services");
+        var contractsRoot = Path.Combine(servicesRoot, "Contracts");
+        var buildingBlocksRoot = Path.Combine(
+            servicesRoot,
+            "BuildingBlocks");
+        var failures = new List<string>();
+        var projects = Directory
+            .EnumerateFiles(
+                contractsRoot,
+                "*.csproj",
+                SearchOption.AllDirectories)
+            .Concat(Directory.EnumerateFiles(
+                buildingBlocksRoot,
+                "*.csproj",
+                SearchOption.AllDirectories))
+            .Where(path =>
+                !path.Contains(
+                    "GuiyangMahjong.BuildingBlocks.Tests",
+                    StringComparison.Ordinal))
+            .ToArray();
+
+        foreach (var projectPath in projects)
+        {
+            var projectName =
+                Path.GetFileNameWithoutExtension(projectPath);
+            var projectDirectory =
+                Path.GetDirectoryName(projectPath)
+                ?? throw new InvalidDataException(
+                    $"项目目录无效：{projectPath}");
+            var document = XDocument.Load(projectPath);
+            var references = document
+                .Descendants("ProjectReference")
+                .Select(reference =>
+                {
+                    var include =
+                        reference.Attribute("Include")?.Value
+                        ?? string.Empty;
+                    return Path.GetFileNameWithoutExtension(
+                        Path.GetFullPath(
+                            Path.Combine(projectDirectory, include)));
+                })
+                .ToArray();
+            var packages = document
+                .Descendants("PackageReference")
+                .Select(reference =>
+                    reference.Attribute("Include")?.Value
+                    ?? string.Empty)
+                .ToArray();
+
+            if (references.Any(reference =>
+                    BusinessServiceNames.Contains(
+                        reference,
+                        StringComparer.Ordinal)
+                    || reference is "GuiyangMahjong.EdgeGateway"))
+            {
+                failures.Add(
+                    $"{projectName} 反向依赖业务服务："
+                    + string.Join(",", references));
+            }
+
+            if (projectName.StartsWith(
+                    "GuiyangMahjong.Contracts.",
+                    StringComparison.Ordinal))
+            {
+                if (references.Any(reference =>
+                        !reference.Equals(
+                            "GuiyangMahjong.Contracts.Common",
+                            StringComparison.Ordinal)))
+                    failures.Add(
+                        $"{projectName} 包含非法契约引用："
+                        + string.Join(",", references));
+                if (packages.Any(package =>
+                        package.Contains(
+                            "EntityFramework",
+                            StringComparison.OrdinalIgnoreCase)
+                        || package.Equals(
+                            "Npgsql",
+                            StringComparison.OrdinalIgnoreCase)))
+                    failures.Add(
+                        $"{projectName} 引用了持久化包。");
+            }
+
+            if (projectName.Equals(
+                    "GuiyangMahjong.BuildingBlocks.Domain",
+                    StringComparison.Ordinal)
+                && document.Descendants("FrameworkReference").Any())
+                failures.Add("Domain BuildingBlock 引用了 ASP.NET Core。");
+
+            if (!projectName.Equals(
+                    "GuiyangMahjong.BuildingBlocks.Persistence",
+                    StringComparison.Ordinal)
+                && packages.Any(package =>
+                    package.Equals(
+                        "Npgsql",
+                        StringComparison.OrdinalIgnoreCase)
+                    || package.Contains(
+                        "EntityFramework",
+                        StringComparison.OrdinalIgnoreCase)))
+                failures.Add(
+                    $"{projectName} 越界引用持久化包。");
+        }
+
+        Assert.Equal(10, projects.Length);
+        Assert.Empty(failures);
+    }
+
+    /// <summary>
+    /// 验证阶段9的消息边界：Workers 只能依赖契约与 BuildingBlocks，不能引用任一业务服务实现；
+    /// 同时禁止在 MVP 中并行引入 Kafka/RabbitMQ，避免形成多套投递和运维语义。
+    /// </summary>
+    [Fact]
+    public void ReliableMessaging_UsesSingleTransportAndKeepsWorkersOutOfBusinessImplementations()
+    {
+        var servicesRoot = Path.Combine(FindProjectRoot(), "Services");
+        var workersProject = Path.Combine(
+            servicesRoot,
+            "Apps",
+            "GuiyangMahjong.Workers",
+            "GuiyangMahjong.Workers.csproj");
+        var document = XDocument.Load(workersProject);
+        var projectDirectory = Path.GetDirectoryName(workersProject)!;
+        var references = document.Descendants("ProjectReference")
+            .Select(reference => Path.GetFileNameWithoutExtension(Path.GetFullPath(
+                Path.Combine(projectDirectory, reference.Attribute("Include")!.Value))))
+            .ToArray();
+        Assert.DoesNotContain(references, reference =>
+            BusinessServiceNames.Contains(reference, StringComparer.Ordinal)
+            || reference == "GuiyangMahjong.GameData");
+
+        var productionProjects = Directory.EnumerateFiles(
+            servicesRoot,
+            "*.csproj",
+            SearchOption.AllDirectories)
+            .Where(path => !path.Contains(".Tests", StringComparison.OrdinalIgnoreCase));
+        var packages = productionProjects
+            .SelectMany(path => XDocument.Load(path).Descendants("PackageReference"))
+            .Select(reference => reference.Attribute("Include")?.Value ?? string.Empty)
+            .ToArray();
+        Assert.Contains(packages, package => package.Equals("NATS.Net", StringComparison.Ordinal));
+        Assert.DoesNotContain(packages, package =>
+            package.Contains("Kafka", StringComparison.OrdinalIgnoreCase)
+            || package.Contains("RabbitMQ", StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
     /// 检查测试工程和源码不再使用程序集别名；兼容性必须通过 Contracts
     /// 中的机器契约验证，而不是共享被测服务内部类型。
     /// </summary>
@@ -359,6 +714,227 @@ public sealed class ProjectArchitectureTests
         }
 
         Assert.Empty(failures);
+    }
+
+    /// <summary>
+    /// 验证 IdentityApp 的六个模块目录和关键依赖边界已经真实建立。
+    /// Auth 不得引用房间业务表，Players 不得读取签名配置或 Refresh Token 模型。
+    /// </summary>
+    [Fact]
+    public void IdentityApp_ModulesRespectSecurityAndDataOwnershipBoundaries()
+    {
+        var identityRoot = Path.Combine(
+            FindProjectRoot(),
+            "Services",
+            "GuiyangMahjong.Auth");
+        var expectedModules = new[]
+        {
+            "Auth",
+            "Sessions",
+            "Players",
+            "Devices",
+            "Administration",
+            "Infrastructure"
+        };
+        foreach (var module in expectedModules)
+        {
+            var modulePath = Path.Combine(identityRoot, module);
+            Assert.True(
+                Directory.Exists(modulePath),
+                $"IdentityApp 缺少模块目录：{modulePath}");
+            Assert.NotEmpty(Directory.EnumerateFiles(
+                modulePath,
+                "*.cs",
+                SearchOption.AllDirectories));
+        }
+
+        var identitySources = Directory
+            .EnumerateFiles(identityRoot, "*.*", SearchOption.AllDirectories)
+            .Where(path => path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase)
+                           || path.EndsWith(".sql", StringComparison.OrdinalIgnoreCase))
+            .Where(path => !path.Contains(
+                $"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}",
+                StringComparison.OrdinalIgnoreCase)
+                && !path.Contains(
+                    $"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}",
+                    StringComparison.OrdinalIgnoreCase))
+            .Select(File.ReadAllText)
+            .ToArray();
+        var forbiddenRoomOwnershipMarkers = new[]
+        {
+            "lobby_rooms",
+            "active_player_rooms",
+            "match_results",
+            "room_event_history",
+            "player_room_history"
+        };
+        foreach (var marker in forbiddenRoomOwnershipMarkers)
+            Assert.DoesNotContain(identitySources, text => text.Contains(marker, StringComparison.OrdinalIgnoreCase));
+
+        var playerSources = Directory
+            .EnumerateFiles(
+                Path.Combine(identityRoot, "Players"),
+                "*.cs",
+                SearchOption.AllDirectories)
+            .Select(File.ReadAllText)
+            .ToArray();
+        var forbiddenCredentialDependencies = new[]
+        {
+            "TokenSigningKey",
+            "PlayerAccessTokenIssuer",
+            "RefreshSession",
+            "GuiyangMahjong.Auth.Security",
+            "AuthOptions"
+        };
+        foreach (var marker in forbiddenCredentialDependencies)
+            Assert.DoesNotContain(playerSources, text => text.Contains(marker, StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// 阶段 8.1 冻结玩家资料和在线会话的数据所有权：长期资料只能由 Identity/Players
+    /// 持久化，会话只能由 Identity/Sessions 持久化。PlayerData 不得因兼容需求重新创建
+    /// 同名表或写入口，否则会形成两个权威来源并使后续下线无法完成。
+    /// </summary>
+    [Fact]
+    public void PlayerData_DoesNotOwnPlayerProfilesOrSessions()
+    {
+        var root = FindProjectRoot();
+        var identitySchema = File.ReadAllText(Path.Combine(
+            root,
+            "Services",
+            "GuiyangMahjong.Auth",
+            "Storage",
+            "schema.sql"));
+        var playerDataRoot = Path.Combine(
+            root,
+            "Services",
+            "GuiyangMahjong.PlayerData");
+        var playerDataSchema = File.ReadAllText(Path.Combine(
+            playerDataRoot,
+            "Storage",
+            "schema.sql"));
+        var playerDataEndpoints = File.ReadAllText(Path.Combine(
+            playerDataRoot,
+            "Api",
+            "PlayerDataEndpoints.cs"));
+
+        // Identity 已存在真实权威表；先验证目标存在，避免仅检查“旧服务没有”造成伪通过。
+        Assert.Contains(
+            "CREATE TABLE IF NOT EXISTS player.player_profiles",
+            identitySchema,
+            StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(
+            "CREATE TABLE IF NOT EXISTS session.auth_refresh_sessions",
+            identitySchema,
+            StringComparison.OrdinalIgnoreCase);
+
+        // PlayerData 的数据库与 HTTP 边界都不得重新暴露资料或会话写能力。
+        foreach (var forbiddenTable in new[]
+                 {
+                     "player_data.player_profiles",
+                     "player_data.player_profile",
+                     "player_data.sessions",
+                     "player_data.player_sessions"
+                 })
+        {
+            Assert.DoesNotContain(
+                forbiddenTable,
+                playerDataSchema,
+                StringComparison.OrdinalIgnoreCase);
+        }
+        foreach (var forbiddenRoute in new[]
+                 {
+                     "/profiles",
+                     "/profile",
+                     "/sessions",
+                     "/session"
+                 })
+        {
+            Assert.DoesNotContain(
+                forbiddenRoute,
+                playerDataEndpoints,
+                StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    /// <summary>
+    /// 阶段8.2以后GameData必须拥有Replay索引表，PlayerData旧URL只能调用窄适配器，
+    /// 并由数据库触发器拒绝任何遗留Replay写入，防止回归为长期双写。
+    /// </summary>
+    [Fact]
+    public void ReplayEvidence_HasSingleGameDataWriterAndPlayerDataFailClosedGuard()
+    {
+        var root = FindProjectRoot();
+        var gameDataSchema = File.ReadAllText(Path.Combine(
+            root, "Services", "Apps", "GuiyangMahjong.GameData", "Storage", "schema.sql"));
+        var playerDataSchema = File.ReadAllText(Path.Combine(
+            root, "Services", "GuiyangMahjong.PlayerData", "Storage", "schema.sql"));
+        var endpoints = File.ReadAllText(Path.Combine(
+            root, "Services", "GuiyangMahjong.PlayerData", "Api", "PlayerDataEndpoints.cs"));
+
+        Assert.Contains("replay.legacy_player_evidence", gameDataSchema, StringComparison.Ordinal);
+        Assert.Contains("trg_reject_replay_evidence_write", playerDataSchema, StringComparison.Ordinal);
+        Assert.Contains("ILegacyReplayEvidenceClient replayClient", endpoints, StringComparison.Ordinal);
+        Assert.Contains("replayClient.RecordAsync", endpoints, StringComparison.Ordinal);
+        var replayStart = endpoints.IndexOf("sources.MapPost(\"/replays\"", StringComparison.Ordinal);
+        var replayEnd = endpoints.IndexOf("app.MapPost(\"/internal/admin", replayStart, StringComparison.Ordinal);
+        Assert.True(replayStart >= 0 && replayEnd > replayStart);
+        Assert.DoesNotContain(
+            "store.RecordEvidenceAsync",
+            endpoints[replayStart..replayEnd],
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 阶段10冻结 Admin 数据和基础设施边界：生产项目不得引用业务实现、Kubernetes/Agones SDK，
+    /// 持久化写 SQL 只能指向 admin_monitor，防止后台演化为任意数据修改工具。
+    /// </summary>
+    [Fact]
+    public void Admin_UsesOwnedSchemaAndControlledServiceCommandsOnly()
+    {
+        var root = FindProjectRoot();
+        var adminRoot = Path.Combine(root, "Services", "GuiyangMahjong.Admin");
+        var project = XDocument.Load(Path.Combine(adminRoot, "GuiyangMahjong.Admin.csproj"));
+        var references = project.Descendants("ProjectReference")
+            .Select(item => item.Attribute("Include")?.Value ?? string.Empty)
+            .ToArray();
+        foreach (var forbidden in new[]
+                 {
+                     "GuiyangMahjong.Auth", "GuiyangMahjong.Lobby", "GuiyangMahjong.Allocator",
+                     "GuiyangMahjong.PlayerData", "GuiyangMahjong.GameData"
+                 })
+        {
+            Assert.DoesNotContain(references, value => value.Contains(forbidden, StringComparison.OrdinalIgnoreCase));
+        }
+
+        var packages = project.Descendants("PackageReference")
+            .Select(item => item.Attribute("Include")?.Value ?? string.Empty)
+            .ToArray();
+        Assert.DoesNotContain(packages, value => value.Contains("Kubernetes", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(packages, value => value.Contains("Agones", StringComparison.OrdinalIgnoreCase));
+
+        var sqlTexts = Directory.EnumerateFiles(adminRoot, "*.*", SearchOption.AllDirectories)
+            .Where(path => path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase)
+                || path.EndsWith(".sql", StringComparison.OrdinalIgnoreCase))
+            .Where(path => !path.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase)
+                && !path.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase))
+            .Select(File.ReadAllText)
+            .ToArray();
+        foreach (var forbiddenMutation in new[]
+                 {
+                     "INSERT INTO room.", "UPDATE room.", "DELETE FROM room.",
+                     "INSERT INTO settlement.", "UPDATE settlement.", "DELETE FROM settlement.",
+                     "INSERT INTO player_data.", "UPDATE player_data.", "DELETE FROM player_data.",
+                     "INSERT INTO auth.", "UPDATE auth.", "DELETE FROM auth."
+                 })
+        {
+            Assert.DoesNotContain(sqlTexts, text => text.Contains(forbiddenMutation, StringComparison.OrdinalIgnoreCase));
+        }
+
+        // 模块必须包含真实可调用代码，避免仅建立空目录通过结构验收。
+        Assert.True(File.Exists(Path.Combine(adminRoot, "TrustSafety", "TrustSafetyReadModels.cs")));
+        Assert.True(File.Exists(Path.Combine(adminRoot, "Api", "TrustSafetyEndpoints.cs")));
+        Assert.True(File.Exists(Path.Combine(adminRoot, "Api", "AdminBffEndpoints.cs")));
     }
 
     /// <summary>

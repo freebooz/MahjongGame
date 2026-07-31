@@ -38,13 +38,18 @@ public sealed record PlayerTokenValidationResult(
 /// </summary>
 public sealed class HmacPlayerTokenValidator : IPlayerTokenValidator
 {
-    private readonly byte[] signingKey;
+    // 当前密钥排在首位，旧密钥仅在有限轮换窗口内参与固定时间签名比较。
+    private readonly byte[][] validationKeys;
     private readonly TimeProvider timeProvider;
 
     /// <summary>取得 Auth/Lobby 共享签名密钥和可测试 UTC 时间源；密钥只驻留服务内存。</summary>
     public HmacPlayerTokenValidator(IOptions<LobbyOptions> options, TimeProvider timeProvider)
     {
-        signingKey = Encoding.UTF8.GetBytes(options.Value.TokenSigningKey);
+        validationKeys = options.Value.PreviousTokenValidationKeys
+            .Where(key => !string.IsNullOrWhiteSpace(key))
+            .Prepend(options.Value.TokenSigningKey)
+            .Select(Encoding.UTF8.GetBytes)
+            .ToArray();
         this.timeProvider = timeProvider;
     }
 
@@ -62,8 +67,15 @@ public sealed class HmacPlayerTokenValidator : IPlayerTokenValidator
             return PlayerTokenValidationResult.Failure("登录凭据格式无效");
         }
 
-        var expected = HMACSHA256.HashData(signingKey, Encoding.ASCII.GetBytes(parts[0]));
-        if (signature.Length != expected.Length || !CryptographicOperations.FixedTimeEquals(signature, expected))
+        var signedBytes = Encoding.ASCII.GetBytes(parts[0]);
+        var signatureValid = false;
+        foreach (var validationKey in validationKeys)
+        {
+            var expected = HMACSHA256.HashData(validationKey, signedBytes);
+            signatureValid |= signature.Length == expected.Length
+                              && CryptographicOperations.FixedTimeEquals(signature, expected);
+        }
+        if (!signatureValid)
         {
             return PlayerTokenValidationResult.Failure("登录凭据签名无效");
         }
@@ -96,8 +108,15 @@ public sealed class HmacPlayerTokenValidator : IPlayerTokenValidator
                 return PlayerTokenValidationResult.Failure("登录身份字段超出限制");
             }
 
+            // 新版 Auth 令牌携带 Sid/Epoch；旧令牌仍可在迁移窗口内解析，但只能签发带 legacy 标记的票据。
             return PlayerTokenValidationResult.Success(
-                new PlayerIdentity(payload.Sub, payload.Name, payload.Provider),
+                new PlayerIdentity(
+                    payload.Sub,
+                    payload.Name,
+                    payload.Provider,
+                    string.IsNullOrWhiteSpace(payload.Sid) ? "legacy-session" : payload.Sid,
+                    payload.SessionEpoch,
+                    payload.SecurityEpoch),
                 issuedAt);
         }
         catch (JsonException)
@@ -119,7 +138,10 @@ public sealed class HmacPlayerTokenValidator : IPlayerTokenValidator
             player.DisplayName,
             player.Provider,
             issuedAt.ToUnixTimeMilliseconds(),
-            expiresAtUtc.ToUnixTimeSeconds());
+            expiresAtUtc.ToUnixTimeSeconds(),
+            player.SessionId,
+            player.SessionEpoch,
+            player.SecurityEpoch);
         var payloadBytes = JsonSerializer.SerializeToUtf8Bytes(payload);
         var encodedPayload = Base64UrlEncode(payloadBytes);
         var signature = HMACSHA256.HashData(
@@ -151,5 +173,8 @@ public sealed class HmacPlayerTokenValidator : IPlayerTokenValidator
         string Name,
         string Provider,
         long Iat,
-        long Exp);
+        long Exp,
+        string? Sid = null,
+        long SessionEpoch = 0,
+        long SecurityEpoch = 0);
 }

@@ -5,6 +5,7 @@
 #include "Interfaces/IHttpRequest.h"
 #include "Interfaces/IHttpResponse.h"
 #include "Server/GuiyangServerTicketVerifier.h"
+#include "Server/GuiyangFairShuffle.h"
 #include "TimerManager.h"
 #include "UObject/Object.h"
 #include "GuiyangGameServerBridge.generated.h"
@@ -20,18 +21,38 @@ struct GUIYANGMAHJONGSERVER_API FGuiyangGameServerLaunchConfig
     FString ServerInstanceId;
     /** Lobby 内网 API 根地址。 */
     FString LobbyInternalUrl;
+    /** GameData 内网 API 根地址；最终结算不得再通过玩家 HTTP 网关。 */
+    FString GameDataInternalUrl;
     /** 游戏服注册与心跳使用的内部凭证。 */
     FString RegistrationCredential;
     /** 当前服务端构建版本，用于拒绝不兼容客户端。 */
     FString BuildVersion;
+    /** 当前分配允许的规则集和网络协议版本；Join Ticket 必须与两者完全一致。 */
+    FString RuleSetVersion;
+    FString ProtocolVersion;
+    /** 允许接入当前服务构建的客户端版本白名单；来源为受控环境变量，不接受 Ticket 自行声明扩展。 */
+    TArray<FString> CompatibleClientBuilds;
     /** 返回给客户端的可连接 IP。 */
     FString AdvertisedIp;
     /** 校验一次性入场票据的签名密钥。 */
     FString JoinTicketSigningKey;
+    /**
+     * 最终结算信封的独立 HMAC 密钥；由受控运行环境注入，不写入命令行、日志或 Outbox。
+     * 它与短生命周期 ResultCredential 分离，使 Allocator 能在 DS 崩溃后原样转交已签名信封。
+     */
+    FString SettlementSigningKey;
     /** 比赛结果发送失败时使用的本地 Outbox 文件。 */
     FString MatchResultOutboxPath;
+    /** 权威动作与快照的持久化根目录；Agones 模式必须挂载可跨 Pod 读取的 RWX 卷。 */
+    FString RecoveryDirectory;
+    /** 仅用于滚动升级/紧急回滚的旧票据兼容开关；生产完成升级后必须保持 false。 */
+    bool bAllowLegacyJoinTickets = false;
     /** 游戏监听端口。 */
     int32 Port = 0;
+    /** Lobby 房间路由代际；重新分配后递增，用于拒绝旧实例和旧 Join Ticket。 */
+    int64 RoomEpoch = 1;
+    /** Allocation Service 租约 fencing token；旧实例即使延迟回调也不得覆盖当前分配。 */
+    int64 LeaseFencingToken = 1;
 
     /** 解析并校验命令行参数；失败时通过 OutError 返回面向运维的原因。 */
     static bool TryParse(const TCHAR* CommandLine, const FString& SigningKey,
@@ -40,6 +61,7 @@ struct GUIYANGMAHJONGSERVER_API FGuiyangGameServerLaunchConfig
 };
 
 struct FMahjongFinalSettlementResult;
+struct FGuiyangRecoveryEvidenceObject;
 class UNetDriver;
 
 /** 连接独立游戏服与 Lobby 控制面的桥接对象，负责注册、心跳、票据和结果上报。 */
@@ -61,8 +83,30 @@ public:
     /** 校验玩家、房间和有效期，并以一次性语义消费入场票据。 */
     bool ValidateAndConsumeJoinTicket(const FString& Ticket, const FString& PlayerId,
         FGuiyangJoinTicketClaims& OutClaims, FString& OutError);
-    /** 将最终结算写入可靠 Outbox，随后异步上报 Lobby。 */
-    void QueueFinalSettlement(const FMahjongFinalSettlementResult& Result, int64 ResultSequence);
+    /**
+     * 将强最终结果信封写入可靠 Outbox，随后异步上报 GameData。
+     * 三个摘要和证据清单必须已通过结算前屏障，任何缺失都会拒绝入队。
+     */
+    void QueueFinalSettlement(
+        const FMahjongFinalSettlementResult& Result,
+        int32 SettlementVersion,
+        const TArray<FGuiyangShuffleAuditProof>& ShuffleProofs,
+        const FString& EventChainDigest,
+        const FString& FinalStateHash,
+        const FString& ActionLogHash,
+        const FString& RandomCommitment,
+        const FString& EvidenceId,
+        const TArray<FGuiyangRecoveryEvidenceObject>& EvidenceObjects);
+    /**
+     * 追加本地公平性审计事件。
+     *
+     * Commitment 阶段严禁写入种子、nonce 或牌序摘要；Reveal 阶段只能在单局结算后调用。
+     * 返回 false 表示可靠落盘失败，开局调用方必须停止发牌。
+     */
+    bool AppendShuffleAuditRecord(
+        const FGuiyangShuffleAuditProof& Proof,
+        bool bReveal,
+        const FString& EventChainDigest) const;
     /** 返回初始化后锁定的启动配置。 */
     const FGuiyangGameServerLaunchConfig& GetConfig() const { return Config; }
 

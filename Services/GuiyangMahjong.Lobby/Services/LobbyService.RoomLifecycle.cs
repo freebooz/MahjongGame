@@ -2,8 +2,10 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Diagnostics;
 using GuiyangMahjong.Lobby.Domain;
+using GuiyangMahjong.Lobby.GameRouting;
 using GuiyangMahjong.Lobby.Options;
 using GuiyangMahjong.Lobby.Realtime;
+using GuiyangMahjong.Lobby.Rooms;
 using GuiyangMahjong.Lobby.Security;
 using GuiyangMahjong.Lobby.Storage;
 using GuiyangMahjong.Observability;
@@ -58,9 +60,13 @@ public sealed partial class LobbyService
                 RuleSnapshot = CloneRuleSnapshot(request.RuleSnapshot),
                 Lifecycle = RoomLifecycle.Allocating,
                 PlayerIds = [player.PlayerId],
+                Seats = [new RoomSeat(player.PlayerId, 0, now)],
                 Password = protectedPassword,
                 MatchId = Guid.NewGuid().ToString(),
                 StateSequence = 1,
+                RoomEpoch = 1,
+                RuleSetVersion = ResolveRuleSetVersion(request.RuleSnapshot),
+                BuildVersion = options.Allocator.GameServerBuildVersion,
                 CreatedAtUtc = now,
                 UpdatedAtUtc = now
             };
@@ -85,11 +91,17 @@ public sealed partial class LobbyService
             {
                 try
                 {
-                    var allocation = await allocator.AllocateAsync(
+                    var allocation = await allocator.AllocateForEpochAsync(
                         requestId,
                         room.RoomId,
                         room.MatchId,
+                        room.RoomEpoch,
                         cancellationToken);
+                    if (allocation.RoomEpoch != room.RoomEpoch)
+                    {
+                        throw new HttpRequestException(
+                            "Allocator returned a stale RoomEpoch.");
+                    }
                     room = room with
                     {
                         PendingServerInstanceId = allocation.ServerInstanceId,
@@ -490,11 +502,15 @@ public sealed partial class LobbyService
                 StatusCodes.Status503ServiceUnavailable,
                 1000);
         }
-        var issued = joinTicketIssuer.Issue(
-            player.PlayerId,
-            player.DisplayName,
-            room,
-            room.Route.ServerInstanceId);
+        if (room.Route.RoomEpoch != room.RoomEpoch)
+        {
+            throw new LobbyOperationException(
+                LobbyErrorCode.ServerUnavailable,
+                "牌桌服务器路由正在切换",
+                StatusCodes.Status503ServiceUnavailable,
+                1000);
+        }
+        var issued = joinTicketIssuer.Issue(player, room, room.Route.ServerInstanceId);
         return room.Route with
         {
             RequestId = requestId,
@@ -569,6 +585,33 @@ public sealed partial class LobbyService
         System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, object?>>(
             System.Text.Json.JsonSerializer.Serialize(snapshot))
         ?? throw new InvalidOperationException("Rule snapshot could not be cloned.");
+
+    /// <summary>
+    /// 从规则快照提取稳定版本；旧请求未携带 ruleVersion 时使用 legacy-v1，
+    /// 确保 Join Ticket 和 DS 启动配置仍能绑定一个明确的规则版本。
+    /// </summary>
+    private static string ResolveRuleSetVersion(Dictionary<string, object?> snapshot)
+    {
+        if (!snapshot.TryGetValue("ruleVersion", out var value))
+        {
+            return "legacy-v1";
+        }
+
+        var version = value switch
+        {
+            string text => text.Trim(),
+            System.Text.Json.JsonElement
+                { ValueKind: System.Text.Json.JsonValueKind.String } element =>
+                element.GetString()?.Trim() ?? string.Empty,
+            System.Text.Json.JsonElement
+                { ValueKind: System.Text.Json.JsonValueKind.Number } element =>
+                element.GetRawText(),
+            int number => number.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            long number => number.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            _ => string.Empty
+        };
+        return version is { Length: > 0 and <= 64 } ? version : "legacy-v1";
+    }
 
     /// <summary>
     /// 从字符串或 JSON 字符串读取规则标识，并限制为安全字符集合。

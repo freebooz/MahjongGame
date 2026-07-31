@@ -10,6 +10,7 @@
 
 struct FGuiyangManagedRoomDefinition;
 struct FGuiyangPlayerConnectionTelemetry;
+class FGuiyangRuntimeRecoveryStore;
 
 /** Dedicated Server 权威入口；为牌桌复制指定 GameState 和玩家请求入口。 */
 UCLASS()
@@ -44,6 +45,10 @@ public:
         const FString& PlayerId, bool& OutTrustee, FDateTime& OutChangedAtUtc) const;
     /** 返回绑定到存活且票据授权连接的玩家 ID，不包含等待重连的离线座位。 */
     void GetConnectedAuthorizedPlayerIds(TArray<FString>& OutPlayerIds) const;
+    /** 心跳只读取恢复状态摘要；不返回完整快照、私有手牌或证据正文。 */
+    bool IsRecoveredAuthority() const { return bRecoveredGameServer; }
+    bool IsSettlementEvidenceReady() const { return bSettlementEvidenceReady; }
+    FString GetAuthoritativeStateHash() const;
 
     /** 处理默认或完整规则开房请求；托管模式下不允许客户端创建第二个权威房间。 */
     virtual void HandleCreateRoom(class AGuiyangMahjongPlayerController* Controller, const FMahjongCreateRoomRequest& Request) override;
@@ -67,6 +72,11 @@ public:
     virtual void HandleTableAction(class AGuiyangMahjongPlayerController* Controller, const FMahjongActionRequest& Request) override;
     /** 将旧版出牌 RPC 转换为统一动作请求，保留兼容性但不绕过任何权威校验。 */
     virtual void HandleLegacyPlayTile(class AGuiyangMahjongPlayerController* Controller, const FMahjongTile& Tile, int32 ClientSequence) override;
+    virtual void HandleReconnectStateConfirmed(
+        class AGuiyangMahjongPlayerController* Controller,
+        const FString& ControlToken,
+        int32 StateVersion,
+        const FString& PublicStateHash) override;
 
 private:
     /** 服务端领域对象：房间、牌桌和控制面桥接。 */
@@ -77,9 +87,16 @@ private:
     int32 LastPublishedSettlementSequence = INDEX_NONE;
     int32 LastFinalizedSettlementSequence = INDEX_NONE;
     int32 LastPublishedFinalRoomSequence = INDEX_NONE;
-    /** 服务端洗牌代次和最近种子，确保每局发牌前使用新的牌序。 */
-    uint32 ShuffleGeneration = 0;
-    int32 LastShuffleSeed = 0;
+    /**
+     * 当前局和已结束局的公平性证明。
+     *
+     * PendingShuffleProof 在局内含敏感披露材料，只能存于服务端内存；CompletedShuffleProofs
+     * 仅在对应单局结算落盘后追加，最终随权威结算进入内部审计存储。
+     */
+    TOptional<FGuiyangShuffleAuditProof> PendingShuffleProof;
+    TArray<FGuiyangShuffleAuditProof> CompletedShuffleProofs;
+    /** 每局披露记录形成的链式摘要，用于发现删除、插入和重排。 */
+    FString FairnessEventChainDigest;
     /** 当前活动房间码及托管模式固定房间码。 */
     FString ActiveRoomCode;
     FString ManagedRoomCode;
@@ -88,9 +105,16 @@ private:
     TMap<FString, FString> PendingAuthorizedPlayersByTicketDigest;
     TMap<FString, FString> PendingAuthorizedDisplayNamesByTicketDigest;
     TMap<FString, int64> PendingTicketExpiryByDigest;
+    /** 强票据声明在 PreLogin 与 InitNewPlayer 之间只按票据摘要暂存，原票据不会驻留。 */
+    TMap<FString, FGuiyangJoinTicketClaims> PendingTicketClaimsByDigest;
     /** 已完成身份绑定的网络连接到玩家 ID 映射。 */
     TMap<TObjectPtr<APlayerController>, FString> AuthorizedPlayerIdsByController;
     TMap<TObjectPtr<APlayerController>, FString> AuthorizedDisplayNamesByController;
+    /** 控制器绑定的完整已验证声明，用于座位、会话 Epoch 和多端控制令牌校验。 */
+    TMap<TObjectPtr<APlayerController>, FGuiyangJoinTicketClaims> AuthorizedClaimsByController;
+    /** 每次重连生成一次控制确认令牌；只保存其摘要，确认后立即删除。 */
+    TMap<TObjectPtr<APlayerController>, FString> PendingReconnectTokenDigests;
+    TSet<TObjectPtr<APlayerController>> ReconnectConfirmedControllers;
     /** 每名玩家的超时自动托管状态；玩家主动完成合法操作后自动解除。 */
     struct FPlayerTrusteeState
     {
@@ -98,6 +122,17 @@ private:
         FDateTime ChangedAtUtc;
     };
     TMap<FString, FPlayerTrusteeState> TrusteeStateByPlayer;
+    /** 已接受动作 ID 和每玩家短窗接收时间；仅保存有界摘要，不保存客户端敏感负载。 */
+    TMap<FString, int64> AcceptedActionIds;
+    TMap<FString, TArray<double>> RecentActionTimesByPlayer;
+    /** 当前比赛的私有证据/快照仓库；只在托管 Dedicated Server 初始化。 */
+    TUniquePtr<FGuiyangRuntimeRecoveryStore> RuntimeRecoveryStore;
+    FDateTime LastAuthoritativeSnapshotAtUtc;
+    int64 LastSnapshotActionSequence = 0;
+    bool bRecoveredGameServer = false;
+    bool bSettlementEvidenceReady = true;
+    /** 只消费一次的恢复计时器剩余值；重新武装后立即清空。 */
+    TOptional<float> RecoveredActionTimeoutRemainingSeconds;
     /** 当前编排模式及托管世界初始化状态。 */
     bool bManagedGameServer = false;
     bool bAgonesGameServer = false;
@@ -136,4 +171,18 @@ private:
     void InitializeManagedBridge(const FGuiyangGameServerLaunchConfig& Config);
     void TryInitializeManagedBridgeAfterListen();
     void HandleAgonesAllocationReady(const FGuiyangGameServerLaunchConfig& Config);
+    /** 在进入规则引擎前校验动作信封、Epoch、时钟窗口、重复 ID 和请求频率。 */
+    bool ValidateAuthoritativeActionEnvelope(
+        const class AGuiyangMahjongPlayerState& Player,
+        const FMahjongActionRequest& Request,
+        FString& OutError);
+    /** 记录动作链并按动作数量/时间/关键动作策略生成完整快照。 */
+    void RecordAcceptedActionEvidence(
+        const class AGuiyangMahjongPlayerState& Player,
+        const FMahjongActionRequest& Request,
+        const FMahjongActionResult& Result,
+        int32 StateVersionBefore);
+    bool PersistAuthoritativeSnapshot(bool bSettlementBarrier, FString& OutError);
+    /** 从前一 Epoch 最新快照和后续动作重放；哈希或序号异常时拒绝成为 Ready。 */
+    bool TryRecoverPriorEpoch(FString& OutError);
 };

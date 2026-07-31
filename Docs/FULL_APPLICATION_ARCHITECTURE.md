@@ -598,6 +598,53 @@ Access Token、Refresh Token、JoinTicket 和服务端密钥不得写入 SaveGam
 
 生产环境禁止使用 `development-only` 密钥，示例 Secret 不能直接应用。
 
+### 12.1 洗牌与公平性
+
+权威洗牌已采用“开局前承诺、单局结束后披露、整场结算时验证并持久化”的闭环，客户端不能提供或覆盖最终随机种子。
+
+```text
+CSPRNG seed + 256-bit serverNonce
+  -> 规范绑定 roomId、roundId、ruleId、ruleVersion、ruleHash
+  -> SHA-256 seedCommitment
+  -> 发牌前写入本地审计 JSONL（只含承诺）
+  -> UE FRandomStream + Fisher-Yates 洗牌
+  -> 单局 Settlement
+  -> 披露 seed、serverNonce、deckOrderDigest
+  -> 链接 eventChainDigest
+  -> 最终结算 Outbox
+  -> Lobby 重算承诺和事件链
+  -> PostgreSQL match_results.payload
+```
+
+规范承诺文本为：
+
+```text
+fair-shuffle-v1
+|seed=<8位小写十六进制>
+|roomId=<RoomId>
+|roundId=<局号>
+|ruleId=<规则标识>
+|ruleVersion=<规则版本>
+|ruleHash=<冻结规则摘要>
+|serverNonce=<64位小写十六进制>
+```
+
+最终 `seedCommitment` 是上述单行规范文本 UTF-8 字节的 SHA-256。它比无分隔符的
+`SHA256(seed + roomId + ruleVersion + serverNonce)` 多绑定了局号、规则标识和规则摘要，并消除了字段边界歧义。
+
+实现约束：
+
+- `FGuiyangFairShuffle` 使用 OpenSSL `RAND_bytes`；安全随机源失败时拒绝开局，不回退到时间戳、GUID 或进程周期；
+- 现有 32 位 `FRandomStream` 种子用于兼容可复现洗牌，256 位 nonce 用于阻止开局前对有限种子空间直接穷举承诺；
+- 开局日志只输出承诺，不输出种子和牌序；`MahjongDeckManager` 的明文种子日志已移除；
+- 发牌前承诺落盘失败时不得开局；单局披露落盘失败时不得完成房间结算；
+- `shuffleProofs` 必须与 `completedRounds` 数量一致、局号从 1 连续递增；
+- Lobby 在写入最终结算前验证房间、规则版本、承诺、证明顺序和最终事件链摘要，失败时整个结算被拒绝；
+- 未结束牌局的完整牌序只存在于 Dedicated Server 内存；当前没有 Admin 或普通运营读取原始牌序的 API；
+- 普通运营不能修改比赛结果，争议调查只能读取结算后证明并留下审批和操作审计。
+
+当前 `eventChainDigest` 链接的是逐局公平性披露事件，不等同于全部玩家动作事件链。若后续要求验证每次摸、打、碰、杠、胡，应在回放事件存储中增加独立的 `gameplayEventChainDigest`，不能复用本字段改变既有语义。
+
 ## 13. 端口和网络边界
 
 | 默认端口 | 组件 | 协议 | 公网暴露建议 |
@@ -728,20 +775,23 @@ powershell -ExecutionPolicy Bypass -File Scripts/RunFullMatchIntegration.ps1
 powershell -ExecutionPolicy Bypass -File Scripts/RunReconnectIntegration.ps1
 ```
 
-## 18. Kubernetes 部署架构
+## 18. Kubernetes 与 Agones 部署架构
 
 ```mermaid
 flowchart TB
     Internet["PC / Android 玩家"]
     Gateway["DNS + TLS Gateway / WAF"]
 
-    subgraph LinuxNodes["Linux 节点"]
+    subgraph ControlPlane["Kubernetes 控制面"]
         AuthPods["Auth Pods x2+"]
         LobbyPods["Lobby Pods x2+"]
-        AllocatorPod["Linux game-node Pod"]
-        ServerA["UE LinuxServer A"]
-        ServerB["UE LinuxServer B"]
-        StateDisk[("State / Outbox 持久目录")]
+        AllocatorPods["Allocator Pods"]
+        Agones["Agones Controller / Allocator"]
+    end
+
+    subgraph Fleet["Agones Fleet / Linux 游戏节点"]
+        ServerA["GameServer Pod A<br/>UE Server + Sidecar"]
+        ServerB["GameServer Pod B<br/>UE Server + Sidecar"]
     end
 
     subgraph Persistence["持久化服务"]
@@ -756,27 +806,95 @@ flowchart TB
     AuthPods --> PG
     LobbyPods --> PG
     LobbyPods --> R
-    LobbyPods --> AllocatorPod
-    AllocatorPod --> ServerA
-    AllocatorPod --> ServerB
-    AllocatorPod --> StateDisk
+    LobbyPods --> AllocatorPods
+    AllocatorPods -->|"GameServerAllocation"| Agones
+    Agones --> ServerA
+    Agones --> ServerB
+    ServerA -->|"注册 / 心跳 / 结算"| LobbyPods
+    ServerB -->|"注册 / 心跳 / 结算"| LobbyPods
     Internet -->|"分配后的 UDP 端口"| ServerA
     Internet -->|"分配后的 UDP 端口"| ServerB
     SecretStore -.-> AuthPods
     SecretStore -.-> LobbyPods
-    SecretStore -.-> AllocatorPod
+    SecretStore -.-> AllocatorPods
+    SecretStore -.-> ServerA
+    SecretStore -.-> ServerB
 ```
+
+### 18.1 GameServer 生命周期（需求条目 12.1）
+
+```text
+Pod 启动
+  -> UE Server 初始化 Server Target 和专用地图
+  -> BeginPlay 确认 World 与监听 NetDriver 就绪
+  -> 启动 Agones Health / Watch / Connect
+  -> Sidecar 可用后 Connect 成功并调用 Ready
+  -> Allocator 创建 GameServerAllocation
+  -> Watch 收到 Allocated 和不可变房间元数据
+  -> Dedicated Server 向 Lobby 注册并加载权威房间
+  -> 玩家使用一次性 JoinTicket 进入并游戏
+  -> 单局公平性披露、整场结算和 Outbox 确认
+  -> Allocator Drain / Agones Shutdown
+  -> Pod 删除
+```
+
+项目使用 Agones Unreal SDK 的本地 REST Sidecar 接口。SDK `Connect()` 每 5 秒重试读取 GameServer，
+覆盖 Sidecar 晚于 UE 进程可用的启动顺序；健康上报周期为 5 秒。项目显式禁用插件的自动 Connect/Health，
+由 `UGuiyangAgonesLifecycleSubsystem::StartAfterWorldReady()` 在专用地图加载后统一启动，防止实例尚未监听就被标记为 Ready。
+
+`Ready`、`Health`、`Shutdown` 和 PlayerTracking 已进入运行链路；`Allocate` 由集群内 Allocator 通过
+`GameServerAllocation` API 执行。`Reserve` 与 SDK 直接 `Allocate` 保留为 Agones 能力，但当前房间分配模型不调用，
+避免 UE 数据面自行绕过 Lobby/Allocator 控制面。
+
+### 18.2 生产平台与发布栈
+
+| 领域 | 目标技术 | 当前仓库状态 |
+|---|---|---|
+| 容器编排 | Kubernetes | 已有 Auth/Lobby/Admin/PlayerData/Allocator 清单 |
+| 游戏服编排 | Agones | 已有 Fleet、FleetAutoscaler、Allocation、SDK RBAC 和 UE 生命周期适配 |
+| 指标 | Prometheus + Grafana | 已有采集配置、仪表板、规则和 SLO |
+| 链路追踪 | OpenTelemetry + Tempo | 已有 Collector 和 Tempo；Jaeger 可作为兼容查询后端，但不应与 Tempo 重复长期存储 |
+| 日志 | Fluent Bit + Loki/OpenSearch | Loki 栈已存在；生产 Kubernetes 尚需补 Fluent Bit DaemonSet 或托管日志代理 |
+| CI | GitHub Actions | 已有 Services 与 Unreal 构建/测试工作流；GitLab CI/Jenkins 只作为组织级替代选项 |
+| 发布 | Helm + Argo CD | 当前仍以原生 YAML 为主，尚未形成正式 Helm Chart 和 Argo CD Application，属于下一发布批次 |
+
+生产建议采用 GitHub Actions 构建、测试、签名并推送不可变镜像，由 Helm 表达环境差异，Argo CD 只拉取已审批版本并执行 GitOps 同步。CI 不应直接持有集群管理员凭据或在流水线中修改运行中牌局。
+
+### 18.3 Dedicated Server 专用构建和瘦身
+
+| 要求 | 当前状态 | 证据或后续动作 |
+|---|---|---|
+| Server Target 单独构建 | 已完成 | `GuiyangMahjongServer.Target.cs`，CI 独立构建 Win64/Linux Server |
+| 不打包 UI、音频、高精模型纹理和客户端特效 | 发布包已隔离 | Server Cook 仅包含 `MahjongRoomMap`，排除 `/Game/UI`、`/Game/Art`、`/Game/Client`；启动增加 `-NullRHI -nosound` |
+| 不加载不需要的动画 | 发布包已隔离 | 高精表现资产目录不进入 Server Cook；新增服务端资产引用必须通过包隔离检查 |
+| 服务端简化地图 | 已完成 | `/Game/Maps/MahjongRoomMap` 是唯一 Server Map |
+| 仅保留碰撞和逻辑对象 | 需持续门禁 | 构建脚本检查资产目录；还需用资产审计命令定期验证地图硬引用 |
+| 禁用无效 Tick / Blueprint 高频 Tick | 部分完成 | 权威规则主要由请求和定时器驱动；上线前继续以 Unreal Insights 检查 Actor/Blueprint Tick |
+| 降低 Actor 数和 Net Update Frequency | 需压测定标 | 不能全局盲降；应按 GameState、PlayerState、静态桌面和临时表现 Actor 分类设置 |
+| 规则核心使用 C++ | 已完成 | 洗牌、规则、牌桌状态机、结算均位于 C++ Core/Server |
+| 对象池 | 按热点采用 | 一桌一进程且结算即销毁，优先池化高频临时逻辑对象；不得为了池化延长跨房间敏感状态生命周期 |
+| 房间结束销毁进程 | 已完成主链路 | Lobby 确认结算后 Allocator Drain，Agones Shutdown 删除 Pod |
+
+目前 Server Target 仍依赖共享 `GuiyangMahjong` 模块，因此部分客户端 UI C++ 可能参与编译但不会进入 Server Cook 资产。
+要达到“编译期完全不含 UI”的更严格目标，下一步应把共享模块内的 `Private/UI`、客户端 Controller 桥接和表现代码全部迁入
+`GuiyangMahjongClient`，再让 Server Target 只依赖 Core、最小共享网络层和 Server 模块。
+
+### 18.4 部署顺序
 
 部署顺序：
 
 1. `Deploy/kubernetes/namespace-and-config.yaml`；
 2. 通过真实密钥系统创建 `mahjong-secrets`；
-3. `Deploy/kubernetes/auth-lobby.yaml`；
-4. `Deploy/kubernetes/allocator-linux.yaml`。
+3. 安装 Agones 并启用项目所需 feature gate；
+4. 部署 PostgreSQL/Redis 或绑定托管实例；
+5. 部署 Auth、Lobby、Admin、PlayerData 和 Allocator；
+6. 应用 `Deploy/Agones` 下的 RBAC、Fleet 与 FleetAutoscaler；
+7. 验证 Ready 容量、真实 Allocation、四客户端对局、结算与 Shutdown。
 
 注意：示例 ConfigMap 引用外部 PostgreSQL 和 Redis 地址，当前 Kubernetes 清单不负责部署数据库和 Redis。
 
-Allocator 使用普通非 root Linux 容器、只读根文件系统、宿主网络和 PVC 启动/管理同 Pod 内的 UE Linux 进程。当前清单采用单副本 `Recreate`，Auth 和 Lobby 可横向扩容；`allocator-windows.yaml` 只保留历史兼容。
+本地/兼容模式仍允许 Allocator 直接管理 UE Linux 子进程；生产集群目标使用 Agones Fleet，不再依赖单个
+game-node Pod 承载全部房间。`allocator-windows.yaml` 仅保留历史兼容。
 
 ## 19. 健康检查和运维
 

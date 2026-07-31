@@ -40,10 +40,22 @@ public sealed class PlayerDataWebApplicationFactory
                 }));
         builder.ConfigureServices(services =>
         {
-            services.RemoveAll<IChatPolicyClient>();
-            services.AddSingleton<TestChatPolicyClient>();
-            services.AddSingleton<IChatPolicyClient>(provider =>
-                provider.GetRequiredService<TestChatPolicyClient>());
+            services.RemoveAll<ILegacyCommunityChatClient>();
+            services.AddSingleton<TestLegacyCommunityChatClient>();
+            services.AddSingleton<ILegacyCommunityChatClient>(provider =>
+                provider.GetRequiredService<TestLegacyCommunityChatClient>());
+            services.RemoveAll<ILegacyReplayEvidenceClient>();
+            services.AddSingleton<TestLegacyReplayEvidenceClient>();
+            services.AddSingleton<ILegacyReplayEvidenceClient>(provider =>
+                provider.GetRequiredService<TestLegacyReplayEvidenceClient>());
+            services.RemoveAll<ILegacyEconomyClient>();
+            services.AddSingleton<TestLegacyEconomyClient>();
+            services.AddSingleton<ILegacyEconomyClient>(provider =>
+                provider.GetRequiredService<TestLegacyEconomyClient>());
+            services.RemoveAll<ILegacyAdminEvidenceClient>();
+            services.AddSingleton<TestLegacyAdminEvidenceClient>();
+            services.AddSingleton<ILegacyAdminEvidenceClient>(provider =>
+                provider.GetRequiredService<TestLegacyAdminEvidenceClient>());
         });
     }
 }
@@ -212,11 +224,70 @@ public sealed class PlayerDataApiTests(
         Assert.Equal(HttpStatusCode.BadRequest, pii.StatusCode);
     }
 
+    /// <summary>旧举报入口只转发 Admin/TrustSafety，不能创建 PlayerData 证据或投影 Outbox。</summary>
+    [Fact]
+    public async Task LegacyReportEndpointForwardsWithoutWritingPlayerDataStore()
+    {
+        var adapter = factory.Services.GetRequiredService<TestLegacyAdminEvidenceClient>();
+        adapter.Requests.Clear();
+        var eventId = Guid.NewGuid().ToString();
+        using var client = factory.CreateClient();
+        using var response = await SendAsync(client, "/internal/sources/reports",
+            PlayerDataWebApplicationFactory.SourceToken, eventId, new
+            {
+                eventId,
+                playerId = "player-report-test",
+                evidenceType = "Report",
+                occurredAtUtc = DateTimeOffset.UtcNow,
+                sourceReference = $"report:{eventId}",
+                data = new { category = "Abuse", reportReference = "masked-report" },
+                sensitivity = "Restricted"
+            });
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        Assert.Single(adapter.Requests);
+        var store = factory.Services.GetRequiredService<GuiyangMahjong.PlayerData.Storage.IPlayerDataStore>();
+        var projections = await store.ClaimProjectionsAsync("test-worker", 10, DateTimeOffset.UtcNow,
+            DateTimeOffset.UtcNow.AddMinutes(1), default);
+        Assert.DoesNotContain(projections, item => item.EventId == eventId);
+    }
+
+    /// <summary>旧Replay URL保持响应兼容，但只调用GameData适配器且不再创建PlayerData投影。</summary>
+    [Fact]
+    public async Task LegacyReplayEndpoint_ForwardsWithoutWritingPlayerDataStore()
+    {
+        var adapter = factory.Services.GetRequiredService<TestLegacyReplayEvidenceClient>();
+        adapter.Requests.Clear();
+        var eventId = Guid.NewGuid().ToString();
+        using var client = factory.CreateClient();
+        using var response = await SendAsync(
+            client,
+            "/internal/sources/replays",
+            PlayerDataWebApplicationFactory.SourceToken,
+            eventId,
+            new
+            {
+                eventId,
+                playerId = "player-replay-test",
+                evidenceType = "Replay",
+                occurredAtUtc = DateTimeOffset.UtcNow,
+                sourceReference = $"replay:{eventId}",
+                data = new { replayId = "legacy-replay-1" },
+                sensitivity = "Restricted"
+            });
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        Assert.Single(adapter.Requests);
+
+        var store = factory.Services.GetRequiredService<GuiyangMahjong.PlayerData.Storage.IPlayerDataStore>();
+        var projections = await store.ClaimProjectionsAsync(
+            "test-worker", 10, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddMinutes(1), default);
+        Assert.DoesNotContain(projections, item => item.EventId == eventId);
+    }
+
     [Fact]
     public async Task ChatAuthorizationFailsClosedForMutedPlayer()
     {
         var policy =
-            factory.Services.GetRequiredService<TestChatPolicyClient>();
+            factory.Services.GetRequiredService<TestLegacyCommunityChatClient>();
         policy.Allowed = false;
         try
         {
@@ -279,16 +350,60 @@ public sealed class PlayerDataApiTests(
     }
 }
 
-public sealed class TestChatPolicyClient : IChatPolicyClient
+/// <summary>旧聊天入口兼容转发替身；验证 PlayerData 不再读取 Auth 或自行计算禁言状态。</summary>
+public sealed class TestLegacyCommunityChatClient : ILegacyCommunityChatClient
 {
     public bool Allowed { get; set; } = true;
 
-    public Task<ChatPolicyResult> GetPolicyAsync(
-        string playerId,
+    public Task<ChatPolicyResult> AuthorizeAsync(
+        AuthorizeChatMessageRequest request,
         CancellationToken cancellationToken) =>
         Task.FromResult(new ChatPolicyResult(
-            playerId,
+            request.PlayerId,
             Allowed,
             Allowed ? null : DateTimeOffset.UtcNow.AddHours(1),
             Allowed ? "Allowed" : "Muted"));
+}
+
+/// <summary>测试替身只记录兼容转发，不访问数据库或网络。</summary>
+public sealed class TestLegacyReplayEvidenceClient : ILegacyReplayEvidenceClient
+{
+    public List<RecordEvidenceRequest> Requests { get; } = [];
+
+    public Task<EvidenceRecordResult> RecordAsync(
+        RecordEvidenceRequest request,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        Requests.Add(request);
+        return Task.FromResult(new EvidenceRecordResult(request.EventId, false));
+    }
+}
+
+/// <summary>Economy 兼容适配测试替身；使用独立内存存储证明旧入口未写入 PlayerData 正式存储实例。</summary>
+public sealed class TestLegacyEconomyClient : ILegacyEconomyClient
+{
+    private readonly GuiyangMahjong.PlayerData.Storage.InMemoryPlayerDataStore isolatedStore = new();
+
+    public Task<EvidenceRecordResult> ClaimRewardAsync(RewardClaimRequest request, string idempotencyKey,
+        CancellationToken cancellationToken) => isolatedStore.RecordRewardClaimAsync(request, DateTimeOffset.UtcNow, cancellationToken);
+
+    public Task<WalletOperationResult> ApplyWalletOperationAsync(AdminWalletOperationRequest request,
+        string idempotencyKey, CancellationToken cancellationToken) => isolatedStore.ApplyWalletOperationAsync(
+            idempotencyKey, request, DateTimeOffset.UtcNow, cancellationToken);
+
+    public Task<IReadOnlyList<WalletBalance>> ListBalancesAsync(string playerId,
+        CancellationToken cancellationToken) => isolatedStore.ListBalancesAsync(playerId, cancellationToken);
+}
+
+/// <summary>Admin/TrustSafety 证据适配替身，只记录转发并保持旧响应结构。</summary>
+public sealed class TestLegacyAdminEvidenceClient : ILegacyAdminEvidenceClient
+{
+    public List<RecordEvidenceRequest> Requests { get; } = [];
+    public Task<EvidenceRecordResult> IngestAsync(RecordEvidenceRequest request,
+        CancellationToken cancellationToken)
+    {
+        Requests.Add(request);
+        return Task.FromResult(new EvidenceRecordResult(request.EventId, false));
+    }
 }

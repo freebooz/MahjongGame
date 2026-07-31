@@ -51,7 +51,25 @@ public sealed class PlayerAuthenticationMiddleware(RequestDelegate next)
             return;
         }
 
-        context.Items[PlayerItemKey] = result.Player;
+        var clientBuild = context.Request.Headers["X-Client-Version"].ToString().Trim();
+        var protocolVersion = context.Request.Headers["X-Protocol-Version"].ToString().Trim();
+        // 旧直连调用只保留到网关迁移结束；其票据会携带 legacy/0，并被严格托管 DS 拒绝。
+        if (clientBuild.Length == 0) clientBuild = "legacy";
+        if (protocolVersion.Length == 0) protocolVersion = "0";
+        if (clientBuild.Length is < 1 or > 80 || protocolVersion.Length is < 1 or > 32
+            || !clientBuild.All(character => char.IsAsciiLetterOrDigit(character)
+                || character is '.' or '-' or '_' or '+')
+            || !protocolVersion.All(char.IsAsciiDigit))
+        {
+            await WriteUnauthorized(context, "客户端版本上下文无效");
+            return;
+        }
+        // 版本头已由 EdgeGateway 清洗和校验；它们只参与兼容绑定，绝不构成玩家身份。
+        context.Items[PlayerItemKey] = result.Player with
+        {
+            ClientBuild = clientBuild,
+            ProtocolVersion = protocolVersion
+        };
         await presence.TouchAsync(result.Player.PlayerId, context.RequestAborted);
         await next(context);
     }

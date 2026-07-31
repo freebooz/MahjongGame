@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using GuiyangMahjong.Lobby.Domain;
 using GuiyangMahjong.Lobby.Options;
+using GuiyangMahjong.Lobby.Rooms;
 using Microsoft.Extensions.Options;
 using Npgsql;
 using StackExchange.Redis;
@@ -72,6 +73,7 @@ public sealed class RedisPostgresLobbyStore : ILobbyStore
     /// <inheritdoc/>
     public async Task<CreateRoomResult> TryCreateRoomAsync(LobbyRoom room, CancellationToken cancellationToken)
     {
+        room = NormalizeSeats(room);
         var payload = JsonSerializer.Serialize(room, JsonOptions);
         await using var connection = await postgres.OpenConnectionAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
@@ -79,15 +81,16 @@ public sealed class RedisPostgresLobbyStore : ILobbyStore
             """
             INSERT INTO lobby_rooms(
                 room_id, room_code, lifecycle, state_sequence,
-                payload, created_at_utc, updated_at_utc)
-            VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7)
+                state_version, room_epoch, payload, created_at_utc, updated_at_utc)
+            VALUES ($1, $2, $3, $4, $4, $5, $6::jsonb, $7, $8)
             ON CONFLICT DO NOTHING
             RETURNING room_id
             """, connection, transaction);
         command.Parameters.AddWithValue(room.RoomId);
         command.Parameters.AddWithValue(room.RoomCode);
-        command.Parameters.AddWithValue(room.Lifecycle.ToString());
+        command.Parameters.AddWithValue(RoomStateMachine.ToCanonicalName(room.Lifecycle));
         command.Parameters.AddWithValue(room.StateSequence);
+        command.Parameters.AddWithValue(room.RoomEpoch);
         command.Parameters.AddWithValue(payload);
         command.Parameters.AddWithValue(room.CreatedAtUtc);
         command.Parameters.AddWithValue(room.UpdatedAtUtc);
@@ -183,7 +186,7 @@ public sealed class RedisPostgresLobbyStore : ILobbyStore
         await using var command = postgres.CreateCommand(
             """
             SELECT payload::text FROM lobby_rooms
-            WHERE lifecycle IN ('Allocating', 'Waiting')
+            WHERE lifecycle IN ('Created', 'Creating', 'Waiting', 'Ready', 'Allocating', 'Starting')
             ORDER BY updated_at_utc DESC LIMIT 100
             """);
         var result = new List<LobbyRoom>();
@@ -279,7 +282,12 @@ public sealed class RedisPostgresLobbyStore : ILobbyStore
 
         var room = JsonSerializer.Deserialize<LobbyRoom>(payload, JsonOptions)
             ?? throw new InvalidDataException("Stored lobby room payload could not be parsed.");
-        if (room.Lifecycle is not RoomLifecycle.Allocating and not RoomLifecycle.Waiting)
+        if (room.Lifecycle is not (
+            RoomLifecycle.Created
+            or RoomLifecycle.Waiting
+            or RoomLifecycle.Ready
+            or RoomLifecycle.Allocating
+            or RoomLifecycle.Starting))
         {
             await transaction.CommitAsync(cancellationToken);
             return room;
@@ -335,7 +343,7 @@ public sealed class RedisPostgresLobbyStore : ILobbyStore
             retainedPlayerIds = [prospectivePlayerId];
         }
 
-        var updated = room with
+        var updated = NormalizeSeats(room with
         {
             OwnerPlayerId = retainedPlayerIds.Contains(room.OwnerPlayerId, StringComparer.Ordinal)
                 ? room.OwnerPlayerId
@@ -343,7 +351,7 @@ public sealed class RedisPostgresLobbyStore : ILobbyStore
             PlayerIds = retainedPlayerIds,
             StateSequence = room.StateSequence + 1,
             UpdatedAtUtc = observedAtUtc
-        };
+        });
         if (!await ReserveActivePlayerAsync(
                 connection, transaction, updated, retainedPlayerIds[0], cancellationToken)
             || !await UpdateInTransactionAsync(
@@ -412,7 +420,12 @@ public sealed class RedisPostgresLobbyStore : ILobbyStore
             await transaction.CommitAsync(cancellationToken);
             return new AddPlayerResult(AddPlayerStatus.AlreadyMember, room);
         }
-        if (room.Lifecycle is RoomLifecycle.Closed or RoomLifecycle.Failed or RoomLifecycle.Playing or RoomLifecycle.Settling)
+        if (room.Lifecycle is not (
+            RoomLifecycle.Created
+            or RoomLifecycle.Waiting
+            or RoomLifecycle.Ready
+            or RoomLifecycle.Allocating
+            or RoomLifecycle.Starting))
         {
             await transaction.CommitAsync(cancellationToken);
             return new AddPlayerResult(AddPlayerStatus.RoomClosed, room);
@@ -431,6 +444,16 @@ public sealed class RedisPostgresLobbyStore : ILobbyStore
         var updated = room with
         {
             PlayerIds = [.. room.PlayerIds, playerId],
+            Seats =
+            [
+                .. NormalizeSeats(room).Seats,
+                new RoomSeat(
+                    playerId,
+                    Enumerable.Range(0, room.MaximumPlayers)
+                        .First(index => NormalizeSeats(room).Seats
+                            .All(seat => seat.SeatIndex != index)),
+                    DateTimeOffset.UtcNow)
+            ],
             StateSequence = room.StateSequence + 1,
             UpdatedAtUtc = DateTimeOffset.UtcNow
         };
@@ -459,17 +482,20 @@ public sealed class RedisPostgresLobbyStore : ILobbyStore
     /// <inheritdoc/>
     public async Task<bool> UpdateRoomAsync(LobbyRoom room, CancellationToken cancellationToken)
     {
+        room = NormalizeSeats(room);
         var payload = JsonSerializer.Serialize(room, JsonOptions);
         await using var connection = await postgres.OpenConnectionAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
         await using var command = new NpgsqlCommand(
             """
             UPDATE lobby_rooms
-            SET lifecycle=$1, state_sequence=$2, payload=$3::jsonb, updated_at_utc=$4
-            WHERE room_id=$5 AND state_sequence=$6
+            SET lifecycle=$1, state_sequence=$2, state_version=$2, room_epoch=$3,
+                payload=$4::jsonb, updated_at_utc=$5
+            WHERE room_id=$6 AND state_version=$7 AND room_epoch <= $3
             """, connection, transaction);
-        command.Parameters.AddWithValue(room.Lifecycle.ToString());
+        command.Parameters.AddWithValue(RoomStateMachine.ToCanonicalName(room.Lifecycle));
         command.Parameters.AddWithValue(room.StateSequence);
+        command.Parameters.AddWithValue(room.RoomEpoch);
         command.Parameters.AddWithValue(payload);
         command.Parameters.AddWithValue(room.UpdatedAtUtc);
         command.Parameters.AddWithValue(room.RoomId);
@@ -529,11 +555,14 @@ public sealed class RedisPostgresLobbyStore : ILobbyStore
 
         await using var update = new NpgsqlCommand(
             """
-            UPDATE lobby_rooms SET lifecycle=$1, state_sequence=$2, payload=$3::jsonb, updated_at_utc=$4
-            WHERE room_id=$5 AND state_sequence=$6
+            UPDATE lobby_rooms
+            SET lifecycle=$1, state_sequence=$2, state_version=$2, room_epoch=$3,
+                payload=$4::jsonb, updated_at_utc=$5
+            WHERE room_id=$6 AND state_version=$7 AND room_epoch <= $3
             """, connection, transaction);
-        update.Parameters.AddWithValue(closedRoom.Lifecycle.ToString());
+        update.Parameters.AddWithValue(RoomStateMachine.ToCanonicalName(closedRoom.Lifecycle));
         update.Parameters.AddWithValue(closedRoom.StateSequence);
+        update.Parameters.AddWithValue(closedRoom.RoomEpoch);
         update.Parameters.AddWithValue(JsonSerializer.Serialize(closedRoom, JsonOptions));
         update.Parameters.AddWithValue(closedRoom.UpdatedAtUtc);
         update.Parameters.AddWithValue(closedRoom.RoomId);
@@ -595,12 +624,15 @@ public sealed class RedisPostgresLobbyStore : ILobbyStore
     {
         await using var update = new NpgsqlCommand(
             """
-            UPDATE lobby_rooms SET lifecycle=$1, state_sequence=$2, payload=$3::jsonb, updated_at_utc=$4
-            WHERE room_id=$5 AND state_sequence=$6
+            UPDATE lobby_rooms
+            SET lifecycle=$1, state_sequence=$2, state_version=$2, room_epoch=$3,
+                payload=$4::jsonb, updated_at_utc=$5
+            WHERE room_id=$6 AND state_version=$7 AND room_epoch <= $3
             """, connection, transaction);
-        update.Parameters.AddWithValue(room.Lifecycle.ToString());
+        update.Parameters.AddWithValue(RoomStateMachine.ToCanonicalName(room.Lifecycle));
         update.Parameters.AddWithValue(room.StateSequence);
-        update.Parameters.AddWithValue(JsonSerializer.Serialize(room, JsonOptions));
+        update.Parameters.AddWithValue(room.RoomEpoch);
+        update.Parameters.AddWithValue(JsonSerializer.Serialize(NormalizeSeats(room), JsonOptions));
         update.Parameters.AddWithValue(room.UpdatedAtUtc);
         update.Parameters.AddWithValue(room.RoomId);
         update.Parameters.AddWithValue(expectedStateSequence);
@@ -701,7 +733,42 @@ public sealed class RedisPostgresLobbyStore : ILobbyStore
     }
 
     private static bool IsActive(RoomLifecycle lifecycle) => lifecycle is
-        RoomLifecycle.Allocating or RoomLifecycle.Waiting or RoomLifecycle.Playing or RoomLifecycle.Settling;
+        RoomLifecycle.Created
+        or RoomLifecycle.Waiting
+        or RoomLifecycle.Ready
+        or RoomLifecycle.Allocating
+        or RoomLifecycle.Starting
+        or RoomLifecycle.Playing
+        or RoomLifecycle.Suspended
+        or RoomLifecycle.Recovering
+        or RoomLifecycle.Settling
+        or RoomLifecycle.Terminating;
+
+    /// <summary>为升级前 JSONB 快照补齐显式座位，避免读取旧数据时产生重复或越界座位。</summary>
+    private static LobbyRoom NormalizeSeats(LobbyRoom room)
+    {
+        var assigned = room.Seats
+            .Where(seat => room.PlayerIds.Contains(seat.PlayerId, StringComparer.Ordinal))
+            .Where(seat => seat.SeatIndex >= 0 && seat.SeatIndex < room.MaximumPlayers)
+            .GroupBy(seat => seat.PlayerId, StringComparer.Ordinal)
+            .Select(group => group.First())
+            .GroupBy(seat => seat.SeatIndex)
+            .Select(group => group.First())
+            .ToList();
+        foreach (var playerId in room.PlayerIds)
+        {
+            if (assigned.Any(seat => seat.PlayerId == playerId))
+            {
+                continue;
+            }
+
+            var seatIndex = Enumerable.Range(0, room.MaximumPlayers)
+                .First(index => assigned.All(seat => seat.SeatIndex != index));
+            assigned.Add(new RoomSeat(playerId, seatIndex, room.CreatedAtUtc));
+        }
+
+        return room with { Seats = assigned.OrderBy(seat => seat.SeatIndex).ToArray() };
+    }
 
     private string RoomCodeKey(string roomCode) => $"{options.RedisKeyPrefix}:room:code:{roomCode}";
     private string RoomIdKey(string roomId) => $"{options.RedisKeyPrefix}:room:id:{roomId}";
@@ -711,6 +778,8 @@ public sealed class RedisPostgresLobbyStore : ILobbyStore
         && left.ServerInstanceId == right.ServerInstanceId
         && left.ResultSequence == right.ResultSequence
         && left.CompletedRounds == right.CompletedRounds
-        && left.Players.SequenceEqual(right.Players);
+        && left.Players.SequenceEqual(right.Players)
+        && string.Equals(left.EventChainDigest, right.EventChainDigest, StringComparison.Ordinal)
+        && (left.ShuffleProofs ?? []).SequenceEqual(right.ShuffleProofs ?? []);
 
 }

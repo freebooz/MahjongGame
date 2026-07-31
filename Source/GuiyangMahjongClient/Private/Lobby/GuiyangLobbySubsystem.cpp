@@ -11,7 +11,8 @@
 
 namespace GuiyangLobbyPrivate
 {
-    constexpr const TCHAR* ConfigSection = TEXT("/Script/GuiyangMahjong.GuiyangLobbySubsystem");
+    constexpr const TCHAR* ConfigSection =
+        TEXT("/Script/GuiyangMahjongClient.GuiyangLobbySubsystem");
 
     class FLocalLegacyLobbyBackend final : public ILobbyBackend
     {
@@ -113,28 +114,32 @@ void UGuiyangLobbySubsystem::Initialize(FSubsystemCollectionBase& Collection)
     }
     else
     {
-        FString ConfiguredBaseUrl;
         float RequestTimeoutSeconds = 10.0f;
         float RoutePollIntervalSeconds = 0.25f;
         int32 RoutePollMaxAttempts = 120;
         if (GConfig)
         {
-            GConfig->GetString(GuiyangLobbyPrivate::ConfigSection, TEXT("RemoteBaseUrl"), ConfiguredBaseUrl, GGameIni);
             GConfig->GetFloat(GuiyangLobbyPrivate::ConfigSection, TEXT("RemoteRequestTimeoutSeconds"), RequestTimeoutSeconds, GGameIni);
             GConfig->GetFloat(GuiyangLobbyPrivate::ConfigSection, TEXT("RemoteRoutePollIntervalSeconds"), RoutePollIntervalSeconds, GGameIni);
             GConfig->GetInt(GuiyangLobbyPrivate::ConfigSection, TEXT("RemoteRoutePollMaxAttempts"), RoutePollMaxAttempts, GGameIni);
         }
-        FString CommandLineBaseUrl;
-        if (FParse::Value(FCommandLine::Get(), TEXT("MahjongLobbyBaseUrl="), CommandLineBaseUrl))
-            ConfiguredBaseUrl = MoveTemp(CommandLineBaseUrl);
         FGuiyangRemoteLobbySettings Settings;
-        if (FGuiyangRemoteLobbyCodec::NormalizeBaseUrl(ConfiguredBaseUrl, Settings.BaseUrl))
+        if (FGuiyangPlatformEndpointSettings::Load(
+                EGuiyangLegacyEndpointRole::Lobby,
+                Settings.PlatformEndpoints))
         {
             Settings.RequestTimeoutSeconds = FMath::Clamp(RequestTimeoutSeconds, 2.0f, 30.0f);
             Settings.RoutePollIntervalSeconds = FMath::Clamp(RoutePollIntervalSeconds, 0.1f, 2.0f);
             Settings.RoutePollMaxAttempts = FMath::Clamp(RoutePollMaxAttempts, 1, 600);
             Backend = CreateRemoteLobbyBackend(*this, Settings);
-            UE_LOG(LogMahjongNet, Log, TEXT("RemoteLobby HTTP 后端已配置：BaseUrl=%s"), *Settings.BaseUrl);
+            // 端点值不写日志；人工审查只需要确认统一网关或旧兼容模式。
+            UE_LOG(
+                LogMahjongNet,
+                Log,
+                TEXT("RemoteLobby HTTP 后端已配置：EndpointMode=%s"),
+                Settings.PlatformEndpoints.bUsingLegacyDirectEndpoint
+                    ? TEXT("LegacyDirect")
+                    : TEXT("EdgeGateway"));
         }
         else
         {

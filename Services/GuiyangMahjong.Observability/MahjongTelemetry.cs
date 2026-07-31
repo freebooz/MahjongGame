@@ -95,6 +95,10 @@ public static class MahjongTelemetry
         Meter.CreateCounter<long>("mahjong_admin_abac_decisions");
     private static readonly Counter<long> AdminBreakGlass =
         Meter.CreateCounter<long>("mahjong_admin_break_glass_uses");
+    private static readonly Counter<long> AllocationProviderOutcome =
+        Meter.CreateCounter<long>("mahjong_allocation_provider_outcomes");
+    private static readonly Histogram<double> AllocationProviderDuration =
+        Meter.CreateHistogram<double>("mahjong_allocation_provider_duration", "ms");
 
     /// <summary>
     /// 获取当前请求的业务 TraceId；下游 HTTP 客户端用它填充 X-Trace-Id，
@@ -104,6 +108,23 @@ public static class MahjongTelemetry
         Activity.Current?.GetBaggageItem("mahjong.business_trace_id")
         ?? Activity.Current?.TraceId.ToString()
         ?? Guid.NewGuid().ToString();
+
+    /// <summary>
+    /// 记录统一 Allocation Provider 调用结果；Provider 与 outcome 必须来自受控枚举，禁止加入房间或实例 ID 标签。
+    /// </summary>
+    public static void RecordAllocationProvider(
+        string provider,
+        string outcome,
+        double durationMilliseconds)
+    {
+        var tags = new TagList
+        {
+            { "provider", NormalizeBoundedTag(provider) },
+            { "outcome", NormalizeBoundedTag(outcome) }
+        };
+        AllocationProviderOutcome.Add(1, tags);
+        AllocationProviderDuration.Record(durationMilliseconds, tags);
+    }
 
     /// <summary>
     /// 记录 HTTP RED 指标；标签只包含服务、方法、受控路由和状态码类别，避免业务 ID 导致高基数。

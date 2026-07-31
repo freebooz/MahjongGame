@@ -1,0 +1,68 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mahjong-workers
+  namespace: guiyang-mahjong
+  labels: {app: mahjong-workers}
+spec:
+  replicas: 2
+  selector: {matchLabels: {app: mahjong-workers}}
+  template:
+    metadata: {labels: {app: mahjong-workers}}
+    spec:
+      # Worker 不调用 Kubernetes API，因此禁止挂载 ServiceAccount Token。
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 45
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1654
+        runAsGroup: 1654
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: workers
+          image: ghcr.io/freebooz/guiyang-mahjong-workers:REPLACE_WITH_GIT_SHA
+          ports: [{name: http, containerPort: 8080}]
+          envFrom:
+            - configMapRef: {name: mahjong-services}
+            - secretRef: {name: mahjong-secrets}
+          startupProbe:
+            httpGet: {path: /health/startup, port: http}
+            periodSeconds: 2
+            failureThreshold: 60
+          readinessProbe:
+            httpGet: {path: /health/ready, port: http}
+            periodSeconds: 5
+            timeoutSeconds: 2
+          livenessProbe:
+            httpGet: {path: /health/live, port: http}
+            periodSeconds: 15
+          resources:
+            requests: {cpu: 250m, memory: 256Mi}
+            limits: {cpu: "2", memory: 1Gi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          volumeMounts: [{name: tmp, mountPath: /tmp}]
+      volumes:
+        - name: tmp
+          emptyDir: {sizeLimit: 64Mi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mahjong-workers
+  namespace: guiyang-mahjong
+spec:
+  selector: {app: mahjong-workers}
+  ports: [{name: http, port: 8080, targetPort: http}]
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: mahjong-workers
+  namespace: guiyang-mahjong
+spec:
+  maxUnavailable: 1
+  selector: {matchLabels: {app: mahjong-workers}}
+

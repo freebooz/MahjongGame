@@ -40,6 +40,30 @@ public sealed class PlayerAccessTokenIssuer(IOptions<AuthOptions> options)
         return $"{encodedPayload}.{Base64UrlEncode(signature)}";
     }
 
+    /// <summary>
+    /// 为实际登录会话签发带 Epoch 快照的兼容令牌。外层仍保持既有两段式 HMAC 格式，
+    /// 旧消费者会忽略新增字段；新消费者可使用会话标识和 Epoch 执行撤销检查。
+    /// </summary>
+    public string Issue(
+        AuthIdentity identity,
+        RefreshSession session,
+        DateTimeOffset issuedAtUtc,
+        DateTimeOffset expiresAtUtc)
+    {
+        var payload = JsonSerializer.SerializeToUtf8Bytes(new PlayerSessionTokenPayload(
+            identity.PlayerId,
+            identity.DisplayName,
+            identity.Provider,
+            issuedAtUtc.ToUnixTimeMilliseconds(),
+            expiresAtUtc.ToUnixTimeSeconds(),
+            session.SessionId,
+            session.SessionEpoch,
+            session.SecurityEpoch));
+        var encodedPayload = Base64UrlEncode(payload);
+        var signature = HMACSHA256.HashData(signingKey, Encoding.ASCII.GetBytes(encodedPayload));
+        return $"{encodedPayload}.{Base64UrlEncode(signature)}";
+    }
+
     private static string Base64UrlEncode(byte[] bytes) =>
         Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');
 
@@ -49,4 +73,18 @@ public sealed class PlayerAccessTokenIssuer(IOptions<AuthOptions> options)
         string Provider,
         long Iat,
         long Exp);
+
+    /// <summary>
+    /// v1 兼容扩展载荷；新增字段采用可向后兼容的 JSON 属性，
+    /// 不改变既有 Sub、Name、Provider、Iat 和 Exp 的含义及单位。
+    /// </summary>
+    private sealed record PlayerSessionTokenPayload(
+        string Sub,
+        string Name,
+        string Provider,
+        long Iat,
+        long Exp,
+        string Sid,
+        long SessionEpoch,
+        long SecurityEpoch);
 }

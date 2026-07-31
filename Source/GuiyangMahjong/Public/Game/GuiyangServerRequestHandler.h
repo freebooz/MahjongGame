@@ -41,4 +41,10 @@ public:
     /** 处理带序号的统一牌桌动作，服务端负责合法性和幂等校验。 */
     virtual void HandleTableAction(AGuiyangMahjongPlayerController* Controller,
         const FMahjongActionRequest& Request) = 0;
+    /** 确认重连快照已经在指定客户端应用；确认前恢复实例不接受该连接的新动作。 */
+    virtual void HandleReconnectStateConfirmed(
+        AGuiyangMahjongPlayerController* Controller,
+        const FString& ControlToken,
+        int32 StateVersion,
+        const FString& PublicStateHash) = 0;
 };

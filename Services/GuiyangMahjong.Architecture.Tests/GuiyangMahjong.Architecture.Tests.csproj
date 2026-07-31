@@ -12,10 +12,9 @@
     </PackageReference>
   </ItemGroup>
   <ItemGroup>
-    <!-- 同时引用四个数据库服务，专门验证组合测试输出中 Schema 仍保持隔离。 -->
+    <!-- 只引用在役数据库服务，退役的 PlayerData 不得因架构测试被重新构建。 -->
     <ProjectReference Include="..\GuiyangMahjong.Auth\GuiyangMahjong.Auth.csproj" />
     <ProjectReference Include="..\GuiyangMahjong.Lobby\GuiyangMahjong.Lobby.csproj" />
-    <ProjectReference Include="..\GuiyangMahjong.PlayerData\GuiyangMahjong.PlayerData.csproj" />
     <ProjectReference Include="..\GuiyangMahjong.Admin\GuiyangMahjong.Admin.csproj" />
   </ItemGroup>
 </Project>

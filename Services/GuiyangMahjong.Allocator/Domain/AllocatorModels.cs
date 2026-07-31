@@ -19,8 +19,22 @@ public enum GameServerInstanceState
     Failed
 }
 
-/// <summary>房间申请游戏服的幂等业务输入；RoomId/MatchId 定位对局，BuildVersion 约束兼容版本。</summary>
-public sealed record AllocationRequest(string RoomId, string MatchId, string BuildVersion);
+/// <summary>
+/// 房间申请游戏服的幂等业务输入。
+/// RoomEpoch 是 Lobby 生成的路由 fencing token，Allocator 只负责原样传递给目标 DS。
+/// </summary>
+public sealed record AllocationRequest(
+    string RoomId,
+    string MatchId,
+    string BuildVersion,
+    long RoomEpoch = 1,
+    string? AllocationId = null,
+    string GameType = "guiyang-zhua-ji",
+    string Region = "local",
+    string RuleSetVersion = "guiyang-zhuoji-v1",
+    string ProtocolVersion = "1",
+    int RequestedCapacity = 4,
+    string? IdempotencyKey = null);
 
 /// <summary>分配结果；端口是主机监听端口，状态通常为 Starting，需等待实例注册后才能加入。</summary>
 public sealed record AllocationResponse(
@@ -28,7 +42,10 @@ public sealed record AllocationResponse(
     string RoomId,
     string ServerInstanceId,
     int Port,
-    GameServerInstanceState State);
+    GameServerInstanceState State,
+    long RoomEpoch = 1,
+    string? AllocationId = null,
+    long FencingToken = 1);
 
 /// <summary>
 /// Dedicated Server 启动后的单次注册请求。
@@ -39,7 +56,9 @@ public sealed record ConfirmRegistrationRequest(
     string ListenIp,
     int ListenPort,
     string BuildVersion,
-    string RegistrationCredential);
+    string RegistrationCredential,
+    long RoomEpoch = 0,
+    long FencingToken = 0);
 
 /// <summary>注册结果；心跳间隔单位为秒，心跳凭据只返回给已验证的目标实例。</summary>
 public sealed record ConfirmRegistrationResponse(
@@ -47,7 +66,9 @@ public sealed record ConfirmRegistrationResponse(
     string ServerInstanceId,
     bool Accepted,
     int HeartbeatIntervalSeconds,
-    string HeartbeatCredential);
+    string HeartbeatCredential,
+    long RoomEpoch = 1,
+    long FencingToken = 1);
 
 /// <summary>
 /// 实例周期心跳；玩家数和局号为非负计数，SentAtUtc 用于识别陈旧或乱序样本，
@@ -60,7 +81,9 @@ public sealed record InstanceHeartbeatRequest(
     string RoomLifecycle,
     int RoundId,
     string BuildVersion,
-    DateTimeOffset SentAtUtc);
+    DateTimeOffset SentAtUtc,
+    long RoomEpoch = 0,
+    long FencingToken = 0);
 
 /// <summary>
 /// 对外可见的实例只读快照。
@@ -78,13 +101,18 @@ public sealed record GameServerInstanceSnapshot(
     DateTimeOffset? RegisteredAtUtc,
     DateTimeOffset? LastHeartbeatAtUtc,
     string BuildVersion,
-    string? FailureReason);
+    string? FailureReason,
+    long RoomEpoch = 1,
+    string? AllocationId = null,
+    string Provider = "LocalProcess",
+    long FencingToken = 1);
 
 /// <summary>发送给 Lobby 的实例失败通知；原因必须脱敏且不包含启动参数中的秘密。</summary>
 public sealed record InstanceFailureNotification(
     string ServerInstanceId,
     string RoomId,
-    string Reason);
+    string Reason,
+    long RoomEpoch = 1);
 
 /// <summary>Admin 终止实例命令；ExpectedState 防止基于陈旧监控页面误杀已复用实例。</summary>
 public sealed record AdminTerminateInstanceRequest(
@@ -108,6 +136,23 @@ internal sealed class GameServerInstance
     public required string ServerInstanceId { get; init; }
     public required string RoomId { get; init; }
     public required string MatchId { get; init; }
+    /// <summary>调用方分配标识和幂等键在一次分配生命周期内不可变，用于响应丢失后的稳定查询。</summary>
+    public required string AllocationId { get; init; }
+    public required string IdempotencyKey { get; init; }
+    /// <summary>规范化请求指纹用于拒绝相同幂等键携带不同参数，禁止记录凭据。</summary>
+    public required string RequestFingerprint { get; init; }
+    /// <summary>Lobby 分配代际；实例生命周期内不可变，旧代际不得向新房间路由注册。</summary>
+    public long RoomEpoch { get; init; } = 1;
+    /// <summary>实例租约 fencing token；当前版本与 RoomEpoch 同值，单独持久化以支持后续独立演进。</summary>
+    public long FencingToken { get; init; } = 1;
+
+    // 调度约束在创建后冻结，同一房间 Epoch 不允许切换 Provider 或版本/容量条件。
+    public required string Provider { get; init; }
+    public required string GameType { get; init; }
+    public required string Region { get; init; }
+    public required string RuleSetVersion { get; init; }
+    public required string ProtocolVersion { get; init; }
+    public int RequestedCapacity { get; init; }
 
     // 端口单位为 TCP/UDP 端口号；AdvertisedIp 是客户端可达地址，不一定等于监听地址。
     public required int Port { get; init; }
@@ -151,7 +196,11 @@ internal sealed class GameServerInstance
         RegisteredAtUtc,
         LastHeartbeatAtUtc,
         BuildVersion,
-        FailureReason);
+        FailureReason,
+        RoomEpoch,
+        AllocationId,
+        Provider,
+        FencingToken);
 }
 
 /// <summary>Allocator 可安全映射为 HTTP 状态的领域异常；消息不得包含凭据或完整启动命令。</summary>

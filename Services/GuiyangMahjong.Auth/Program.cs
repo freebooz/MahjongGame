@@ -1,8 +1,14 @@
 using System.Threading.RateLimiting;
+using GuiyangMahjong.Auth.Administration;
+using GuiyangMahjong.Auth.Auth;
+using GuiyangMahjong.Auth.Devices;
 using GuiyangMahjong.Auth.Domain;
+using GuiyangMahjong.Auth.Infrastructure;
 using GuiyangMahjong.Auth.Options;
+using GuiyangMahjong.Auth.Players;
 using GuiyangMahjong.Auth.Security;
 using GuiyangMahjong.Auth.Services;
+using GuiyangMahjong.Auth.Sessions;
 using GuiyangMahjong.Auth.Storage;
 using GuiyangMahjong.Observability;
 using Microsoft.AspNetCore.RateLimiting;
@@ -50,10 +56,19 @@ builder.Services.AddOptions<AuthOptions>()
                                  "development-only", StringComparison.OrdinalIgnoreCase)),
         "Production Auth must not use development-only signing material.")
     .ValidateOnStart();
+builder.Services.AddOptions<SessionPolicyOptions>()
+    .Bind(builder.Configuration.GetSection(SessionPolicyOptions.SectionName))
+    .ValidateDataAnnotations()
+    .Validate(
+        options => Enum.TryParse<SessionPolicyMode>(
+            options.Mode,
+            ignoreCase: false,
+            out _),
+        "Sessions:Mode must be SingleDevice or MultiDevice.")
+    .ValidateOnStart();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<PlayerAccessTokenIssuer>();
 builder.Services.AddSingleton<LocalPlayerNameGenerator>();
-builder.Services.AddSingleton<AuthService>();
 builder.Services.AddSingleton<IAuthStore>(provider =>
 {
     var options = provider.GetRequiredService<IOptions<AuthOptions>>().Value;
@@ -61,6 +76,31 @@ builder.Services.AddSingleton<IAuthStore>(provider =>
     var dataSource = NpgsqlDataSource.Create(options.PostgresConnectionString);
     return new PostgresAuthStore(dataSource);
 });
+// 模块仍共享一个部署单元和一个存储实例，但通过窄接口暴露玩家档案，
+// 防止 Players 模块获得 Refresh Token 或签名密钥能力。
+builder.Services.AddSingleton<IPlayerProfileReader>(provider =>
+    (IPlayerProfileReader)provider.GetRequiredService<IAuthStore>());
+builder.Services.AddSingleton<IIdentityRepository>(provider =>
+    provider.GetRequiredService<IAuthStore>());
+builder.Services.AddSingleton<ISessionRepository>(provider =>
+    provider.GetRequiredService<IAuthStore>());
+builder.Services.AddSingleton<IDeviceAuditWriter>(provider =>
+    provider.GetRequiredService<IAuthStore>());
+builder.Services.AddSingleton<IIdentityAdministrationStore>(provider =>
+    provider.GetRequiredService<IAuthStore>());
+builder.Services.AddSingleton<IPlayerDirectoryReader>(provider =>
+    provider.GetRequiredService<IAuthStore>());
+builder.Services.AddSingleton<IIdentityStorageLifecycle>(provider =>
+    provider.GetRequiredService<IAuthStore>());
+builder.Services.AddSingleton<AuthService>(provider => new AuthService(
+    provider.GetRequiredService<IIdentityRepository>(),
+    provider.GetRequiredService<ISessionRepository>(),
+    provider.GetRequiredService<IDeviceAuditWriter>(),
+    provider.GetRequiredService<PlayerAccessTokenIssuer>(),
+    provider.GetRequiredService<LocalPlayerNameGenerator>(),
+    provider.GetRequiredService<IOptions<AuthOptions>>(),
+    provider.GetRequiredService<IOptions<SessionPolicyOptions>>(),
+    provider.GetRequiredService<TimeProvider>()));
 builder.Services.AddHostedService<AuthStoreInitializer>();
 builder.Services.AddRateLimiter(options => options.AddPolicy("auth", context =>
     RateLimitPartition.GetFixedWindowLimiter(
@@ -83,7 +123,7 @@ app.UseRateLimiter();
 
 app.MapGet("/health/live", () => Results.Ok(new { status = "live" }));
 app.MapGet("/health/ready", async (
-    IAuthStore store,
+    IIdentityStorageLifecycle store,
     CancellationToken cancellationToken) =>
     await store.CheckHealthAsync(cancellationToken)
         ? Results.Ok(new { status = "ready", identityStore = "ready" })
@@ -93,6 +133,28 @@ app.MapGet("/health/ready", async (
 app.MapGet("/openapi/v1.yaml", () => Results.File(
     Path.Combine(AppContext.BaseDirectory, "OpenAPI", "auth-v1.openapi.yaml"),
     "application/yaml"));
+
+app.MapGet("/internal/identity/token-validation-config", (
+    HttpContext context,
+    IOptions<AuthOptions> options) =>
+{
+    if (!HasMonitoringCredential(context, options.Value.MonitoringReadOnlyToken))
+        return Results.Unauthorized();
+    // HMAC 没有可公开的验证公钥，因此这里只发布非敏感算法和轮换元数据；
+    // EdgeGateway/Lobby 的实际验证密钥继续由各自生产身份从密钥系统注入。
+    return Results.Ok(new
+    {
+        format = "base64url-json.hmac-sha256",
+        algorithm = "HMAC-SHA256",
+        activeKeyId = options.Value.ActiveSigningKeyId,
+        accessTokenLifetimeMinutes = options.Value.AccessTokenMinutes,
+        claims = new[]
+        {
+            "Sub", "Name", "Provider", "Iat", "Exp",
+            "Sid", "SessionEpoch", "SecurityEpoch"
+        }
+    });
+});
 
 app.MapPost("/v1/auth/guest", async (
     GuestLoginRequest request,
@@ -127,7 +189,7 @@ app.MapPost("/internal/admin/players/{playerId}/sessions/revoke", async (
     string playerId,
     AdminRevokePlayerSessionsRequest request,
     HttpContext context,
-    IAuthStore store,
+    IIdentityAdministrationStore store,
     IOptions<AuthOptions> options,
     TimeProvider timeProvider,
     CancellationToken cancellationToken) =>
@@ -160,7 +222,7 @@ app.MapPost("/internal/admin/players/{playerId}/controls", async (
     string playerId,
     AdminUpdatePlayerControlRequest request,
     HttpContext context,
-    IAuthStore store,
+    IIdentityAdministrationStore store,
     IOptions<AuthOptions> options,
     TimeProvider timeProvider,
     CancellationToken cancellationToken) =>
@@ -219,7 +281,7 @@ app.MapPost("/internal/admin/players/{playerId}/controls", async (
 
 app.MapGet("/internal/monitoring/players", async (
     HttpContext context,
-    IAuthStore store,
+    IPlayerDirectoryReader store,
     IOptions<AuthOptions> options,
     string? search,
     string? cursor,
@@ -275,7 +337,7 @@ app.MapGet("/internal/monitoring/players", async (
 app.MapGet("/internal/monitoring/players/{playerId}", async (
     string playerId,
     HttpContext context,
-    IAuthStore store,
+    IPlayerDirectoryReader store,
     IOptions<AuthOptions> options,
     TimeProvider timeProvider,
     CancellationToken cancellationToken) =>

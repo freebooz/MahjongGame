@@ -40,7 +40,10 @@ bool FGuiyangAgonesActivationTest::RunTest(const FString& Parameters)
         { TEXT("mahjong.freebooz/server-instance-id"), TEXT("33333333-3333-3333-3333-333333333333") },
         { TEXT("mahjong.freebooz/registration-credential"), TEXT("registration-credential-long-enough") },
         { TEXT("mahjong.freebooz/lobby-internal-url"), TEXT("http://mahjong-lobby:8080") },
-        { TEXT("mahjong.freebooz/build-version"), TEXT("test-build") }
+        { TEXT("mahjong.freebooz/gamedata-internal-url"), TEXT("http://mahjong-gamedata:8080") },
+        { TEXT("mahjong.freebooz/build-version"), TEXT("test-build") },
+        { TEXT("mahjong.freebooz/room-epoch"), TEXT("1") },
+        { TEXT("mahjong.freebooz/fencing-token"), TEXT("1") }
     };
     FGuiyangGameServerLaunchConfig Config;
     FString Error;
@@ -73,8 +76,8 @@ namespace GuiyangManagedGameServerTests
     constexpr const TCHAR* MatchId = TEXT("22222222-2222-2222-2222-222222222222");
     constexpr const TCHAR* InstanceId = TEXT("33333333-3333-3333-3333-333333333333");
     constexpr const TCHAR* ValidTicket = TEXT(
-        "eyJwbGF5ZXJJZCI6InBsYXllci0xIiwiZGlzcGxheU5hbWUiOiLmtYvor5XnjqnlrrYiLCJyb29tSWQiOiIxMTExMTExMS0xMTExLTExMTEtMTExMS0xMTExMTExMTExMTEiLCJtYXRjaElkIjoiMjIyMjIyMjItMjIyMi0yMjIyLTIyMjItMjIyMjIyMjIyMjIyIiwic2VydmVySW5zdGFuY2VJZCI6IjMzMzMzMzMzLTMzMzMtMzMzMy0zMzMzLTMzMzMzMzMzMzMzMyIsImV4cGlyZXNBdFVuaXhTZWNvbmRzIjoyMDAwMDAwMDMwLCJub25jZSI6IjQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0In0."
-        "kM_Qa8MeH-B-BLF6TcCiQUzMy_9w7Rbi0FdgKnyQGUg");
+        "eyJ0aWNrZXRJZCI6ImFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhIiwicGxheWVySWQiOiJwbGF5ZXItMSIsImRpc3BsYXlOYW1lIjoi5rWL6K-V546p5a62Iiwicm9vbUlkIjoiMTExMTExMTEtMTExMS0xMTExLTExMTEtMTExMTExMTExMTExIiwibWF0Y2hJZCI6IjIyMjIyMjIyLTIyMjItMjIyMi0yMjIyLTIyMjIyMjIyMjIyMiIsInNlYXRJZCI6MCwic2Vzc2lvbklkIjoiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmIiLCJzZXNzaW9uRXBvY2giOjQsInNlY3VyaXR5RXBvY2giOjIsInNlcnZlckluc3RhbmNlSWQiOiIzMzMzMzMzMy0zMzMzLTMzMzMtMzMzMy0zMzMzMzMzMzMzMzMiLCJyb29tRXBvY2giOjEsImNsaWVudEJ1aWxkIjoidGVzdC1idWlsZCIsInByb3RvY29sVmVyc2lvbiI6MSwicnVsZVNldFZlcnNpb24iOiJndWl5YW5nLXpodW9qaS12MSIsImlzc3VlZEF0VW5peFNlY29uZHMiOjIwMDAwMDAwMDAsImV4cGlyZXNBdFVuaXhTZWNvbmRzIjoyMDAwMDAwMDMwLCJub25jZSI6IjQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0In0."
+        "QQSkPSO63p5BRSmDgf8FtNTGOIqZ2d4--0YIzaHbONg");
 
     FGuiyangGameServerLaunchConfig MakeConfig()
     {
@@ -83,6 +86,10 @@ namespace GuiyangManagedGameServerTests
         Config.MatchId = MatchId;
         Config.ServerInstanceId = InstanceId;
         Config.JoinTicketSigningKey = SigningKey;
+        Config.BuildVersion = TEXT("test-build");
+        Config.CompatibleClientBuilds = { TEXT("test-build") };
+        Config.RuleSetVersion = TEXT("guiyang-zhuoji-v1");
+        Config.ProtocolVersion = TEXT("1");
         Config.MatchResultOutboxPath = FString::Printf(TEXT("C:/mahjong-outbox/%s.json"), InstanceId);
         return Config;
     }
@@ -125,7 +132,8 @@ bool FGuiyangManagedLaunchConfigTest::RunTest(const FString& Parameters)
     const FString CommandLine = FString::Printf(
         TEXT("-MahjongManagedGameServer -RoomId=%s -MatchId=%s -ServerInstanceId=%s -Port=19000 ")
         TEXT("-LobbyInternalUrl=http://127.0.0.1:18080 ")
-        TEXT("-BuildVersion=test-build -AdvertisedIp=127.0.0.1"),
+        TEXT("-BuildVersion=test-build -RuleSetVersion=guiyang-zhuoji-v1 -ProtocolVersion=1 ")
+        TEXT("-AdvertisedIp=127.0.0.1 -RoomEpoch=1 -LeaseFencingToken=1"),
         GuiyangManagedGameServerTests::RoomId,
         GuiyangManagedGameServerTests::MatchId,
         GuiyangManagedGameServerTests::InstanceId);
@@ -161,6 +169,10 @@ bool FGuiyangJoinTicketValidationTest::RunTest(const FString& Parameters)
         GuiyangManagedGameServerTests::ValidTicket, TEXT("player-1"), 2000000000, Claims, Error));
     TestEqual(TEXT("PlayerId 必须来自已签名载荷"), Claims.PlayerId, FString(TEXT("player-1")));
     TestEqual(TEXT("显示名必须来自已签名载荷"), Claims.DisplayName, FString(TEXT("测试玩家")));
+    TestEqual(TEXT("座位必须来自已签名载荷"), Claims.SeatId, 0);
+    TestEqual(TEXT("会话必须来自已签名载荷"), Claims.SessionId,
+        FString(TEXT("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")));
+    TestEqual(TEXT("会话 Epoch 必须保持"), Claims.SessionEpoch, static_cast<int64>(4));
 
     FGuiyangJoinTicketClaims ReplayClaims;
     TestFalse(TEXT("同一 nonce 不得重复消费"), Validator.ValidateAndConsume(
@@ -178,6 +190,34 @@ bool FGuiyangJoinTicketValidationTest::RunTest(const FString& Parameters)
     TestFalse(TEXT("票据不得跨 GameServer 实例使用"), WrongScopeValidator.ValidateAndConsume(
         GuiyangManagedGameServerTests::ValidTicket, TEXT("player-1"), 2000000000, Claims, Error));
     TestEqual(TEXT("实例不匹配必须归类为范围错误"), Error, FString(TEXT("JOIN_TICKET_SCOPE_MISMATCH")));
+
+    FGuiyangGameServerLaunchConfig WrongEpochConfig = GuiyangManagedGameServerTests::MakeConfig();
+    WrongEpochConfig.RoomEpoch = 2;
+    FGuiyangJoinTicketValidator WrongEpochValidator(WrongEpochConfig);
+    TestFalse(TEXT("旧 Room Epoch 票据不得进入新权威实例"), WrongEpochValidator.ValidateAndConsume(
+        GuiyangManagedGameServerTests::ValidTicket, TEXT("player-1"), 2000000000, Claims, Error));
+    TestEqual(TEXT("Epoch 不匹配必须归类为范围错误"), Error, FString(TEXT("JOIN_TICKET_SCOPE_MISMATCH")));
+
+    FGuiyangGameServerLaunchConfig WrongProtocolConfig = GuiyangManagedGameServerTests::MakeConfig();
+    WrongProtocolConfig.ProtocolVersion = TEXT("2");
+    FGuiyangJoinTicketValidator WrongProtocolValidator(WrongProtocolConfig);
+    TestFalse(TEXT("协议版本不匹配的票据必须拒绝"), WrongProtocolValidator.ValidateAndConsume(
+        GuiyangManagedGameServerTests::ValidTicket, TEXT("player-1"), 2000000000, Claims, Error));
+    TestEqual(TEXT("协议不匹配必须归类为范围错误"), Error, FString(TEXT("JOIN_TICKET_SCOPE_MISMATCH")));
+
+    FGuiyangGameServerLaunchConfig WrongBuildConfig = GuiyangManagedGameServerTests::MakeConfig();
+    WrongBuildConfig.CompatibleClientBuilds = { TEXT("2.0.0") };
+    FGuiyangJoinTicketValidator WrongBuildValidator(WrongBuildConfig);
+    TestFalse(TEXT("不在白名单中的客户端 Build 必须拒绝"), WrongBuildValidator.ValidateAndConsume(
+        GuiyangManagedGameServerTests::ValidTicket, TEXT("player-1"), 2000000000, Claims, Error));
+    TestEqual(TEXT("Build 不匹配必须归类为范围错误"), Error, FString(TEXT("JOIN_TICKET_SCOPE_MISMATCH")));
+
+    FGuiyangGameServerLaunchConfig WrongRulesConfig = GuiyangManagedGameServerTests::MakeConfig();
+    WrongRulesConfig.RuleSetVersion = TEXT("guiyang-zhuoji-v2");
+    FGuiyangJoinTicketValidator WrongRulesValidator(WrongRulesConfig);
+    TestFalse(TEXT("规则版本不匹配的票据必须拒绝"), WrongRulesValidator.ValidateAndConsume(
+        GuiyangManagedGameServerTests::ValidTicket, TEXT("player-1"), 2000000000, Claims, Error));
+    TestEqual(TEXT("规则不匹配必须归类为范围错误"), Error, FString(TEXT("JOIN_TICKET_SCOPE_MISMATCH")));
 
     FString TamperedTicket = GuiyangManagedGameServerTests::ValidTicket;
     TamperedTicket[0] = TamperedTicket[0] == TEXT('e') ? TEXT('f') : TEXT('e');
@@ -270,8 +310,11 @@ bool FGuiyangManagedRoomIsolationTest::RunTest(const FString& Parameters)
         const FString PlayerId = PlayerIndex == 0 ? TEXT("owner-1") : FString::Printf(TEXT("player-%d"), PlayerIndex);
         TestTrue(FString::Printf(TEXT("玩家 %d 应进入权威桌"), PlayerIndex),
             FirstManager->AdmitManagedPlayer(TEXT("100001"), PlayerId,
-                FString::Printf(TEXT("玩家%d"), PlayerIndex), FirstState, Error));
+                FString::Printf(TEXT("玩家%d"), PlayerIndex), FirstState, Error, PlayerIndex));
     }
+    TestFalse(TEXT("已绑定玩家不得使用另一张座位票据重新进入"), FirstManager->AdmitManagedPlayer(
+        TEXT("100001"), TEXT("owner-1"), TEXT("玩家0"), FirstState, Error, 1));
+    TestEqual(TEXT("错误座位必须返回无效请求"), Error, EMahjongRoomError::InvalidRequest);
     TestEqual(TEXT("四位玩家必须占用四个唯一座位"),
         FirstState.Seats.FilterByPredicate([](const FMahjongSeatInfo& Seat) { return Seat.bOccupied; }).Num(), 4);
     TestFalse(TEXT("满桌必须拒绝第五位玩家"), FirstManager->AdmitManagedPlayer(

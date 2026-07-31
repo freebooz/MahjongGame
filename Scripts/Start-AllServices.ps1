@@ -1,5 +1,5 @@
 <#
-一键启动本地 Auth、Lobby、Allocator、PlayerData、Admin 及所需依赖，并等待健康就绪。
+一键启动本地 EdgeGateway、Auth、Lobby、Allocator、PlayerData、Admin 及所需依赖，并等待健康就绪。
 脚本只使用开发配置；已有进程需先识别归属，不得终止或覆盖用户的无关服务。
 #>
 [CmdletBinding()]
@@ -158,6 +158,7 @@ $defaultValues = [ordered]@{
     ALLOCATOR_PORT = '18081'
     ADMIN_PORT = '18083'
     PLAYER_DATA_PORT = '18084'
+    EDGE_GATEWAY_PORT = '18085'
     GAME_PORT_START = '19000'
     GAME_PORT_END = '19099'
     MAHJONG_CLUSTER_ID = 'local-docker'
@@ -272,6 +273,7 @@ $serviceEndpoints = [ordered]@{
     Allocator = "http://127.0.0.1:$($environment['ALLOCATOR_PORT'])/health/ready"
     Lobby = "http://127.0.0.1:$($environment['LOBBY_PORT'])/health/ready"
     PlayerData = "http://127.0.0.1:$($environment['PLAYER_DATA_PORT'])/health/ready"
+    EdgeGateway = "http://127.0.0.1:$($environment['EDGE_GATEWAY_PORT'])/health/ready"
     Admin = "http://127.0.0.1:$($environment['ADMIN_PORT'])/health/ready"
 }
 foreach ($endpoint in $serviceEndpoints.GetEnumerator()) {
@@ -279,4 +281,4 @@ foreach ($endpoint in $serviceEndpoints.GetEnumerator()) {
 }
 
 Invoke-Compose ps
-Write-Host "ALL_SERVICES_READY admin=http://127.0.0.1:$($environment['ADMIN_PORT'])"
+Write-Host "ALL_SERVICES_READY api=http://127.0.0.1:$($environment['EDGE_GATEWAY_PORT']) admin=http://127.0.0.1:$($environment['ADMIN_PORT'])"

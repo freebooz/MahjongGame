@@ -2,8 +2,11 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 using GuiyangMahjong.Auth.Domain;
+using GuiyangMahjong.Auth.Auth;
+using GuiyangMahjong.Auth.Devices;
 using GuiyangMahjong.Auth.Options;
 using GuiyangMahjong.Auth.Security;
+using GuiyangMahjong.Auth.Sessions;
 using GuiyangMahjong.Auth.Storage;
 using Microsoft.Extensions.Options;
 
@@ -15,14 +18,42 @@ namespace GuiyangMahjong.Auth.Services;
 /// 每次登录/刷新均重新执行账号冻结与封禁策略。
 /// </summary>
 public sealed partial class AuthService(
-    IAuthStore store,
+    IIdentityRepository identities,
+    ISessionRepository sessions,
+    IDeviceAuditWriter devices,
     PlayerAccessTokenIssuer accessTokenIssuer,
     LocalPlayerNameGenerator playerNameGenerator,
     IOptions<AuthOptions> options,
+    IOptions<SessionPolicyOptions> sessionPolicyOptions,
     TimeProvider timeProvider)
 {
     // 启动时验证并冻结的令牌 TTL、密钥和身份策略；请求处理中不动态接受客户端覆盖。
     private readonly AuthOptions options = options.Value;
+    // 会话并发策略在启动阶段完成校验并冻结，防止单个请求通过 Header 或正文改变安全边界。
+    private readonly (SessionPolicyMode Mode, int MaximumActiveSessions) sessionPolicy =
+        sessionPolicyOptions.Value.ToPolicy();
+
+    /// <summary>
+    /// 保留阶段 3 之前的进程内构造入口，供既有集成测试和嵌入式调用方平滑升级。
+    /// 未显式提供策略时采用与生产默认值一致的有限多设备模式。
+    /// </summary>
+    public AuthService(
+        IAuthStore store,
+        PlayerAccessTokenIssuer accessTokenIssuer,
+        LocalPlayerNameGenerator playerNameGenerator,
+        IOptions<AuthOptions> options,
+        TimeProvider timeProvider)
+        : this(
+            store,
+            store,
+            store,
+            accessTokenIssuer,
+            playerNameGenerator,
+            options,
+            Microsoft.Extensions.Options.Options.Create(new SessionPolicyOptions()),
+            timeProvider)
+    {
+    }
 
     /// <summary>兼容无网络观察值的内部登录入口；生产 HTTP 入口应使用带脱敏观察值的重载。</summary>
     public async Task<AuthSessionResponse> LoginGuestAsync(
@@ -51,22 +82,23 @@ public sealed partial class AuthService(
         var installationHash = Convert.ToHexStringLower(installationHashBytes);
         var playerId = $"guest-{Base64UrlEncode(installationHashBytes.AsSpan(0, 18))}";
         var displayName = NormalizeDisplayName(request.DisplayName, playerNameGenerator);
-        var identity = await store.GetOrCreateGuestAsync(
+        var deviceId = $"device-{installationHash[..20]}";
+        var identity = await identities.GetOrCreateGuestAsync(
             installationHash,
             new AuthIdentity(playerId, displayName, "Guest", now, now),
             cancellationToken);
-        var refresh = CreateRefreshSession(identity.PlayerId, now);
-        var creation = await store.CreateRefreshSessionAsync(
+        var refresh = CreateRefreshSession(identity, deviceId, now);
+        var creation = await sessions.CreateRefreshSessionAsync(
             refresh.Session,
             now,
             cancellationToken);
         if (creation != SessionCreationStatus.Created)
         {
-            await store.RecordLoginAsync(
+            await devices.RecordLoginAsync(
                 new AuthLoginEvent(
                     Guid.NewGuid().ToString(),
                     identity.PlayerId,
-                    $"device-{installationHash[..20]}",
+                    deviceId,
                     NormalizeObservation(observation.MaskedIp, 64, "Unknown"),
                     NormalizeObservation(observation.ClientSummary, 160, "Unknown"),
                     creation.ToString(),
@@ -74,11 +106,11 @@ public sealed partial class AuthService(
                 cancellationToken);
             throw Restricted(creation.ToString());
         }
-        await store.RecordLoginAsync(
+        await devices.RecordLoginAsync(
             new AuthLoginEvent(
                 Guid.NewGuid().ToString(),
                 identity.PlayerId,
-                $"device-{installationHash[..20]}",
+                deviceId,
                 NormalizeObservation(observation.MaskedIp, 64, "Unknown"),
                 NormalizeObservation(observation.ClientSummary, 160, "Unknown"),
                 "Success",
@@ -98,8 +130,13 @@ public sealed partial class AuthService(
         if (!TryParseRefreshToken(request.RefreshToken, out var sessionId, out var tokenHash))
             throw InvalidRefresh();
         var now = timeProvider.GetUtcNow();
-        var replacement = CreateRefreshSession(string.Empty, now);
-        var rotation = await store.RotateRefreshSessionAsync(
+        // 轮换事务会从当前会话继承玩家、设备、Token Family 和 Epoch；
+        // 此处只生成一次性新秘密，避免应用层先读取再更新产生竞态。
+        var replacement = CreateRefreshSession(
+            new AuthIdentity(string.Empty, string.Empty, string.Empty, now, now),
+            string.Empty,
+            now);
+        var rotation = await sessions.RotateRefreshSessionAsync(
             sessionId,
             tokenHash,
             replacement.Session,
@@ -107,17 +144,22 @@ public sealed partial class AuthService(
             cancellationToken);
         if (rotation.Status is RefreshRotationStatus.Frozen or RefreshRotationStatus.Banned)
             throw Restricted(rotation.Status.ToString());
-        if (rotation.Status != RefreshRotationStatus.Rotated || rotation.Identity is null)
+        if (rotation.Status != RefreshRotationStatus.Rotated
+            || rotation.Identity is null
+            || rotation.ReplacementSession is null)
             throw InvalidRefresh();
 
-        return CreateResponse(rotation.Identity, replacement, now);
+        return CreateResponse(
+            rotation.Identity,
+            replacement with { Session = rotation.ReplacementSession },
+            now);
     }
 
     /// <summary>幂等撤销有效刷新令牌；格式损坏或已撤销时无副作用，不泄漏会话是否存在。</summary>
     public async Task LogoutAsync(LogoutRequest request, CancellationToken cancellationToken)
     {
         if (!TryParseRefreshToken(request.RefreshToken, out var sessionId, out var tokenHash)) return;
-        await store.RevokeRefreshSessionAsync(
+        await sessions.RevokeRefreshSessionAsync(
             sessionId, tokenHash, timeProvider.GetUtcNow(), cancellationToken);
     }
 
@@ -131,13 +173,16 @@ public sealed partial class AuthService(
             identity.PlayerId,
             identity.DisplayName,
             identity.Provider,
-            accessTokenIssuer.Issue(identity, now, accessExpiry),
+            accessTokenIssuer.Issue(identity, refresh.Session, now, accessExpiry),
             accessExpiry,
             refresh.Plaintext,
             refresh.Session.ExpiresAtUtc);
     }
 
-    private IssuedRefreshToken CreateRefreshSession(string playerId, DateTimeOffset now)
+    private IssuedRefreshToken CreateRefreshSession(
+        AuthIdentity identity,
+        string deviceId,
+        DateTimeOffset now)
     {
         var sessionId = Guid.NewGuid().ToString("N");
         var secret = RandomNumberGenerator.GetBytes(32);
@@ -146,11 +191,21 @@ public sealed partial class AuthService(
             plaintext,
             new RefreshSession(
                 sessionId,
-                playerId,
+                identity.PlayerId,
                 SHA256.HashData(secret),
                 now.AddDays(options.RefreshTokenDays),
                 now,
-                null));
+                null,
+                Guid.NewGuid().ToString("N"),
+                null,
+                deviceId,
+                identity.SessionEpoch,
+                identity.SecurityEpoch,
+                null,
+                null,
+                null,
+                sessionPolicy.Mode.ToString(),
+                sessionPolicy.MaximumActiveSessions));
     }
 
     private static bool TryParseRefreshToken(string? token, out string sessionId, out byte[] hash)

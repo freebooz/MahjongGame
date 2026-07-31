@@ -59,8 +59,6 @@ spec:
       serviceAccountName: mahjong-allocator
       nodeSelector:
         kubernetes.io/os: linux
-      hostNetwork: true
-      dnsPolicy: ClusterFirstWithHostNet
       terminationGracePeriodSeconds: 60
       securityContext:
         runAsNonRoot: true
@@ -69,12 +67,12 @@ spec:
         fsGroup: 1654
         seccompProfile: {type: RuntimeDefault}
       containers:
-        - name: game-node
-          image: ghcr.io/freebooz/guiyang-mahjong-game-node:REPLACE_WITH_GIT_SHA
+        - name: allocator
+          # Agones 模式使用不包含 DS 二进制的最小 Allocation Service 镜像。
+          image: ghcr.io/freebooz/guiyang-mahjong-allocator-agones:REPLACE_WITH_GIT_SHA
           imagePullPolicy: IfNotPresent
           ports:
             - {name: http, containerPort: 8080, protocol: TCP}
-            # UE child processes bind 19000-19099/UDP directly on this Linux node.
           envFrom:
             - configMapRef: {name: mahjong-services}
             - secretRef: {name: mahjong-secrets}
@@ -83,6 +81,7 @@ spec:
               valueFrom: {fieldRef: {fieldPath: status.hostIP}}
           volumeMounts:
             - {name: allocator-data, mountPath: /var/lib/guiyang-mahjong}
+            - {name: game-recovery, mountPath: /var/lib/guiyang-mahjong/game-shared}
             - {name: tmp, mountPath: /tmp}
           readinessProbe:
             httpGet: {path: /health/ready, port: http}
@@ -105,6 +104,8 @@ spec:
           persistentVolumeClaim: {claimName: mahjong-allocator-data}
         - name: tmp
           emptyDir: {sizeLimit: 256Mi}
+        - name: game-recovery
+          persistentVolumeClaim: {claimName: mahjong-game-recovery}
 ---
 apiVersion: v1
 kind: Service

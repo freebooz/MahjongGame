@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <!-- 纯契约程序集不得引入 ASP.NET Core、数据库驱动或任何业务服务。 -->
+    <Description>贵阳麻将平台跨服务公共值对象与调用上下文契约。</Description>
+  </PropertyGroup>
+</Project>

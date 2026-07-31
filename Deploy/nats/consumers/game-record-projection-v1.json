@@ -1,0 +1,12 @@
+{
+  "durable_name": "game-record-projection-v1",
+  "name": "game-record-projection-v1",
+  "description": "战绩投影；业务去重由 PostgreSQL Inbox 保证",
+  "ack_policy": "explicit",
+  "filter_subjects": ["match.finished.v1", "settlement.committed.v1"],
+  "ack_wait": 30000000000,
+  "max_deliver": 12,
+  "backoff": [1000000000, 5000000000, 30000000000, 120000000000],
+  "max_ack_pending": 512
+}
+

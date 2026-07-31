@@ -92,6 +92,9 @@ services:
       Admin__RealtimeCapacity__LegacyPollingEnabled: "false"
       # 容量环境允许单个测试身份持续读取；生产环境仍使用更严格的默认限额。
       Admin__WebSecurity__ReadRequestsPerMinute: "1000"
+      # 容量环境使用 HTTP 本地入口，因此不能使用要求 Secure 的 __Host- Cookie 名；生产清单仍强制 __Host-。
+      Admin__WebSecurity__SessionCookieName: mahjong-admin-capacity
+      Admin__WebSecurity__BrowserSessionEnabled: "true"
     depends_on:
       auth: {condition: service_healthy}
       lobby: {condition: service_healthy}

@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <!-- 事件项目只定义版本化事实，不包含发布器、数据库或业务处理器。 -->
+    <Description>贵阳麻将平台版本化事件信封与第一批事件契约。</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\GuiyangMahjong.Contracts.Common\GuiyangMahjong.Contracts.Common.csproj" />
+  </ItemGroup>
+</Project>

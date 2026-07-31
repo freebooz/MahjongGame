@@ -18,27 +18,6 @@ namespace GuiyangAuthPrivate
 {
     constexpr const TCHAR* ConfigSection = TEXT("/Script/GuiyangMahjongOnline.GuiyangLoginSubsystem");
 
-    bool NormalizeBaseUrl(
-        const FString& Candidate, const bool bAllowInsecureLoopbackHttp, FString& OutBaseUrl)
-    {
-        OutBaseUrl = Candidate.TrimStartAndEnd();
-        while (OutBaseUrl.EndsWith(TEXT("/"))) OutBaseUrl.LeftChopInline(1);
-        if (OutBaseUrl.Contains(TEXT("@")) || OutBaseUrl.Contains(TEXT("?")) || OutBaseUrl.Contains(TEXT("#")))
-            return false;
-        if (OutBaseUrl.StartsWith(TEXT("https://"), ESearchCase::IgnoreCase)) return OutBaseUrl.Len() > 10;
-        const bool bLoopbackHttp =
-            OutBaseUrl.StartsWith(TEXT("http://127.0.0.1"), ESearchCase::IgnoreCase)
-            || OutBaseUrl.StartsWith(TEXT("http://localhost"), ESearchCase::IgnoreCase)
-            || OutBaseUrl.StartsWith(TEXT("http://[::1]"), ESearchCase::IgnoreCase);
-#if !UE_BUILD_SHIPPING
-        return bLoopbackHttp;
-#else
-        // Shipping remains HTTPS-only unless a manual local-review process
-        // explicitly opts into loopback HTTP. Non-loopback HTTP is never accepted.
-        return bAllowInsecureLoopbackHttp && bLoopbackHttp;
-#endif
-    }
-
     FString SerializeObject(const TSharedRef<FJsonObject>& Object)
     {
         FString Json;
@@ -82,24 +61,23 @@ void UGuiyangLoginSubsystem::Initialize(FSubsystemCollectionBase& Collection)
     }
 
     FString AuthMode = TEXT("LocalDevelopment");
-    FString ConfiguredBaseUrl;
     if (GConfig)
     {
         GConfig->GetString(GuiyangAuthPrivate::ConfigSection, TEXT("AuthMode"), AuthMode, GGameIni);
-        GConfig->GetString(GuiyangAuthPrivate::ConfigSection, TEXT("AuthBaseUrl"), ConfiguredBaseUrl, GGameIni);
     }
     FString CommandLineMode;
     if (FParse::Value(FCommandLine::Get(), TEXT("MahjongAuthMode="), CommandLineMode)) AuthMode = MoveTemp(CommandLineMode);
-    FString CommandLineBaseUrl;
-    if (FParse::Value(FCommandLine::Get(), TEXT("MahjongAuthBaseUrl="), CommandLineBaseUrl)) ConfiguredBaseUrl = MoveTemp(CommandLineBaseUrl);
     bUseRemoteAuth = AuthMode.Equals(TEXT("RemoteAuth"), ESearchCase::IgnoreCase);
-    const bool bAllowInsecureLoopbackAuth =
-        FParse::Param(FCommandLine::Get(), TEXT("MahjongAllowInsecureLoopbackAuth"));
-    if (bUseRemoteAuth && !GuiyangAuthPrivate::NormalizeBaseUrl(
-            ConfiguredBaseUrl, bAllowInsecureLoopbackAuth, AuthBaseUrl))
+    if (bUseRemoteAuth
+        && !FGuiyangPlatformEndpointSettings::Load(
+            EGuiyangLegacyEndpointRole::Auth,
+            PlatformEndpoints))
     {
-        AuthBaseUrl.Reset();
-        UE_LOG(LogMahjongOnline, Error, TEXT("RemoteAuth 地址无效；正式环境必须使用 HTTPS，本机开发仅允许 loopback HTTP"));
+        PlatformEndpoints = {};
+        UE_LOG(
+            LogMahjongOnline,
+            Error,
+            TEXT("RemoteAuth 的 ApiBaseUrl 无效；正式环境必须使用 HTTPS，本机开发仅允许 loopback HTTP"));
     }
     UE_LOG(LogMahjongOnline, Log, TEXT("登录子系统初始化完成，模式=%s，自动登录=禁止"),
         bUseRemoteAuth ? TEXT("RemoteAuth") : TEXT("LocalDevelopment"));
@@ -206,7 +184,9 @@ void UGuiyangLoginSubsystem::CompleteLogin(const EGuiyangLoginProvider Provider,
 
 void UGuiyangLoginSubsystem::BeginRemoteGuestLogin(const FString& ExistingName)
 {
-    if (AuthBaseUrl.IsEmpty() || !LoginSettings || LoginSettings->InstallationId.IsEmpty())
+    if (PlatformEndpoints.ApiBaseUrl.IsEmpty()
+        || !LoginSettings
+        || LoginSettings->InstallationId.IsEmpty())
     {
         FailLogin(TEXT("远程登录服务尚未安全配置"));
         return;
@@ -216,9 +196,12 @@ void UGuiyangLoginSubsystem::BeginRemoteGuestLogin(const FString& ExistingName)
     Payload->SetStringField(TEXT("installationId"), LoginSettings->InstallationId);
     if (!ExistingName.IsEmpty()) Payload->SetStringField(TEXT("displayName"), ExistingName.Left(24));
     const TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = FHttpModule::Get().CreateRequest();
-    Request->SetURL(AuthBaseUrl + TEXT("/v1/auth/guest"));
+    Request->SetURL(
+        PlatformEndpoints.BuildApiUrl(
+            TEXT("/v1/auth/guest")));
     Request->SetVerb(TEXT("POST"));
     Request->SetHeader(TEXT("Content-Type"), TEXT("application/json"));
+    PlatformEndpoints.ApplyStandardHeaders(Request.Get());
     Request->SetContentAsString(GuiyangAuthPrivate::SerializeObject(Payload));
     Request->SetTimeout(10.0f);
     Request->OnProcessRequestComplete().BindUObject(this, &ThisClass::CompleteRemoteGuestLogin);
@@ -242,9 +225,12 @@ void UGuiyangLoginSubsystem::RefreshRemoteSession()
     const TSharedRef<FJsonObject> Payload = MakeShared<FJsonObject>();
     Payload->SetStringField(TEXT("refreshToken"), RefreshToken);
     const TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = FHttpModule::Get().CreateRequest();
-    Request->SetURL(AuthBaseUrl + TEXT("/v1/auth/refresh"));
+    Request->SetURL(
+        PlatformEndpoints.BuildApiUrl(
+            TEXT("/v1/auth/refresh")));
     Request->SetVerb(TEXT("POST"));
     Request->SetHeader(TEXT("Content-Type"), TEXT("application/json"));
+    PlatformEndpoints.ApplyStandardHeaders(Request.Get());
     Request->SetContentAsString(GuiyangAuthPrivate::SerializeObject(Payload));
     Request->SetTimeout(10.0f);
     Request->OnProcessRequestComplete().BindUObject(this, &ThisClass::CompleteRemoteRefresh);
@@ -340,14 +326,19 @@ void UGuiyangLoginSubsystem::Logout()
         World->GetTimerManager().ClearTimer(PendingLoginTimer);
         World->GetTimerManager().ClearTimer(RefreshTimer);
     }
-    if (bUseRemoteAuth && !AuthBaseUrl.IsEmpty() && !RefreshToken.IsEmpty())
+    if (bUseRemoteAuth
+        && !PlatformEndpoints.ApiBaseUrl.IsEmpty()
+        && !RefreshToken.IsEmpty())
     {
         const TSharedRef<FJsonObject> Payload = MakeShared<FJsonObject>();
         Payload->SetStringField(TEXT("refreshToken"), RefreshToken);
         const TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = FHttpModule::Get().CreateRequest();
-        Request->SetURL(AuthBaseUrl + TEXT("/v1/auth/logout"));
+        Request->SetURL(
+            PlatformEndpoints.BuildApiUrl(
+                TEXT("/v1/auth/logout")));
         Request->SetVerb(TEXT("POST"));
         Request->SetHeader(TEXT("Content-Type"), TEXT("application/json"));
+        PlatformEndpoints.ApplyStandardHeaders(Request.Get());
         Request->SetContentAsString(GuiyangAuthPrivate::SerializeObject(Payload));
         Request->SetTimeout(5.0f);
         Request->ProcessRequest();

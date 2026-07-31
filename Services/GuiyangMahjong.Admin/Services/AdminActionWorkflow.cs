@@ -61,6 +61,10 @@ public sealed partial class AdminActionWorkflow(
             : AdminRoles.RoomViewer);
         RequireRole(principal, RequiredOperatorRole(request.ActionType));
         var parameters = ValidateInput(request);
+        var reasonCode = NormalizeReasonCode(request.ReasonCode);
+        var operationDescription = NormalizeOperationDescription(
+            request.OperationDescription,
+            request.Reason);
         var actionRequestId = string.IsNullOrEmpty(idempotencyKey)
             ? Guid.NewGuid().ToString()
             : CreateDeterministicActionId(principal.OperatorId, idempotencyKey);
@@ -74,6 +78,8 @@ public sealed partial class AdminActionWorkflow(
                 || existing.RequestedBy != principal.OperatorId
                 || existing.Reason != NormalizeText(request.Reason)
                 || existing.TicketId != NormalizeText(request.TicketId)
+                || existing.ReasonCode != reasonCode
+                || existing.OperationDescription != operationDescription
                 || !SameJson(existing.Parameters, parameters))
             {
                 throw AdminOperationException.Conflict(
@@ -114,7 +120,11 @@ public sealed partial class AdminActionWorkflow(
             AdminActionStatus.AwaitingConfirmation,
             null,
             1,
-            parameters);
+            parameters,
+            reasonCode,
+            operationDescription,
+            null,
+            NormalizeIdempotencyKey(idempotencyKey));
         await store.CreateAsync(
             action,
             Audit(
@@ -160,8 +170,9 @@ public sealed partial class AdminActionWorkflow(
         var now = timeProvider.GetUtcNow();
         if (action.ConfirmationExpiresAtUtc <= now || action.ExpiresAtUtc <= now)
             return await ExpireAsync(action, principal.OperatorId, now, cancellationToken);
+        var confirmation = request.TargetConfirmation?.Trim() ?? string.Empty;
         if (!string.Equals(
-                request.TargetConfirmation?.Trim(),
+                confirmation,
                 action.TargetId,
                 StringComparison.Ordinal))
         {
@@ -175,6 +186,7 @@ public sealed partial class AdminActionWorkflow(
         var replacement = action with
         {
             ConfirmedAtUtc = now,
+            Confirmation = confirmation,
             Status = AdminActionStatus.PendingApproval,
             Version = action.Version + 1
         };
@@ -452,6 +464,13 @@ public sealed partial class AdminActionWorkflow(
             AdminManagementActionType.GrantPlayerCompensation or
             AdminManagementActionType.RevokeErroneousReward =>
                 AdminRoles.CompensationOperator,
+            AdminManagementActionType.OrderRefund =>
+                AdminRoles.RefundOperator,
+            AdminManagementActionType.RulePublish or
+            AdminManagementActionType.ConfigurationPublish =>
+                AdminRoles.GovernancePublisher,
+            AdminManagementActionType.BatchSanction =>
+                AdminRoles.BatchSanctionOperator,
             AdminManagementActionType.TemporaryFreezePlayer or
             AdminManagementActionType.PermanentBanPlayer or
             AdminManagementActionType.LiftPlayerBan or
@@ -470,7 +489,12 @@ public sealed partial class AdminActionWorkflow(
         };
 
     private static string RequiredApproverRole(AdminManagementActionType actionType) =>
-        IsPlayerAction(actionType) ? AdminRoles.PlayerApprover : AdminRoles.RoomApprover;
+        actionType is AdminManagementActionType.OrderRefund
+            or AdminManagementActionType.RulePublish
+            or AdminManagementActionType.ConfigurationPublish
+            or AdminManagementActionType.BatchSanction
+            ? AdminRoles.GovernanceApprover
+            : IsPlayerAction(actionType) ? AdminRoles.PlayerApprover : AdminRoles.RoomApprover;
 
     private static bool IsPlayerAction(AdminManagementActionType actionType) =>
         actionType is
@@ -485,7 +509,8 @@ public sealed partial class AdminActionWorkflow(
             AdminManagementActionType.GrantPlayerCompensation or
             AdminManagementActionType.RevokeErroneousReward or
             AdminManagementActionType.ViewPlayerReplay or
-            AdminManagementActionType.CreatePlayerSupportTicket;
+            AdminManagementActionType.CreatePlayerSupportTicket or
+            AdminManagementActionType.BatchSanction;
 
     private static JsonElement? ValidateInput(CreateAdminActionRequest request)
     {
@@ -509,9 +534,43 @@ public sealed partial class AdminActionWorkflow(
             AdminManagementActionType.LiftPlayerBan or
             AdminManagementActionType.UnmutePlayer =>
                 NormalizeSanctionReversalParameters(request.Parameters),
+            // 仓库当前没有订单、规则发布、配置发布或批量处罚的权威业务所有者；
+            // 在对应管理命令 API 建立前必须失败关闭，避免 Admin 自行写表或伪造成功。
+            AdminManagementActionType.OrderRefund or
+            AdminManagementActionType.RulePublish or
+            AdminManagementActionType.ConfigurationPublish or
+            AdminManagementActionType.BatchSanction =>
+                throw new AdminOperationException(
+                    "ADMIN_OWNER_CAPABILITY_UNAVAILABLE",
+                    "目标业务所有者尚未提供受控管理命令，本操作当前保持关闭。",
+                    StatusCodes.Status503ServiceUnavailable),
             _ => RejectUnexpectedParameters(request.Parameters)
         };
     }
+
+    /// <summary>规范化结构化原因码；旧客户端缺失时使用显式兼容值而非空字符串。</summary>
+    private static string NormalizeReasonCode(string? value)
+    {
+        var normalized = NormalizeText(value);
+        if (normalized.Length == 0) return "LEGACY_UNSPECIFIED";
+        if (normalized.Length > 64 || !SafeIdentifierPattern().IsMatch(normalized))
+            throw AdminOperationException.Invalid("reasonCode 格式无效。");
+        return normalized.ToUpperInvariant();
+    }
+
+    /// <summary>规范化操作说明；旧客户端缺失时复制已验证的原因文本以保持审计可读性。</summary>
+    private static string NormalizeOperationDescription(string? description, string reason)
+    {
+        var normalized = NormalizeText(description);
+        if (normalized.Length == 0) return NormalizeText(reason);
+        if (normalized.Length is < 10 or > 1000)
+            throw AdminOperationException.Invalid("operationDescription 长度必须为 10 到 1000 个字符。");
+        return normalized;
+    }
+
+    /// <summary>持久化调用方幂等键用于审计；兼容入口未提供时保存 null，不生成可误认的值。</summary>
+    private static string? NormalizeIdempotencyKey(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     private static JsonElement NormalizeGrantParameters(JsonElement? parameters)
     {

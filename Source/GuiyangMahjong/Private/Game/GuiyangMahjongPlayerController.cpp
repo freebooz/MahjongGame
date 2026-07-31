@@ -173,11 +173,15 @@ void AGuiyangMahjongPlayerController::RequestTableAction(
         return;
     }
     FMahjongActionRequest Request;
+    Request.ClientActionId = FGuid::NewGuid().ToString(EGuidFormats::DigitsWithHyphensLower);
     Request.Type = Type;
     Request.RoundId = State->PublicTableState.RoundId;
     Request.TurnId = State->PublicTableState.TurnId;
     Request.TargetTileId = TargetTileId;
     Request.ClientSequence = ++LastClientActionSequence;
+    Request.ExpectedStateVersion = State->PublicTableState.StateSequence;
+    Request.RoomEpoch = State->PublicTableState.RoomEpoch;
+    Request.ClientSentAtUnixMilliseconds = FDateTime::UtcNow().ToUnixTimestamp() * 1000;
     Server_RequestAction(Request);
 }
 
@@ -316,6 +320,19 @@ void AGuiyangMahjongPlayerController::Server_RequestAction_Implementation(const 
     RecordServerRpcTelemetry(TEXT("Server.RequestAction"), StartedAtSeconds, false, Handler == nullptr);
 }
 
+void AGuiyangMahjongPlayerController::Server_ConfirmReconnectState_Implementation(
+    const FString& ControlToken,
+    const int32 StateVersion,
+    const FString& PublicStateHash)
+{
+    const double StartedAtSeconds = FPlatformTime::Seconds();
+    ++ServerRpcReceivedCount;
+    IGuiyangServerRequestHandler* Handler = GetServerRequestHandler();
+    if (Handler) Handler->HandleReconnectStateConfirmed(this, ControlToken, StateVersion, PublicStateHash);
+    RecordServerRpcTelemetry(
+        TEXT("Server.ConfirmReconnectState"), StartedAtSeconds, false, Handler == nullptr);
+}
+
 void AGuiyangMahjongPlayerController::Server_RequestIntegrationDisconnect_Implementation()
 {
     const double StartedAtSeconds = FPlatformTime::Seconds();
@@ -376,6 +393,10 @@ void AGuiyangMahjongPlayerController::Client_RestoreReconnectSnapshot_Implementa
     OnReconnectRestored.Broadcast(Snapshot);
     OnPrivateHandUpdated.Broadcast(Snapshot.PrivateState);
     OnAvailableActionsUpdated.Broadcast(AvailableActions);
+    // 仅在 UI/本地状态均已应用后确认；Token 只绑定本次控制权迁移，不是登录凭据。
+    if (!Snapshot.ControlToken.IsEmpty())
+        Server_ConfirmReconnectState(
+            Snapshot.ControlToken, Snapshot.TableState.StateSequence, Snapshot.TableState.PublicStateHash);
 }
 
 void AGuiyangMahjongPlayerController::Client_ShowFinalSettlement_Implementation(

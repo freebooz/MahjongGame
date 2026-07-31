@@ -26,11 +26,20 @@ public sealed class PortLeasePool
 
     /// <summary>租用当前最小可用端口；容量耗尽时抛出可映射为 503 的领域异常。</summary>
     public int Acquire()
+        => Acquire(_ => true);
+
+    /// <summary>
+    /// 在池锁内选择第一个同时满足外部可用性检查的端口；用于跳过已被非托管进程占用的端口。
+    /// 检查不得长期阻塞，也不得修改池状态。
+    /// </summary>
+    public int Acquire(Func<int, bool> canUse)
     {
+        ArgumentNullException.ThrowIfNull(canUse);
         lock (gate)
         {
-            if (available.Count == 0) throw new AllocatorOperationException("没有可用的 GameServer 端口", 503);
-            var port = available.Min;
+            var port = available.FirstOrDefault(canUse);
+            if (port == 0)
+                throw new AllocatorOperationException("没有可用且未被占用的 GameServer 端口", 503);
             available.Remove(port);
             leased.Add(port);
             return port;

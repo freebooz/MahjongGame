@@ -1,0 +1,6 @@
+apiVersion: v2
+name: guiyang-mahjong
+description: 贵阳麻将控制面与多版本 Dedicated Server 发布治理 Chart
+type: application
+version: 0.11.0
+appVersion: "stage-11"

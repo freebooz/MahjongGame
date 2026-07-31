@@ -5,6 +5,7 @@
 #include "Interfaces/IHttpResponse.h"
 #include "Subsystems/GameInstanceSubsystem.h"
 #include "Auth/GuiyangLoginTypes.h"
+#include "Config/GuiyangPlatformEndpointSettings.h"
 #include "GuiyangLoginSubsystem.generated.h"
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FGuiyangLoginStateChanged, EGuiyangLoginState, State, const FGuiyangLoginProfile&, Profile);
@@ -53,7 +54,8 @@ private:
     FDateTime SessionExpireAtUtc;
     FTimerHandle PendingLoginTimer;
     FTimerHandle RefreshTimer;
-    FString AuthBaseUrl;
+    /** 玩家 HTTP 统一端点和版本头；Access/Refresh Token 不属于该配置。 */
+    FGuiyangPlatformEndpointSettings PlatformEndpoints;
     bool bUseRemoteAuth = false;
 
     void BeginLogin(EGuiyangLoginProvider Provider, const FString& ExistingPlayerId = FString(), const FString& ExistingName = FString());

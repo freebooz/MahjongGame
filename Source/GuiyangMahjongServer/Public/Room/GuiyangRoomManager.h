@@ -36,9 +36,20 @@ public:
     /** 从控制面 Bootstrap 创建唯一的托管权威房间。 */
     bool CreateManagedRoom(const FGuiyangManagedRoomDefinition& Definition,
         FMahjongRoomState& OutState, EMahjongRoomError& OutError);
-    /** 将持有效票据的玩家接纳到托管房间。 */
+    /**
+     * 用受验证的恢复快照替换刚 Bootstrap 的空托管房间。
+     * 调用方必须先校验 Match/Room/Epoch 和完整状态哈希；本方法不会解析外部 JSON。
+     */
+    bool RestoreManagedRoomState(
+        const FString& RoomCode,
+        const FMahjongRoomState& RecoveredState,
+        FString& OutError);
+    /**
+     * 将持有效票据的玩家接纳到托管房间。
+     * ExpectedSeatIndex 来自已签名票据；为 INDEX_NONE 时仅兼容本地测试/旧票据，不应用于严格托管接入。
+     */
     bool AdmitManagedPlayer(const FString& RoomCode, const FString& PlayerId, const FString& DisplayName,
-        FMahjongRoomState& OutState, EMahjongRoomError& OutError);
+        FMahjongRoomState& OutState, EMahjongRoomError& OutError, int32 ExpectedSeatIndex = INDEX_NONE);
     /** 本地模式的创建、快速匹配和按码加入入口。 */
     bool CreateRoom(const FString& PlayerId, const FString& DisplayName, const FMahjongCreateRoomRequest& Request,
         FMahjongRoomState& OutState, EMahjongRoomError& OutError);

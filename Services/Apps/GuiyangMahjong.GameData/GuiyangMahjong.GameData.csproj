@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <!-- GameData 的五个逻辑 Schema 由同一迁移单元管理，构建产物使用独立输出目录。 -->
+    <MahjongSchemaServiceName>GameData</MahjongSchemaServiceName>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Npgsql" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\GuiyangMahjong.Observability\GuiyangMahjong.Observability.csproj" />
+    <ProjectReference Include="..\..\Contracts\GuiyangMahjong.Contracts.Common\GuiyangMahjong.Contracts.Common.csproj" />
+    <ProjectReference Include="..\..\Contracts\GuiyangMahjong.Contracts.Events\GuiyangMahjong.Contracts.Events.csproj" />
+  </ItemGroup>
+</Project>

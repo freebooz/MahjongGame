@@ -22,6 +22,12 @@ int32 UMahjongTableEngine::GetCounterClockwiseSeatDistance(const int32 FromSeat,
     return (ToSeat - FromSeat + 4) % 4;
 }
 
+const TArray<FMahjongTile>* UMahjongTableEngine::GetDeckOrderForServerAudit() const
+{
+    // 返回只读指针可避免复制完整牌墙；所有权仍归本局 DeckManager，调用方不得跨局缓存该地址。
+    return DeckManager ? &DeckManager->GetDeckForServerTest() : nullptr;
+}
+
 bool UMahjongTableEngine::StartRound(const FGuiyangRuleSnapshot& RuleSnapshot, const TArray<FMahjongSeatInfo>& Seats,
     const int32 DealerSeat, const int32 ShuffleSeed, FString& OutError)
 {
@@ -341,6 +347,107 @@ bool UMahjongTableEngine::GetSettlementResult(FMahjongSettlementResult& OutResul
     return true;
 }
 
+bool UMahjongTableEngine::ExportRecoveryState(FMahjongTableRecoveryState& OutState) const
+{
+    if (!DeckManager || !UGuiyangRuleSnapshotLibrary::VerifySnapshot(LockedRules)
+        || Hands.Num() != 4 || PublicState.RoundId < 1)
+    {
+        return false;
+    }
+    OutState = {};
+    OutState.LockedRules = LockedRules;
+    OutState.PublicState = PublicState;
+    OutState.Hands = Hands;
+    OutState.SettlementResult = SettlementResult;
+    for (int32 SeatIndex = 0; SeatIndex < 4; ++SeatIndex)
+    {
+        FMahjongSeatActionRecoveryState SeatState;
+        SeatState.SeatIndex = SeatIndex;
+        if (const TArray<FMahjongAction>* Actions = AvailableActionsBySeat.Find(SeatIndex))
+            SeatState.AvailableActions = *Actions;
+        if (const FMahjongActionRequest* Reaction = SubmittedReactions.Find(SeatIndex))
+        {
+            SeatState.bHasSubmittedReaction = true;
+            SeatState.SubmittedReaction = *Reaction;
+        }
+        OutState.SeatActions.Add(MoveTemp(SeatState));
+    }
+    OutState.LastClientSequences = LastClientSequences;
+    OutState.CurrentScores = CurrentScores;
+    OutState.GangDeltas = GangDeltas;
+    OutState.SpecialJiDeltas = SpecialJiDeltas;
+    OutState.LastDiscardSeat = LastDiscardSeat;
+    OutState.FirstSpecialJiDiscardSequence = FirstSpecialJiDiscardSequence;
+    OutState.LastDrawnTile = LastDrawnTile;
+    OutState.bQiangGangWindow = bQiangGangWindow;
+    OutState.PendingBuGangSeat = PendingBuGangSeat;
+    OutState.PendingBuGangTileId = PendingBuGangTileId;
+    OutState.PendingBuGangTile = PendingBuGangTile;
+    OutState.DeckState = DeckManager->ExportRecoveryState();
+    return true;
+}
+
+bool UMahjongTableEngine::RestoreRecoveryState(const FMahjongTableRecoveryState& State, FString& OutError)
+{
+    if (!UGuiyangRuleSnapshotLibrary::VerifySnapshot(State.LockedRules)
+        || State.Hands.Num() != 4 || State.PublicState.Seats.Num() != 4
+        || State.LastClientSequences.Num() != 4 || State.CurrentScores.Num() != 4
+        || State.GangDeltas.Num() != 4 || State.SpecialJiDeltas.Num() != 4
+        || State.PublicState.RoundId < 1 || State.PublicState.StateSequence < 1)
+    {
+        OutError = TEXT("恢复快照的牌桌维度或规则无效");
+        return false;
+    }
+    TObjectPtr<UMahjongDeckManager> RestoredDeck = NewObject<UMahjongDeckManager>(this);
+    if (!RestoredDeck || !RestoredDeck->RestoreRecoveryState(State.DeckState))
+    {
+        OutError = TEXT("恢复快照的牌墙状态无效");
+        return false;
+    }
+    TMap<int32, TArray<FMahjongAction>> RestoredActions;
+    TMap<int32, FMahjongActionRequest> RestoredReactions;
+    TSet<int32> RestoredSeats;
+    for (const FMahjongSeatActionRecoveryState& SeatState : State.SeatActions)
+    {
+        if (SeatState.SeatIndex < 0 || SeatState.SeatIndex >= 4
+            || RestoredSeats.Contains(SeatState.SeatIndex))
+        {
+            OutError = TEXT("恢复快照的座位动作集合无效");
+            return false;
+        }
+        RestoredSeats.Add(SeatState.SeatIndex);
+        if (!SeatState.AvailableActions.IsEmpty())
+            RestoredActions.Add(SeatState.SeatIndex, SeatState.AvailableActions);
+        if (SeatState.bHasSubmittedReaction)
+            RestoredReactions.Add(SeatState.SeatIndex, SeatState.SubmittedReaction);
+    }
+    if (RestoredSeats.Num() != 4)
+    {
+        OutError = TEXT("恢复快照缺少座位动作集合");
+        return false;
+    }
+    LockedRules = State.LockedRules;
+    PublicState = State.PublicState;
+    Hands = State.Hands;
+    SettlementResult = State.SettlementResult;
+    AvailableActionsBySeat = MoveTemp(RestoredActions);
+    SubmittedReactions = MoveTemp(RestoredReactions);
+    LastClientSequences = State.LastClientSequences;
+    CurrentScores = State.CurrentScores;
+    GangDeltas = State.GangDeltas;
+    SpecialJiDeltas = State.SpecialJiDeltas;
+    LastDiscardSeat = State.LastDiscardSeat;
+    FirstSpecialJiDiscardSequence = State.FirstSpecialJiDiscardSequence;
+    LastDrawnTile = State.LastDrawnTile;
+    bQiangGangWindow = State.bQiangGangWindow;
+    PendingBuGangSeat = State.PendingBuGangSeat;
+    PendingBuGangTileId = State.PendingBuGangTileId;
+    PendingBuGangTile = State.PendingBuGangTile;
+    DeckManager = RestoredDeck;
+    OutError.Reset();
+    return true;
+}
+
 #if WITH_DEV_AUTOMATION_TESTS
 bool UMahjongTableEngine::SetHandForServerTest(const int32 SeatIndex, const FMahjongHand& Hand)
 {
@@ -372,12 +479,15 @@ bool UMahjongTableEngine::SetHandForServerTest(const int32 SeatIndex, const FMah
 
 bool UMahjongTableEngine::ValidateRequestCommon(const int32 SeatIndex, const FMahjongActionRequest& Request, FString& OutError)
 {
-    // 三项检查共同阻断非法座位、过期状态和重复/倒退序号。
+    // 座位、状态版本和单调序号共同阻断越权、过期与重放；RoomEpoch 在 DS 房间边界先行校验。
     if (!Hands.IsValidIndex(SeatIndex)) { OutError = TEXT("座位无效"); return false; }
     if (Request.RoundId != PublicState.RoundId || Request.TurnId != PublicState.TurnId)
     { OutError = TEXT("请求所属牌局或回合已过期"); return false; }
     if (Request.ClientSequence <= LastClientSequences[SeatIndex])
     { OutError = TEXT("客户端序号重复或倒退"); return false; }
+    // Core 单元测试和服务端自动托管可使用 0 表示内部命令；所有网络动作已在 GameMode 强制要求精确版本。
+    if (Request.ExpectedStateVersion != 0 && Request.ExpectedStateVersion != PublicState.StateSequence)
+    { OutError = TEXT("权威状态版本已经变化"); return false; }
     return true;
 }
 

@@ -33,6 +33,20 @@ public sealed class AllocatorExceptionMiddleware(
             context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
             await WriteProblemAsync(context, "ALLOCATOR_UNAVAILABLE", exception.Message);
         }
+        catch (TaskCanceledException exception) when (!context.RequestAborted.IsCancellationRequested)
+        {
+            if (context.Response.HasStarted) throw;
+            logger.LogWarning(exception, "Allocator upstream timed out RequestId={RequestId}", GetRequestId(context));
+            context.Response.StatusCode = StatusCodes.Status504GatewayTimeout;
+            await WriteProblemAsync(context, "PROVIDER_TIMEOUT", "GameServer provider timed out.");
+        }
+        catch (HttpRequestException exception)
+        {
+            if (context.Response.HasStarted) throw;
+            logger.LogWarning(exception, "Allocator provider unavailable RequestId={RequestId}", GetRequestId(context));
+            context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
+            await WriteProblemAsync(context, "PROVIDER_UNAVAILABLE", "GameServer provider is unavailable.");
+        }
         catch (Exception exception)
         {
             if (context.Response.HasStarted) throw;

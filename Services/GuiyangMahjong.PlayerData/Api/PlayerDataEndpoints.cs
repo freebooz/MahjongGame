@@ -38,7 +38,7 @@ public static class PlayerDataEndpoints
             HttpContext context,
             RewardClaimRequest request,
             IOptions<PlayerDataOptions> options,
-            IPlayerDataStore store,
+            ILegacyEconomyClient economyClient,
             TimeProvider timeProvider,
             CancellationToken cancellationToken) =>
         {
@@ -53,10 +53,7 @@ public static class PlayerDataEndpoints
                 Guid.Parse(request.EventId).ToString())
                 throw PlayerDataOperationException.Invalid(
                     "Idempotency-Key must match eventId.");
-            var result = await store.RecordRewardClaimAsync(
-                request,
-                now,
-                cancellationToken);
+            var result = await economyClient.ClaimRewardAsync(request, idempotencyKey, cancellationToken);
             return result.Duplicate
                 ? Results.Ok(result)
                 : Results.Json(
@@ -71,16 +68,33 @@ public static class PlayerDataEndpoints
             sources,
             "/reports",
             PlayerEvidenceType.Report);
-        MapEvidenceSource(
-            sources,
-            "/replays",
-            PlayerEvidenceType.Replay);
+        // 阶段8.2保留旧URL和响应结构，但写入权威已经切到GameData；禁止继续写player_data.evidence_events。
+        sources.MapPost("/replays", async (
+            HttpContext context,
+            RecordEvidenceRequest request,
+            IOptions<PlayerDataOptions> options,
+            ILegacyReplayEvidenceClient replayClient,
+            TimeProvider timeProvider,
+            ILoggerFactory loggerFactory,
+            CancellationToken cancellationToken) =>
+        {
+            RequireCredential(context, options.Value.SourceIngestionToken);
+            var idempotencyKey = PlayerDataValidation.RequireIdempotencyKey(context);
+            PlayerDataValidation.ValidateEvidence(request, PlayerEvidenceType.Replay, timeProvider.GetUtcNow());
+            if (idempotencyKey != Guid.Parse(request.EventId).ToString())
+                throw PlayerDataOperationException.Invalid("Idempotency-Key must match eventId.");
+            loggerFactory.CreateLogger("PlayerData.LegacyReplayAdapter").LogInformation(
+                "旧Replay写入口已转发至GameData。DeprecatedEndpoint={DeprecatedEndpoint} Owner={Owner}",
+                "/internal/sources/replays", "GameData/ReplayEvidence");
+            var result = await replayClient.RecordAsync(request, cancellationToken);
+            return result.Duplicate ? Results.Ok(result) : Results.Json(result, statusCode: StatusCodes.Status201Created);
+        }).WithMetadata(new RequestSizeLimitAttribute(24 * 1024));
 
         app.MapPost("/internal/admin/wallet-operations", async (
             HttpContext context,
             AdminWalletOperationRequest request,
             IOptions<PlayerDataOptions> options,
-            IPlayerDataStore store,
+            ILegacyEconomyClient economyClient,
             TimeProvider timeProvider,
             CancellationToken cancellationToken) =>
         {
@@ -91,11 +105,7 @@ public static class PlayerDataEndpoints
                 PlayerDataValidation.RequireIdempotencyKey(context);
             var now = timeProvider.GetUtcNow();
             PlayerDataValidation.ValidateWalletOperation(request, now);
-            return Results.Ok(await store.ApplyWalletOperationAsync(
-                commandId,
-                request,
-                now,
-                cancellationToken));
+            return Results.Ok(await economyClient.ApplyWalletOperationAsync(request, commandId, cancellationToken));
         }).WithMetadata(new RequestSizeLimitAttribute(12 * 1024));
 
         app.MapGet(
@@ -123,7 +133,7 @@ public static class PlayerDataEndpoints
                 string playerId,
                 HttpContext context,
                 IOptions<PlayerDataOptions> options,
-                IPlayerDataStore store,
+                ILegacyEconomyClient economyClient,
                 CancellationToken cancellationToken) =>
             {
                 RequireCredential(
@@ -132,16 +142,14 @@ public static class PlayerDataEndpoints
                 PlayerDataValidation.ValidateIdentifier(
                     playerId,
                     "playerId");
-                return Results.Ok(await store.ListBalancesAsync(
-                    playerId,
-                    cancellationToken));
+                return Results.Ok(await economyClient.ListBalancesAsync(playerId, cancellationToken));
             });
 
         app.MapPost("/internal/chat/messages/authorize", async (
             HttpContext context,
             AuthorizeChatMessageRequest request,
             IOptions<PlayerDataOptions> options,
-            IChatPolicyClient policyClient,
+            ILegacyCommunityChatClient communityClient,
             TimeProvider timeProvider,
             CancellationToken cancellationToken) =>
         {
@@ -151,9 +159,7 @@ public static class PlayerDataEndpoints
             PlayerDataValidation.ValidateChatAuthorization(
                 request,
                 timeProvider.GetUtcNow());
-            var policy = await policyClient.GetPolicyAsync(
-                request.PlayerId,
-                cancellationToken);
+            var policy = await communityClient.AuthorizeAsync(request, cancellationToken);
             return policy.Allowed
                 ? Results.Ok(policy)
                 : Results.Json(
@@ -171,7 +177,7 @@ public static class PlayerDataEndpoints
             HttpContext context,
             RecordEvidenceRequest request,
             IOptions<PlayerDataOptions> options,
-            IPlayerDataStore store,
+            ILegacyAdminEvidenceClient evidenceClient,
             TimeProvider timeProvider,
             CancellationToken cancellationToken) =>
         {
@@ -189,10 +195,7 @@ public static class PlayerDataEndpoints
                 Guid.Parse(request.EventId).ToString())
                 throw PlayerDataOperationException.Invalid(
                     "Idempotency-Key must match eventId.");
-            var result = await store.RecordEvidenceAsync(
-                request,
-                now,
-                cancellationToken);
+            var result = await evidenceClient.IngestAsync(request, cancellationToken);
             return result.Duplicate
                 ? Results.Ok(result)
                 : Results.Json(

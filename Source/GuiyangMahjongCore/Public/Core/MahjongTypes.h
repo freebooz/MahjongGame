@@ -153,6 +153,8 @@ USTRUCT(BlueprintType)
 struct GUIYANGMAHJONGCORE_API FMahjongActionRequest
 {
     GENERATED_BODY()
+    /** 客户端为一次用户意图生成的 UUID；服务端按玩家去重，不能由网络重试重新生成。 */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite) FString ClientActionId;
     UPROPERTY(EditAnywhere, BlueprintReadWrite) EMahjongActionType Type = EMahjongActionType::Pass;
     /** 客户端观察到的局号和回合号，服务端用其拒绝过期操作。 */
     UPROPERTY(EditAnywhere, BlueprintReadWrite) int32 RoundId = 0;
@@ -161,6 +163,11 @@ struct GUIYANGMAHJONGCORE_API FMahjongActionRequest
     UPROPERTY(EditAnywhere, BlueprintReadWrite) TArray<int32> ConsumedTileIds;
     /** 当前连接内单调递增的客户端动作序号。 */
     UPROPERTY(EditAnywhere, BlueprintReadWrite) int32 ClientSequence = 0;
+    /** 客户端观察到的权威状态版本和房间代际，旧状态或旧实例请求必须拒绝。 */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite) int32 ExpectedStateVersion = 0;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite) int64 RoomEpoch = 0;
+    /** 客户端发送时的 Unix 毫秒只用于窗口校验和诊断，绝不参与规则计时。 */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite) int64 ClientSentAtUnixMilliseconds = 0;
 };
 
 /** 一次动作的成功标志、错误信息及规范化结果。 */
@@ -171,6 +178,24 @@ struct GUIYANGMAHJONGCORE_API FMahjongActionResult
     UPROPERTY(EditAnywhere, BlueprintReadWrite) bool bSuccess = false;
     UPROPERTY(EditAnywhere, BlueprintReadWrite) FString Message;
     UPROPERTY(EditAnywhere, BlueprintReadWrite) FMahjongAction Action;
+};
+
+/**
+ * Dedicated Server 崩溃恢复使用的完整牌墙状态。
+ * 该结构不得复制到客户端或普通日志；Deck 顺序和游标共同保证恢复后摸牌完全确定。
+ */
+USTRUCT()
+struct GUIYANGMAHJONGCORE_API FMahjongDeckRecoveryState
+{
+    GENERATED_BODY()
+    /** 按权威摸牌顺序保存完整牌墙；包含未公开牌，只能进入受限恢复快照。 */
+    UPROPERTY() TArray<FMahjongTile> Deck;
+    /** 牌墙顺时针起点和开门位置；三者共同决定恢复后的物理牌墙语义。 */
+    UPROPERTY() int32 ClockwiseDrawStartIndex = 0;
+    UPROPERTY() int32 WallBreakSide = 0;
+    UPROPERTY() int32 WallBreakStackFromRight = 0;
+    /** 已从顺时针起点消耗的牌数；恢复后下一次摸牌必须从该偏移继续。 */
+    UPROPERTY() int32 ClockwiseDrawOffset = 0;
 };
 
 /** 单个座位的本局分项增减及累计总分。 */

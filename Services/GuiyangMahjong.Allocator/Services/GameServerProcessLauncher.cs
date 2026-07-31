@@ -30,13 +30,20 @@ public sealed class GameServerProcessLauncher(
         var workingDirectory = ResolveWorkingDirectory(executablePath);
         Directory.CreateDirectory(Path.GetDirectoryName(spec.MatchResultOutboxPath)
             ?? throw new InvalidOperationException("MatchResultOutboxPath has no parent directory."));
+        var recoveryDirectory = Path.GetFullPath(
+            Path.IsPathRooted(options.RecoveryDirectory)
+                ? options.RecoveryDirectory
+                : Path.Combine(AppContext.BaseDirectory, options.RecoveryDirectory));
+        Directory.CreateDirectory(recoveryDirectory);
 
         var startInfo = new ProcessStartInfo
         {
             FileName = OperatingSystem.IsLinux() ? ResolveSetSidPath() : executablePath,
             UseShellExecute = false,
             CreateNoWindow = true,
-            WorkingDirectory = workingDirectory
+            WorkingDirectory = workingDirectory,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true
         };
         if (OperatingSystem.IsLinux()) startInfo.ArgumentList.Add(executablePath);
         var isUnrealDedicatedServer = Path.GetFileNameWithoutExtension(executablePath)
@@ -66,10 +73,23 @@ public sealed class GameServerProcessLauncher(
         startInfo.ArgumentList.Add($"-Port={spec.Port}");
         startInfo.ArgumentList.Add($"-LobbyInternalUrl={spec.LobbyInternalUrl}");
         startInfo.ArgumentList.Add($"-BuildVersion={spec.BuildVersion}");
+        startInfo.ArgumentList.Add(
+            $"-RoomEpoch={spec.RoomEpoch.ToString(System.Globalization.CultureInfo.InvariantCulture)}");
+        startInfo.ArgumentList.Add(
+            $"-LeaseFencingToken={spec.FencingToken.ToString(System.Globalization.CultureInfo.InvariantCulture)}");
+        startInfo.ArgumentList.Add($"-RuleSetVersion={spec.RuleSetVersion}");
+        startInfo.ArgumentList.Add($"-ProtocolVersion={spec.ProtocolVersion}");
         startInfo.ArgumentList.Add($"-AdvertisedIp={spec.AdvertisedIp}");
         startInfo.Environment["MAHJONG_REGISTRATION_CREDENTIAL"] = spec.RegistrationCredential;
         startInfo.Environment["MAHJONG_JOIN_TICKET_SIGNING_KEY"] = spec.JoinTicketSigningKey;
         startInfo.Environment["MAHJONG_MATCH_RESULT_OUTBOX_PATH"] = spec.MatchResultOutboxPath;
+        startInfo.Environment["MAHJONG_RECOVERY_DIRECTORY"] = recoveryDirectory;
+        startInfo.Environment["MAHJONG_GAMEDATA_INTERNAL_URL"] = spec.GameDataInternalUrl;
+        // 密钥通过子进程环境传递，避免进入进程参数、诊断日志与 Allocator 状态文件。
+        startInfo.Environment["MAHJONG_SETTLEMENT_SIGNING_KEY"] = spec.SettlementSigningKey;
+        startInfo.Environment["MAHJONG_SNAPSHOT_EVERY_ACTIONS"] = "3";
+        startInfo.Environment["MAHJONG_SNAPSHOT_MAX_INTERVAL_SECONDS"] = "10";
+        startInfo.Environment["MAHJONG_COMPATIBLE_CLIENT_BUILDS"] = "1.0.0";
 
         var process = Process.Start(startInfo)
             ?? throw new InvalidOperationException("GameServer process failed to start.");
@@ -79,7 +99,47 @@ public sealed class GameServerProcessLauncher(
             spec.RoomId,
             spec.Port,
             process.Id);
+        // 必须持续排空子进程输出以避免管道缓冲区阻塞 DS；只记录长度和流类型，禁止把手牌或凭据写入日志。
+        _ = CaptureOutputAsync(
+            process.StandardOutput,
+            "stdout",
+            spec.ServerInstanceId);
+        _ = CaptureOutputAsync(
+            process.StandardError,
+            "stderr",
+            spec.ServerInstanceId);
         return Task.FromResult<IManagedGameServerProcess>(new ManagedGameServerProcess(process));
+    }
+
+    /// <summary>
+    /// 异步排空一个进程输出流；内容本身不进入结构化日志，只记录行长度用于诊断输出风暴和管道阻塞。
+    /// </summary>
+    private async Task CaptureOutputAsync(
+        StreamReader reader,
+        string streamName,
+        string serverInstanceId)
+    {
+        try
+        {
+            while (await reader.ReadLineAsync() is { } line)
+            {
+                logger.LogDebug(
+                    "GameServer output observed InstanceId={InstanceId} Stream={Stream} Characters={Characters}",
+                    serverInstanceId,
+                    streamName,
+                    line.Length);
+            }
+        }
+        catch (Exception exception) when (exception is IOException
+                                           or ObjectDisposedException
+                                           or InvalidOperationException)
+        {
+            logger.LogDebug(
+                exception,
+                "GameServer output stream closed InstanceId={InstanceId} Stream={Stream}",
+                serverInstanceId,
+                streamName);
+        }
     }
 
     /// <inheritdoc/>
@@ -138,6 +198,51 @@ public sealed class GameServerProcessLauncher(
         {
             return Task.FromResult<IManagedGameServerProcess?>(null);
         }
+    }
+
+    /// <inheritdoc/>
+    public Task<IReadOnlyList<ManagedGameServerProcessObservation>> ListManagedProcessesAsync(
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var executablePath = CanonicalizeExistingPath(
+            ResolveExecutablePath(options.GameServerExecutablePath));
+        var comparison = OperatingSystem.IsWindows()
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+        var observations = new List<ManagedGameServerProcessObservation>();
+        foreach (var process in Process.GetProcesses())
+        {
+            using (process)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                try
+                {
+                    var actualPath = process.MainModule?.FileName;
+                    if (string.IsNullOrWhiteSpace(actualPath)
+                        || !string.Equals(
+                            executablePath,
+                            CanonicalizeExistingPath(actualPath),
+                            comparison))
+                    {
+                        continue;
+                    }
+                    observations.Add(new ManagedGameServerProcessObservation(
+                        process.Id,
+                        process.StartTime.ToUniversalTime()));
+                }
+                catch (Exception exception) when (exception is Win32Exception
+                                                   or InvalidOperationException
+                                                   or NotSupportedException
+                                                   or IOException
+                                                   or UnauthorizedAccessException)
+                {
+                    // 系统进程或已退出进程可能无法读取模块；孤儿扫描必须容错且不能影响服务就绪。
+                }
+            }
+        }
+        return Task.FromResult<IReadOnlyList<ManagedGameServerProcessObservation>>(
+            observations.OrderBy(item => item.ProcessId).ToArray());
     }
 
     /// <summary>返回经绝对化和允许根目录验证的服务端可执行文件路径。</summary>

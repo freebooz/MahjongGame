@@ -5,13 +5,16 @@
 #include "Game/GuiyangMahjongPlayerState.h"
 #include "GuiyangMahjong.h"
 #include "Engine/GameInstance.h"
+#include "Engine/NetConnection.h"
 #include "Room/GuiyangManagedRoomDefinition.h"
 #include "Room/GuiyangRoomManager.h"
 #include "Runtime/Launch/Resources/Version.h"
 #include "Server/GuiyangAgonesLifecycleSubsystem.h"
+#include "Server/GuiyangFairShuffle.h"
 #include "Server/GuiyangGameServerBridge.h"
+#include "Snapshot/GuiyangRuntimeRecoveryStore.h"
+#include "Evidence/GuiyangActionEvidence.h"
 #include "Table/MahjongTableEngine.h"
-#include "HAL/PlatformTime.h"
 #include "EngineUtils.h"
 #include "Misc/SecureHash.h"
 #include "Misc/CommandLine.h"
@@ -125,6 +128,18 @@ void AGuiyangMahjongGameMode::BeginPlay()
 {
     Super::BeginPlay();
     bManagedWorldReady = true;
+    if (bAgonesGameServer)
+    {
+        if (UGameInstance* GameInstance = GetGameInstance())
+        {
+            if (UGuiyangAgonesLifecycleSubsystem* Lifecycle =
+                GameInstance->GetSubsystem<UGuiyangAgonesLifecycleSubsystem>())
+            {
+                // Server 专用地图和监听对象已加载，至此才允许 Sidecar 将实例标记为 Ready。
+                Lifecycle->StartAfterWorldReady();
+            }
+        }
+    }
     TryInitializeManagedBridgeAfterListen();
 }
 
@@ -223,6 +238,7 @@ void AGuiyangMahjongGameMode::PreLogin(const FString& Options, const FString& Ad
         {
             PendingAuthorizedPlayersByTicketDigest.Remove(It.Key());
             PendingAuthorizedDisplayNamesByTicketDigest.Remove(It.Key());
+            PendingTicketClaimsByDigest.Remove(It.Key());
             It.RemoveCurrent();
         }
     }
@@ -231,6 +247,7 @@ void AGuiyangMahjongGameMode::PreLogin(const FString& Options, const FString& Ad
     PendingAuthorizedDisplayNamesByTicketDigest.Add(
         TicketDigest, Claims.DisplayName.TrimStartAndEnd());
     PendingTicketExpiryByDigest.Add(TicketDigest, Claims.ExpiresAtUnixSeconds);
+    PendingTicketClaimsByDigest.Add(TicketDigest, Claims);
 }
 
 FString AGuiyangMahjongGameMode::InitNewPlayer(APlayerController* NewPlayerController,
@@ -250,7 +267,9 @@ FString AGuiyangMahjongGameMode::InitNewPlayer(APlayerController* NewPlayerContr
     const bool bHasDisplayName =
         PendingAuthorizedDisplayNamesByTicketDigest.RemoveAndCopyValue(TicketDigest, DisplayName);
     const bool bHasExpiry = PendingTicketExpiryByDigest.RemoveAndCopyValue(TicketDigest, TicketExpiry);
-    if (!bHasPlayerBinding || !bHasDisplayName || !bHasExpiry
+    FGuiyangJoinTicketClaims Claims;
+    const bool bHasClaims = PendingTicketClaimsByDigest.RemoveAndCopyValue(TicketDigest, Claims);
+    if (!bHasPlayerBinding || !bHasDisplayName || !bHasExpiry || !bHasClaims
         || TicketExpiry <= FDateTime::UtcNow().ToUnixTimestamp()
         || PlayerId.IsEmpty() || DisplayName.IsEmpty() || !NewPlayerController)
     {
@@ -258,6 +277,7 @@ FString AGuiyangMahjongGameMode::InitNewPlayer(APlayerController* NewPlayerContr
     }
     AuthorizedPlayerIdsByController.Add(NewPlayerController, MoveTemp(PlayerId));
     AuthorizedDisplayNamesByController.Add(NewPlayerController, MoveTemp(DisplayName));
+    AuthorizedClaimsByController.Add(NewPlayerController, MoveTemp(Claims));
     return FString();
 }
 
@@ -280,12 +300,29 @@ void AGuiyangMahjongGameMode::GetConnectedAuthorizedPlayerIds(
     }
 }
 
+FString AGuiyangMahjongGameMode::GetAuthoritativeStateHash() const
+{
+    FMahjongTableRecoveryState State;
+    return TableEngine && TableEngine->ExportRecoveryState(State)
+        ? FGuiyangRuntimeRecoveryStore::CalculateTableStateHash(State)
+        : FString();
+}
+
 void AGuiyangMahjongGameMode::PostLogin(APlayerController* NewPlayer)
 {
     Super::PostLogin(NewPlayer);
     if (const FString* AuthorizedPlayerId = AuthorizedPlayerIdsByController.Find(NewPlayer))
     {
         const FString PlayerId = *AuthorizedPlayerId;
+        // 新 Ticket 的 Session/Epoch 获得唯一控制权；旧设备连接先失效，再允许新连接恢复座位。
+        for (const TPair<TObjectPtr<APlayerController>, FString>& Entry : AuthorizedPlayerIdsByController)
+        {
+            APlayerController* Existing = Entry.Key.Get();
+            if (!Existing || Existing == NewPlayer || Entry.Value != PlayerId) continue;
+            if (UNetConnection* ExistingConnection = Existing->GetNetConnection()) ExistingConnection->Close();
+            ReconnectConfirmedControllers.Remove(Existing);
+            PendingReconnectTokenDigests.Remove(Existing);
+        }
         if (UGameInstance* GameInstance = GetGameInstance())
         {
             if (UGuiyangAgonesLifecycleSubsystem* Lifecycle =
@@ -324,8 +361,9 @@ void AGuiyangMahjongGameMode::PostLogin(APlayerController* NewPlayer)
             return;
         }
         EMahjongRoomError Error = EMahjongRoomError::None;
-        if (!RoomManager->AdmitManagedPlayer(
-                ManagedRoomCode, PlayerId, DisplayName, State, Error))
+        const FGuiyangJoinTicketClaims* Claims = AuthorizedClaimsByController.Find(NewPlayer);
+        if (!Claims || !RoomManager->AdmitManagedPlayer(
+                ManagedRoomCode, PlayerId, DisplayName, State, Error, Claims->SeatId))
         {
             MahjongController->Client_ShowErrorMessage(ErrorToMessage(Error));
             return;
@@ -340,6 +378,9 @@ void AGuiyangMahjongGameMode::PostLogin(APlayerController* NewPlayer)
             Seat ? Seat->SeatIndex : INDEX_NONE,
             Seat ? Seat->bReady : false);
         PublishRoomState(State);
+        if (TableEngine && ActiveRoomCode == State.RoomInfo.RoomId)
+            PublishReconnectSnapshot(MahjongController, State,
+                State.RuleSnapshot.Config.ReconnectTimeoutSeconds);
         if (State.Lifecycle == EMahjongRoomLifecycle::Starting)
         {
             TryStartTable(State);
@@ -381,6 +422,9 @@ void AGuiyangMahjongGameMode::Logout(AController* Exiting)
     }
     AuthorizedPlayerIdsByController.Remove(Cast<APlayerController>(Exiting));
     AuthorizedDisplayNamesByController.Remove(Cast<APlayerController>(Exiting));
+    AuthorizedClaimsByController.Remove(Cast<APlayerController>(Exiting));
+    PendingReconnectTokenDigests.Remove(Cast<APlayerController>(Exiting));
+    ReconnectConfirmedControllers.Remove(Cast<APlayerController>(Exiting));
     Super::Logout(Exiting);
 }
 
@@ -401,8 +445,12 @@ void AGuiyangMahjongGameMode::EndPlay(const EEndPlayReason::Type EndPlayReason)
     PendingAuthorizedPlayersByTicketDigest.Reset();
     PendingAuthorizedDisplayNamesByTicketDigest.Reset();
     PendingTicketExpiryByDigest.Reset();
+    PendingTicketClaimsByDigest.Reset();
     AuthorizedPlayerIdsByController.Reset();
     AuthorizedDisplayNamesByController.Reset();
+    AuthorizedClaimsByController.Reset();
+    PendingReconnectTokenDigests.Reset();
+    ReconnectConfirmedControllers.Reset();
     ManagedRoomCode.Reset();
     Super::EndPlay(EndPlayReason);
 }
@@ -425,7 +473,43 @@ bool AGuiyangMahjongGameMode::InitializeManagedRoomAuthority(
         return false;
     }
     ManagedRoomCode = Definition.RoomCode;
+    // 每个托管进程只承载一场比赛；Bootstrap 成功时建立全新的公平性审计链。
+    PendingShuffleProof.Reset();
+    CompletedShuffleProofs.Reset();
+    FairnessEventChainDigest.Reset();
+    if (bManagedGameServer && GameServerBridge)
+    {
+        RuntimeRecoveryStore = MakeUnique<FGuiyangRuntimeRecoveryStore>();
+        if (!RuntimeRecoveryStore->Initialize(GameServerBridge->GetConfig(), OutError))
+        {
+            RuntimeRecoveryStore.Reset();
+            return false;
+        }
+        if (!TryRecoverPriorEpoch(OutError))
+        {
+            RuntimeRecoveryStore.Reset();
+            return false;
+        }
+        if (bRecoveredGameServer)
+        {
+            FMahjongRoomState RecoveredState;
+            if (RoomManager->GetRoomState(ManagedRoomCode, RecoveredState))
+                State = MoveTemp(RecoveredState);
+        }
+    }
     PublishRoomState(State);
+    if (bRecoveredGameServer && TableEngine)
+    {
+        // 恢复后重新武装权威计时器；若崩溃点已进入 Settlement，则继续证据屏障和幂等结算流程。
+        PublishTableSnapshots();
+        FinalizeRoundIfNeeded();
+        FString CurrentEpochSnapshotError;
+        if (!PersistAuthoritativeSnapshot(false, CurrentEpochSnapshotError))
+        {
+            OutError = TEXT("恢复成功但新 Epoch 快照落盘失败：") + CurrentEpochSnapshotError;
+            return false;
+        }
+    }
     UE_LOG(LogMahjongServer, Display,
         TEXT("Managed room initialized BackendRoomId=%s RoomCode=%s MatchId=%s RuleHash=%s"),
         *Definition.BackendRoomId, *Definition.RoomCode, *Definition.MatchId, *Definition.RuleSnapshot.RuleHash);
@@ -536,8 +620,9 @@ void AGuiyangMahjongGameMode::HandleAuthenticateSession(AGuiyangMahjongPlayerCon
         }
         FMahjongRoomState AdmittedState;
         EMahjongRoomError AdmitError;
-        if (!RoomManager->AdmitManagedPlayer(ManagedRoomCode, CleanPlayerId, CleanDisplayName,
-            AdmittedState, AdmitError))
+        const FGuiyangJoinTicketClaims* Claims = AuthorizedClaimsByController.Find(Controller);
+        if (!Claims || !RoomManager->AdmitManagedPlayer(ManagedRoomCode, CleanPlayerId, CleanDisplayName,
+            AdmittedState, AdmitError, Claims->SeatId))
         {
             Controller->Client_ShowErrorMessage(ErrorToMessage(AdmitError));
             return;
@@ -760,35 +845,52 @@ void AGuiyangMahjongGameMode::PublishRoomState(const FMahjongRoomState& State)
 
 void AGuiyangMahjongGameMode::TryStartTable(const FMahjongRoomState& StartingRoomState)
 {
-    // 房间生命周期进入 Starting 后，使用规则快照和服务器种子创建权威牌桌。
+    // 房间生命周期进入 Starting 后，使用冻结规则和 CSPRNG 种子创建权威牌桌。
     if (!RoomManager || (TableEngine && TableEngine->GetPublicState().Phase != EMahjongTablePhase::Settlement)) return;
     GetWorldTimerManager().ClearTimer(NextRoundAutoStartHandle);
     UMahjongTableEngine* RoundEngine = TableEngine ? TableEngine.Get() : NewObject<UMahjongTableEngine>(this);
     FString Error;
-    // 只在权威服务端、且紧邻 StartRound 发牌前生成洗牌种子。组合系统
-    // GUID、UTC 时间、进程周期、房间号和单调代次，避免快速连续开局或
-    // 新分配的 Dedicated Server 重复同一牌序。
-    ++ShuffleGeneration;
-    uint32 SeedBits = GetTypeHash(FGuid::NewGuid());
-    SeedBits = HashCombineFast(SeedBits, GetTypeHash(FDateTime::UtcNow().GetTicks()));
-    SeedBits = HashCombineFast(SeedBits, GetTypeHash(FPlatformTime::Cycles64()));
-    SeedBits = HashCombineFast(SeedBits, GetTypeHash(StartingRoomState.RoomInfo.RoomId));
-    SeedBits = HashCombineFast(SeedBits, ShuffleGeneration);
-    int32 Seed = static_cast<int32>(SeedBits);
-    if (Seed == LastShuffleSeed)
+    const int32 RoundId = CompletedShuffleProofs.Num() + 1;
+    int32 Seed = 0;
+    FGuiyangShuffleAuditProof Proof;
+    if (!FGuiyangFairShuffle::Generate(
+        StartingRoomState.RoomInfo.RoomId, RoundId,
+        StartingRoomState.RuleSnapshot, Seed, Proof, Error))
     {
-        Seed = static_cast<int32>(SeedBits + 0x9E3779B9u + ShuffleGeneration);
+        UE_LOG(LogMahjongServer, Error,
+            TEXT("Secure shuffle material generation failed Room=%s Round=%d Reason=%s"),
+            *StartingRoomState.RoomInfo.RoomId, RoundId, *Error);
+        return;
     }
-    LastShuffleSeed = Seed;
+    // 托管服必须在发牌前可靠落盘承诺；落盘失败时拒绝开局，不能形成“先看牌后选承诺”的空间。
+    if (bManagedGameServer
+        && (!GameServerBridge || !GameServerBridge->AppendShuffleAuditRecord(
+            Proof, false, FString())))
+    {
+        UE_LOG(LogMahjongServer, Error,
+            TEXT("Pre-deal shuffle commitment persistence failed Room=%s Round=%d"),
+            *StartingRoomState.RoomInfo.RoomId, RoundId);
+        return;
+    }
     UE_LOG(LogMahjongServer, Display,
-        TEXT("Authoritative pre-deal shuffle: room=%s generation=%u seed=%d tiles=108 honors=0"),
-        *StartingRoomState.RoomInfo.RoomId, ShuffleGeneration, Seed);
+        TEXT("Authoritative pre-deal shuffle committed Room=%s Round=%d Commitment=%s"),
+        *StartingRoomState.RoomInfo.RoomId, RoundId, *Proof.SeedCommitment);
     if (!RoundEngine->StartRound(StartingRoomState.RuleSnapshot, StartingRoomState.Seats,
         StartingRoomState.RoomInfo.DealerSeat, Seed, Error))
     {
         if (!TableEngine) RoundEngine = nullptr;
         return;
     }
+    const TArray<FMahjongTile>* Deck = RoundEngine->GetDeckOrderForServerAudit();
+    if (!Deck || Deck->IsEmpty())
+    {
+        UE_LOG(LogMahjongServer, Error,
+            TEXT("Post-shuffle deck audit snapshot unavailable Room=%s Round=%d"),
+            *StartingRoomState.RoomInfo.RoomId, RoundId);
+        return;
+    }
+    Proof.DeckOrderDigest = FGuiyangFairShuffle::CalculateDeckOrderDigest(*Deck);
+    PendingShuffleProof = MoveTemp(Proof);
     FMahjongRoomState PlayingState;
     EMahjongRoomError RoomError;
     if (!RoomManager->BeginPlaying(StartingRoomState.RoomInfo.RoomId, PlayingState, RoomError))
@@ -805,6 +907,13 @@ void AGuiyangMahjongGameMode::TryStartTable(const FMahjongRoomState& StartingRoo
     ArmedTimeoutPhase = EMahjongTablePhase::WaitingForPlayers;
     PublishRoomState(PlayingState);
     PublishTableSnapshots();
+    FString SnapshotError;
+    if (RuntimeRecoveryStore && !PersistAuthoritativeSnapshot(false, SnapshotError))
+    {
+        UE_LOG(LogMahjongServer, Error,
+            TEXT("Post-deal authoritative snapshot failed Room=%s Reason=%s"),
+            *ActiveRoomCode, *SnapshotError);
+    }
     if (FParse::Param(FCommandLine::Get(), TEXT("MahjongEnableIntegrationHooks")))
     {
         UE_LOG(LogMahjongServer, Display,
@@ -839,6 +948,63 @@ void AGuiyangMahjongGameMode::HandleNextRound(AGuiyangMahjongPlayerController* C
     }
 }
 
+bool AGuiyangMahjongGameMode::ValidateAuthoritativeActionEnvelope(
+    const AGuiyangMahjongPlayerState& Player,
+    const FMahjongActionRequest& Request,
+    FString& OutError)
+{
+    // 动作 ID 必须是规范 UUID；服务端不接受空 ID，也不把 ID 当作玩家身份依据。
+    FGuid ParsedActionId;
+    if (!FGuid::Parse(Request.ClientActionId, ParsedActionId))
+    {
+        OutError = TEXT("操作标识格式无效");
+        return false;
+    }
+    const int64 ExpectedEpoch = GameServerBridge ? GameServerBridge->GetConfig().RoomEpoch : 0;
+    if (Request.RoomEpoch != ExpectedEpoch)
+    {
+        OutError = TEXT("房间实例已经切换，请重新连接");
+        return false;
+    }
+    if (!TableEngine || Request.ExpectedStateVersion != TableEngine->GetPublicState().StateSequence)
+    {
+        OutError = TEXT("牌桌状态已经变化，请同步后重试");
+        return false;
+    }
+    const FString ReplayKey = Player.MahjongPlayerId + TEXT("|") + Request.ClientActionId;
+    if (AcceptedActionIds.Contains(ReplayKey))
+    {
+        OutError = TEXT("该操作已经处理");
+        return false;
+    }
+    const int64 NowMilliseconds = FDateTime::UtcNow().ToUnixTimestamp() * 1000;
+    if (Request.ClientSentAtUnixMilliseconds <= 0
+        || FMath::Abs(NowMilliseconds - Request.ClientSentAtUnixMilliseconds) > 120000)
+    {
+        OutError = TEXT("操作时间窗口无效，请校准时间后重连");
+        return false;
+    }
+
+    // 每玩家每秒最多十个牌桌意图；限流只保护入口，规则引擎仍会独立校验回合和牌所有权。
+    const double NowSeconds = FPlatformTime::Seconds();
+    TArray<double>& Recent = RecentActionTimesByPlayer.FindOrAdd(Player.MahjongPlayerId);
+    Recent.RemoveAll([NowSeconds](const double Value) { return NowSeconds - Value >= 1.0; });
+    if (Recent.Num() >= 10)
+    {
+        OutError = TEXT("操作过于频繁，请稍后重试");
+        return false;
+    }
+    Recent.Add(NowSeconds);
+
+    // 重放缓存保留十分钟即可覆盖连接重试；按 UTC 秒清理不会影响规则确定性。
+    const int64 ExpireBefore = FDateTime::UtcNow().ToUnixTimestamp() - 600;
+    for (auto It = AcceptedActionIds.CreateIterator(); It; ++It)
+    {
+        if (It.Value() < ExpireBefore) It.RemoveCurrent();
+    }
+    return true;
+}
+
 void AGuiyangMahjongGameMode::HandleTableAction(AGuiyangMahjongPlayerController* Controller, const FMahjongActionRequest& Request)
 {
     // 根据当前阶段分派到出牌、回合动作或响应接口，所有合法性由 TableEngine 复核。
@@ -848,6 +1014,18 @@ void AGuiyangMahjongGameMode::HandleTableAction(AGuiyangMahjongPlayerController*
         if (Controller) Controller->Client_ShowErrorMessage(TEXT("牌桌尚未开始"));
         return;
     }
+    if (bRecoveredGameServer && !ReconnectConfirmedControllers.Contains(Controller))
+    {
+        Controller->Client_ShowErrorMessage(TEXT("恢复状态尚未确认，请等待同步完成"));
+        return;
+    }
+    FString EnvelopeError;
+    if (!ValidateAuthoritativeActionEnvelope(*Player, Request, EnvelopeError))
+    {
+        Controller->Client_ShowErrorMessage(EnvelopeError);
+        return;
+    }
+    const int32 StateVersionBefore = TableEngine->GetPublicState().StateSequence;
     FMahjongActionResult Result;
     if (Request.Type == EMahjongActionType::Play)
         Result = TableEngine->SubmitPlayTile(Player->SeatIndex, Request);
@@ -860,6 +1038,10 @@ void AGuiyangMahjongGameMode::HandleTableAction(AGuiyangMahjongPlayerController*
         Controller->Client_ShowErrorMessage(Result.Message);
         return;
     }
+    AcceptedActionIds.Add(
+        Player->MahjongPlayerId + TEXT("|") + Request.ClientActionId,
+        FDateTime::UtcNow().ToUnixTimestamp());
+    RecordAcceptedActionEvidence(*Player, Request, Result, StateVersionBefore);
     // 玩家成功提交权威动作即解除此前由超时触发的托管；无效请求不得解除托管。
     SetSeatTrusteeState(Player->SeatIndex, false);
     PublishTableSnapshots();
@@ -868,13 +1050,22 @@ void AGuiyangMahjongGameMode::HandleTableAction(AGuiyangMahjongPlayerController*
 
 void AGuiyangMahjongGameMode::HandleLegacyPlayTile(AGuiyangMahjongPlayerController* Controller, const FMahjongTile& Tile, const int32 ClientSequence)
 {
+    if (bManagedGameServer)
+    {
+        if (Controller) Controller->Client_ShowErrorMessage(TEXT("当前服务器要求新版权威动作协议"));
+        return;
+    }
     if (!TableEngine) return;
     FMahjongActionRequest Request;
     Request.Type = EMahjongActionType::Play;
+    Request.ClientActionId = FGuid::NewGuid().ToString(EGuidFormats::DigitsWithHyphensLower);
     Request.RoundId = TableEngine->GetPublicState().RoundId;
     Request.TurnId = TableEngine->GetPublicState().TurnId;
     Request.TargetTileId = Tile.UniqueId;
     Request.ClientSequence = ClientSequence;
+    Request.ExpectedStateVersion = TableEngine->GetPublicState().StateSequence;
+    Request.RoomEpoch = GameServerBridge ? GameServerBridge->GetConfig().RoomEpoch : 0;
+    Request.ClientSentAtUnixMilliseconds = FDateTime::UtcNow().ToUnixTimestamp() * 1000;
     HandleTableAction(Controller, Request);
 }
 
@@ -884,7 +1075,14 @@ void AGuiyangMahjongGameMode::PublishTableSnapshots()
     if (!TableEngine) return;
     RefreshActionTimeoutTimer();
     if (AGuiyangMahjongGameState* MahjongState = GetGameState<AGuiyangMahjongGameState>())
-        MahjongState->SetPublicTableStateAuthority(TableEngine->GetPublicState());
+    {
+        FMahjongPublicTableState PublicState = TableEngine->GetPublicState();
+        PublicState.RoomEpoch = GameServerBridge ? GameServerBridge->GetConfig().RoomEpoch : 0;
+        FMahjongTableRecoveryState RecoveryState;
+        if (TableEngine->ExportRecoveryState(RecoveryState))
+            PublicState.PublicStateHash = FGuiyangRuntimeRecoveryStore::CalculateTableStateHash(RecoveryState);
+        MahjongState->SetPublicTableStateAuthority(PublicState);
+    }
     FMahjongSettlementResult Settlement;
     const bool bPublishSettlement = TableEngine->GetSettlementResult(Settlement)
         && LastPublishedSettlementSequence != TableEngine->GetPublicState().StateSequence;
@@ -934,9 +1132,15 @@ void AGuiyangMahjongGameMode::RefreshActionTimeoutTimer()
     // Only the explicit full-match integration mode uses a fast timer.
     // Production turns use a hidden 15-second grace period followed by the
     // replicated 30-second visible countdown.
-    const float TimerDelay = IsFullMatchIntegrationEnabled()
+    float TimerDelay = IsFullMatchIntegrationEnabled()
         ? 0.05f
         : static_cast<float>(TotalTimeoutSeconds);
+    if (RecoveredActionTimeoutRemainingSeconds.IsSet())
+    {
+        TimerDelay = FMath::Clamp(
+            RecoveredActionTimeoutRemainingSeconds.GetValue(), 0.05f, TimerDelay);
+        RecoveredActionTimeoutRemainingSeconds.Reset();
+    }
     TableEngine->SetActionDeadlineForServer(GetWorld()->GetTimeSeconds() + TimerDelay,
         IsFullMatchIntegrationEnabled() ? 1 : VisibleTimeoutSeconds);
     FTimerDelegate Delegate;
@@ -961,10 +1165,49 @@ void AGuiyangMahjongGameMode::HandleActionTimeout(const int32 ExpectedRoundId, c
             if (!TableEngine->GetAvailableActions(SeatIndex).IsEmpty()) TimedOutSeats.Add(SeatIndex);
         }
     }
+    const int32 StateVersionBefore = TableEngine->GetPublicState().StateSequence;
     const FMahjongActionResult Result = TableEngine->ResolveActionTimeout(ExpectedRoundId, ExpectedTurnId, ExpectedPhase);
     if (!Result.bSuccess) return;
     // 超时动作由服务器代打，只有超时发生前确实拥有可选动作的座位进入托管。
     for (const int32 TimedOutSeat : TimedOutSeats) SetSeatTrusteeState(TimedOutSeat, true);
+    if (RuntimeRecoveryStore && GameServerBridge)
+    {
+        FMahjongTableRecoveryState RecoveryState;
+        const FString StateHash = TableEngine->ExportRecoveryState(RecoveryState)
+            ? FGuiyangRuntimeRecoveryStore::CalculateTableStateHash(RecoveryState)
+            : FString();
+        for (const int32 TimedOutSeat : TimedOutSeats)
+        {
+            FGuiyangActionEvidenceRecord Record;
+            Record.MatchId = GameServerBridge->GetConfig().MatchId;
+            Record.RoomId = GameServerBridge->GetConfig().RoomId;
+            Record.RoomEpoch = GameServerBridge->GetConfig().RoomEpoch;
+            Record.StateVersionBefore = StateVersionBefore;
+            Record.StateVersionAfter = TableEngine->GetPublicState().StateSequence;
+            Record.StateHashAfter = StateHash;
+            const FMahjongSeatInfo* TimedOutPlayer = TableEngine->GetPublicState().Seats.FindByPredicate(
+                [TimedOutSeat](const FMahjongSeatInfo& Seat) { return Seat.SeatIndex == TimedOutSeat; });
+            Record.PlayerId = TimedOutPlayer ? TimedOutPlayer->PlayerId : FString::Printf(TEXT("seat:%d"), TimedOutSeat);
+            Record.SeatId = TimedOutSeat;
+            Record.ActionType = ExpectedPhase == EMahjongTablePhase::PlayerTurn
+                ? TEXT("TimeoutAutoPlay") : TEXT("TimeoutAutoPass");
+            Record.OccurredAtUtc = FDateTime::UtcNow().ToIso8601();
+            Record.Request.ClientActionId = FGuid::NewGuid().ToString(EGuidFormats::DigitsWithHyphensLower);
+            Record.Request.RoundId = ExpectedRoundId;
+            Record.Request.TurnId = ExpectedTurnId;
+            Record.Request.RoomEpoch = GameServerBridge->GetConfig().RoomEpoch;
+            Record.Request.Type = Result.Action.Type;
+            Record.NormalizedPayload = FGuiyangActionEvidence::NormalizeRequest(Record.Request);
+            Record.bReplayable = false;
+            FString EvidenceError;
+            if (!RuntimeRecoveryStore->AppendAction(Record, EvidenceError))
+                UE_LOG(LogMahjongServer, Error, TEXT("Timeout evidence append failed Reason=%s"), *EvidenceError);
+        }
+    }
+    // 超时可能一次推进多个自动 Pass；立即写完整快照，避免把聚合自动动作误表示成单个玩家意图。
+    FString SnapshotError;
+    if (RuntimeRecoveryStore && !PersistAuthoritativeSnapshot(false, SnapshotError))
+        UE_LOG(LogMahjongServer, Error, TEXT("Trustee snapshot failed Reason=%s"), *SnapshotError);
     PublishTableSnapshots();
     FinalizeRoundIfNeeded();
 }
@@ -1004,6 +1247,46 @@ void AGuiyangMahjongGameMode::FinalizeRoundIfNeeded()
 
     FMahjongSettlementResult Settlement;
     if (!TableEngine->GetSettlementResult(Settlement)) return;
+    FString EvidenceError;
+    if (RuntimeRecoveryStore && !PersistAuthoritativeSnapshot(true, EvidenceError))
+    {
+        // 结算前证据是强屏障：失败时保持 Settlement 内存状态，不向 Lobby 上报正常结果。
+        bSettlementEvidenceReady = false;
+        UE_LOG(LogMahjongServer, Error,
+            TEXT("Settlement evidence barrier failed Room=%s Reason=%s"),
+            *ActiveRoomCode, *EvidenceError);
+        return;
+    }
+    bSettlementEvidenceReady = true;
+    if (PendingShuffleProof.IsSet())
+    {
+        const TArray<FMahjongTile>* Deck = TableEngine->GetDeckOrderForServerAudit();
+        FGuiyangShuffleAuditProof Proof = PendingShuffleProof.GetValue();
+        Proof.RevealedAtUtc = FDateTime::UtcNow();
+        if (!Deck || !FGuiyangFairShuffle::Verify(
+            ActiveRoomCode, TableEngine->GetLockedRuleSnapshot(), *Deck, Proof))
+        {
+            UE_LOG(LogMahjongServer, Error,
+                TEXT("Shuffle fairness proof verification failed Room=%s Round=%d"),
+                *ActiveRoomCode, Proof.RoundId);
+            return;
+        }
+        const FString NextEventChainDigest = FGuiyangFairShuffle::CalculateEventChainDigest(
+            FairnessEventChainDigest, ActiveRoomCode, Proof);
+        // Reveal 只能在牌桌进入 Settlement 后写入；失败时保留 Pending，等待下一次安全重试。
+        if (bManagedGameServer
+            && (!GameServerBridge || !GameServerBridge->AppendShuffleAuditRecord(
+                Proof, true, NextEventChainDigest)))
+        {
+            UE_LOG(LogMahjongServer, Error,
+                TEXT("Post-round shuffle proof persistence failed Room=%s Round=%d"),
+                *ActiveRoomCode, Proof.RoundId);
+            return;
+        }
+        CompletedShuffleProofs.Add(MoveTemp(Proof));
+        FairnessEventChainDigest = NextEventChainDigest;
+        PendingShuffleProof.Reset();
+    }
     FMahjongRoomState State;
     EMahjongRoomError Error;
     if (!RoomManager->FinishRound(ActiveRoomCode, Settlement, State, Error)) return;
@@ -1121,9 +1404,18 @@ void AGuiyangMahjongGameMode::PublishReconnectSnapshot(AGuiyangMahjongPlayerCont
     if (TableEngine && ActiveRoomCode == RoomState.RoomInfo.RoomId)
     {
         Snapshot.TableState = TableEngine->GetPublicState();
+        Snapshot.TableState.RoomEpoch = GameServerBridge ? GameServerBridge->GetConfig().RoomEpoch : 0;
+        FMahjongTableRecoveryState RecoveryState;
+        if (TableEngine->ExportRecoveryState(RecoveryState))
+            Snapshot.TableState.PublicStateHash =
+                FGuiyangRuntimeRecoveryStore::CalculateTableStateHash(RecoveryState);
         TableEngine->GetPrivateState(Player->SeatIndex, Snapshot.PrivateState);
         Actions = TableEngine->GetAvailableActions(Player->SeatIndex);
     }
+    Snapshot.ControlToken = FGuid::NewGuid().ToString(EGuidFormats::DigitsWithHyphensLower);
+    Snapshot.MissingActionCount = 0;
+    PendingReconnectTokenDigests.Add(Controller, HashSessionToken(Snapshot.ControlToken));
+    ReconnectConfirmedControllers.Remove(Controller);
     Controller->Client_RestoreReconnectSnapshot(Snapshot, Actions);
     if (FParse::Param(FCommandLine::Get(), TEXT("MahjongEnableIntegrationHooks"))
         && Player->MahjongPlayerId.StartsWith(TEXT("integration-client-")))
@@ -1145,13 +1437,79 @@ void AGuiyangMahjongGameMode::PublishReconnectSnapshot(AGuiyangMahjongPlayerCont
         Controller->Client_ShowFinalSettlement(UGuiyangRoomManager::BuildFinalSettlement(RoomState));
 }
 
+void AGuiyangMahjongGameMode::HandleReconnectStateConfirmed(
+    AGuiyangMahjongPlayerController* Controller,
+    const FString& ControlToken,
+    const int32 StateVersion,
+    const FString& PublicStateHash)
+{
+    const FString* ExpectedDigest = PendingReconnectTokenDigests.Find(Controller);
+    FMahjongTableRecoveryState RecoveryState;
+    const FString CurrentHash = TableEngine && TableEngine->ExportRecoveryState(RecoveryState)
+        ? FGuiyangRuntimeRecoveryStore::CalculateTableStateHash(RecoveryState)
+        : FString();
+    if (!Controller || !ExpectedDigest
+        || !ConstantTimeDigestEquals(*ExpectedDigest, HashSessionToken(ControlToken))
+        || !TableEngine || StateVersion != TableEngine->GetPublicState().StateSequence
+        || PublicStateHash != CurrentHash)
+    {
+        if (Controller) Controller->Client_ShowErrorMessage(TEXT("重连状态确认失败，请重新连接"));
+        return;
+    }
+    PendingReconnectTokenDigests.Remove(Controller);
+    ReconnectConfirmedControllers.Add(Controller);
+}
+
 void AGuiyangMahjongGameMode::PublishFinalSettlement(const FMahjongRoomState& RoomState)
 {
-    // 最终结果既发送四个客户端，也以可靠 Outbox 方式上报 Lobby 控制面。
+    // 最终结果既发送四个客户端，也以可靠 Outbox 方式上报 GameData；客户端永远不能提交该信封。
     if (RoomState.StateSequence == LastPublishedFinalRoomSequence) return;
     const FMahjongFinalSettlementResult Result = UGuiyangRoomManager::BuildFinalSettlement(RoomState);
     if (bManagedGameServer && GameServerBridge)
-        GameServerBridge->QueueFinalSettlement(Result, RoomState.StateSequence);
+    {
+        FString EvidenceError;
+        if (!PersistAuthoritativeSnapshot(true, EvidenceError))
+        {
+            bSettlementEvidenceReady = false;
+            UE_LOG(LogMahjongServer, Error,
+                TEXT("Final GameData snapshot barrier failed MatchId=%s Reason=%s"),
+                *Result.MatchId, *EvidenceError);
+            return;
+        }
+        FMahjongTableRecoveryState FinalState;
+        const FString FinalStateHash = TableEngine && TableEngine->ExportRecoveryState(FinalState)
+            ? FGuiyangRuntimeRecoveryStore::CalculateTableStateHash(FinalState)
+            : FString();
+        TArray<FGuiyangRecoveryEvidenceObject> EvidenceObjects;
+        if (!RuntimeRecoveryStore
+            || !RuntimeRecoveryStore->MaterializeFinalEvidence(EvidenceObjects, EvidenceError))
+        {
+            bSettlementEvidenceReady = false;
+            UE_LOG(LogMahjongServer, Error,
+                TEXT("Final GameData evidence materialization failed MatchId=%s Reason=%s"),
+                *Result.MatchId, *EvidenceError);
+            return;
+        }
+        FString CommitmentCanonical = TEXT("shuffle-commitments-v1");
+        for (const FGuiyangShuffleAuditProof& Proof : CompletedShuffleProofs)
+            CommitmentCanonical += FString::Printf(TEXT("|%d:%s"), Proof.RoundId, *Proof.SeedCommitment);
+        const FTCHARToUTF8 CommitmentUtf8(*CommitmentCanonical);
+        FSHA256Signature CommitmentSignature;
+        const FString RandomCommitment = FPlatformMisc::GetSHA256Signature(
+            CommitmentUtf8.Get(), static_cast<uint32>(CommitmentUtf8.Length()), CommitmentSignature)
+            ? CommitmentSignature.ToString().ToLower()
+            : FString();
+        GameServerBridge->QueueFinalSettlement(
+            Result,
+            1,
+            CompletedShuffleProofs,
+            FairnessEventChainDigest,
+            FinalStateHash,
+            RuntimeRecoveryStore->GetLastActionHash(),
+            RandomCommitment,
+            FGuid::NewGuid().ToString(EGuidFormats::DigitsWithHyphensLower),
+            EvidenceObjects);
+    }
     for (TActorIterator<AGuiyangMahjongPlayerController> It(GetWorld()); It; ++It)
         It->Client_ShowFinalSettlement(Result);
     if (IsFullMatchIntegrationEnabled())
@@ -1161,6 +1519,196 @@ void AGuiyangMahjongGameMode::PublishFinalSettlement(const FMahjongRoomState& Ro
             *Result.RoomId, Result.CompletedRounds, Result.Players.Num());
     }
     LastPublishedFinalRoomSequence = RoomState.StateSequence;
+}
+
+void AGuiyangMahjongGameMode::RecordAcceptedActionEvidence(
+    const AGuiyangMahjongPlayerState& Player,
+    const FMahjongActionRequest& Request,
+    const FMahjongActionResult& Result,
+    const int32 StateVersionBefore)
+{
+    if (!RuntimeRecoveryStore || !TableEngine || !GameServerBridge) return;
+    FMahjongTableRecoveryState RecoveryState;
+    if (!TableEngine->ExportRecoveryState(RecoveryState))
+    {
+        UE_LOG(LogMahjongServer, Error, TEXT("Accepted action state export failed Player=%s"), *Player.MahjongPlayerId);
+        return;
+    }
+    FGuiyangActionEvidenceRecord Record;
+    Record.MatchId = GameServerBridge->GetConfig().MatchId;
+    Record.RoomId = GameServerBridge->GetConfig().RoomId;
+    Record.RoomEpoch = GameServerBridge->GetConfig().RoomEpoch;
+    Record.StateVersionBefore = StateVersionBefore;
+    Record.StateVersionAfter = TableEngine->GetPublicState().StateSequence;
+    Record.StateHashAfter = FGuiyangRuntimeRecoveryStore::CalculateTableStateHash(RecoveryState);
+    Record.PlayerId = Player.MahjongPlayerId;
+    Record.SeatId = Player.SeatIndex;
+    Record.ActionType = FString::FromInt(static_cast<int32>(Result.Action.Type));
+    Record.NormalizedPayload = FGuiyangActionEvidence::NormalizeRequest(Request);
+    Record.OccurredAtUtc = FDateTime::UtcNow().ToIso8601();
+    Record.Request = Request;
+    FString Error;
+    if (!RuntimeRecoveryStore->AppendAction(Record, Error))
+    {
+        UE_LOG(LogMahjongServer, Error,
+            TEXT("Authoritative action evidence append failed Player=%s Reason=%s"),
+            *Player.MahjongPlayerId, *Error);
+        return;
+    }
+
+    const bool bCriticalAction = Request.Type == EMahjongActionType::AnGang
+        || Request.Type == EMahjongActionType::MingGang
+        || Request.Type == EMahjongActionType::BuGang
+        || Request.Type == EMahjongActionType::Hu
+        || TableEngine->GetPublicState().Phase == EMahjongTablePhase::Settlement;
+    const bool bActionThreshold = RuntimeRecoveryStore->GetLastActionSequence()
+        - LastSnapshotActionSequence >= RuntimeRecoveryStore->GetSnapshotEveryActions();
+    const bool bTimeThreshold = LastAuthoritativeSnapshotAtUtc.GetTicks() <= 0
+        || FDateTime::UtcNow() - LastAuthoritativeSnapshotAtUtc
+            >= FTimespan::FromSeconds(RuntimeRecoveryStore->GetSnapshotMaxIntervalSeconds());
+    if (bCriticalAction || bActionThreshold || bTimeThreshold)
+    {
+        if (!PersistAuthoritativeSnapshot(false, Error))
+            UE_LOG(LogMahjongServer, Error, TEXT("Periodic authoritative snapshot failed Reason=%s"), *Error);
+    }
+}
+
+bool AGuiyangMahjongGameMode::PersistAuthoritativeSnapshot(
+    const bool bSettlementBarrier,
+    FString& OutError)
+{
+    if (!RuntimeRecoveryStore || !TableEngine || !RoomManager || !GameServerBridge)
+    {
+        OutError = TEXT("权威快照依赖尚未初始化");
+        return false;
+    }
+    FGuiyangAuthoritativeSnapshot Snapshot;
+    Snapshot.MatchId = GameServerBridge->GetConfig().MatchId;
+    Snapshot.RoomId = GameServerBridge->GetConfig().RoomId;
+    Snapshot.RoomCode = ActiveRoomCode.IsEmpty() ? ManagedRoomCode : ActiveRoomCode;
+    Snapshot.RoomEpoch = GameServerBridge->GetConfig().RoomEpoch;
+    Snapshot.RuleSetVersion = GameServerBridge->GetConfig().RuleSetVersion;
+    Snapshot.CreatedAtUtc = FDateTime::UtcNow().ToIso8601();
+    Snapshot.RemainingActionTimeoutSeconds = GetWorld()
+        ? FMath::Max(0.0f, GetWorldTimerManager().GetTimerRemaining(ActionTimeoutHandle))
+        : 0.0f;
+    if (!RoomManager->GetRoomState(Snapshot.RoomCode, Snapshot.RoomState)
+        || !TableEngine->ExportRecoveryState(Snapshot.TableState))
+    {
+        OutError = TEXT("无法导出完整房间或牌桌状态");
+        return false;
+    }
+    Snapshot.StateVersion = Snapshot.TableState.PublicState.StateSequence;
+    Snapshot.RandomState = FString::Printf(
+        TEXT("seed=%s;nonce=%s;deck-offset=%d;commitment=%s"),
+        PendingShuffleProof.IsSet() ? *PendingShuffleProof.GetValue().SeedHex : TEXT("revealed"),
+        PendingShuffleProof.IsSet() ? *PendingShuffleProof.GetValue().ServerNonceHex : TEXT("revealed"),
+        Snapshot.TableState.DeckState.ClockwiseDrawOffset,
+        PendingShuffleProof.IsSet()
+            ? *PendingShuffleProof.GetValue().SeedCommitment
+            : TEXT("revealed"));
+    Snapshot.bHasPendingShuffleProof = PendingShuffleProof.IsSet();
+    if (PendingShuffleProof.IsSet()) Snapshot.PendingShuffleProof = PendingShuffleProof.GetValue();
+    Snapshot.CompletedShuffleProofs = CompletedShuffleProofs;
+    Snapshot.FairnessEventChainDigest = FairnessEventChainDigest;
+    for (const FMahjongSeatInfo& Seat : Snapshot.RoomState.Seats)
+    {
+        const FPlayerTrusteeState* Trustee = TrusteeStateByPlayer.Find(Seat.PlayerId);
+        if (Seat.bOccupied && Trustee && Trustee->bTrustee) Snapshot.TrusteeSeats.Add(Seat.SeatIndex);
+    }
+    if (!RuntimeRecoveryStore->SaveSnapshot(Snapshot, OutError))
+    {
+        if (bSettlementBarrier) bSettlementEvidenceReady = false;
+        return false;
+    }
+    LastAuthoritativeSnapshotAtUtc = FDateTime::UtcNow();
+    LastSnapshotActionSequence = RuntimeRecoveryStore->GetLastActionSequence();
+    return true;
+}
+
+bool AGuiyangMahjongGameMode::TryRecoverPriorEpoch(FString& OutError)
+{
+    bRecoveredGameServer = false;
+    if (!RuntimeRecoveryStore || !RoomManager || !GameServerBridge) return true;
+    FGuiyangAuthoritativeSnapshot Snapshot;
+    TArray<FGuiyangActionEvidenceRecord> Actions;
+    if (!RuntimeRecoveryStore->LoadLatestPriorEpoch(Snapshot, Actions, OutError))
+    {
+        // 空错误表示该比赛从未产生快照，是全新分配而不是恢复故障。
+        return OutError.IsEmpty();
+    }
+    if (Snapshot.RuleSetVersion != GameServerBridge->GetConfig().RuleSetVersion)
+    {
+        OutError = TEXT("恢复快照规则版本与新实例不兼容");
+        return false;
+    }
+    UMahjongTableEngine* RecoveredEngine = NewObject<UMahjongTableEngine>(this);
+    if (!RecoveredEngine || !RecoveredEngine->RestoreRecoveryState(Snapshot.TableState, OutError)
+        || !RoomManager->RestoreManagedRoomState(Snapshot.RoomCode, Snapshot.RoomState, OutError))
+    {
+        return false;
+    }
+    FString LastHash = Snapshot.PreviousActionHash;
+    int64 LastSequence = Snapshot.ActionSequence;
+    for (const FGuiyangActionEvidenceRecord& Action : Actions)
+    {
+        if (!Action.bReplayable)
+        {
+            OutError = TEXT("恢复点之后包含未被快照覆盖的聚合超时动作");
+            return false;
+        }
+        if (Action.ActionSequence != LastSequence + 1
+            || Action.PreviousHash != LastHash
+            || Action.StateVersionBefore != RecoveredEngine->GetPublicState().StateSequence)
+        {
+            OutError = TEXT("恢复动作序号、哈希链或状态版本不连续");
+            return false;
+        }
+        FMahjongActionRequest ReplayRequest = Action.Request;
+        ReplayRequest.ExpectedStateVersion = RecoveredEngine->GetPublicState().StateSequence;
+        FMahjongActionResult Result;
+        if (ReplayRequest.Type == EMahjongActionType::Play)
+            Result = RecoveredEngine->SubmitPlayTile(Action.SeatId, ReplayRequest);
+        else if (RecoveredEngine->GetPublicState().Phase == EMahjongTablePhase::PlayerTurn)
+            Result = RecoveredEngine->SubmitTurnAction(Action.SeatId, ReplayRequest);
+        else
+            Result = RecoveredEngine->SubmitReaction(Action.SeatId, ReplayRequest);
+        FMahjongTableRecoveryState ReplayedState;
+        if (!Result.bSuccess || !RecoveredEngine->ExportRecoveryState(ReplayedState)
+            || RecoveredEngine->GetPublicState().StateSequence != Action.StateVersionAfter
+            || FGuiyangRuntimeRecoveryStore::CalculateTableStateHash(ReplayedState) != Action.StateHashAfter)
+        {
+            OutError = TEXT("确定性动作重放结果与证据哈希不一致");
+            return false;
+        }
+        LastSequence = Action.ActionSequence;
+        LastHash = Action.ActionHash;
+    }
+    TableEngine = RecoveredEngine;
+    ActiveRoomCode = Snapshot.RoomCode;
+    PendingShuffleProof = Snapshot.bHasPendingShuffleProof
+        ? TOptional<FGuiyangShuffleAuditProof>(Snapshot.PendingShuffleProof)
+        : TOptional<FGuiyangShuffleAuditProof>();
+    CompletedShuffleProofs = Snapshot.CompletedShuffleProofs;
+    FairnessEventChainDigest = Snapshot.FairnessEventChainDigest;
+    RecoveredActionTimeoutRemainingSeconds = Snapshot.RemainingActionTimeoutSeconds;
+    RuntimeRecoveryStore->AdoptRecoveredChain(LastSequence, LastHash);
+    LastSnapshotActionSequence = Snapshot.ActionSequence;
+    for (const int32 SeatIndex : Snapshot.TrusteeSeats)
+    {
+        const FMahjongSeatInfo* Seat = Snapshot.RoomState.Seats.FindByPredicate(
+            [SeatIndex](const FMahjongSeatInfo& Item) { return Item.SeatIndex == SeatIndex; });
+        if (!Seat || Seat->PlayerId.IsEmpty()) continue;
+        FPlayerTrusteeState& Trustee = TrusteeStateByPlayer.FindOrAdd(Seat->PlayerId);
+        Trustee.bTrustee = true;
+        Trustee.ChangedAtUtc = FDateTime::UtcNow();
+    }
+    bRecoveredGameServer = true;
+    UE_LOG(LogMahjongServer, Display,
+        TEXT("GameServer recovery completed Match=%s PreviousEpoch=%lld CurrentEpoch=%lld ReplayedActions=%d"),
+        *Snapshot.MatchId, Snapshot.RoomEpoch, GameServerBridge->GetConfig().RoomEpoch, Actions.Num());
+    OutError.Reset();
+    return true;
 }
 
 FString AGuiyangMahjongGameMode::HashSessionToken(const FString& SessionToken)

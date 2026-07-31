@@ -23,7 +23,7 @@
         <strong id="freshnessDecision" class="freshness-decision">等待首次观测</strong>
       </div>
       <div id="sourceHealthCards" class="source-health-cards">
-        <article class="source-health Degraded"><strong>等待来源状态</strong><span>刷新后显示 Auth、Lobby、Allocator 与 PlayerData</span></article>
+        <article class="source-health Degraded"><strong>等待来源状态</strong><span>刷新后显示 Auth、Lobby 与 Allocator</span></article>
       </div>
     </section>
 
@@ -40,6 +40,28 @@
           <tbody id="actionsBody"><tr><td colspan="8" class="empty">暂无管理申请</td></tr></tbody>
         </table>
       </div>
+    </section>
+
+    <section id="configurationPanel" class="panel" hidden aria-label="配置治理">
+      <div class="panel-heading">
+        <div><p class="eyebrow">SIGNED CONFIGURATION</p><h2>配置草稿、审批与灰度发布</h2></div>
+        <small id="configurationSource">来源：Configuration Service · 尚未加载 · 陈旧阈值：60 秒</small>
+      </div>
+      <div class="filters">
+        <input id="configurationTicket" type="text" maxlength="128" placeholder="关联工单">
+        <input id="configurationReason" type="text" maxlength="80" placeholder="原因代码">
+        <button id="configurationCreate">创建草稿</button>
+      </div>
+      <textarea id="configurationPayload" rows="12" aria-label="平台配置 JSON">{
+  "client":{"minimumVersion":"1.0.0","recommendedVersion":"1.0.0","blockedVersions":[],"supportedProtocolVersions":["1"]},
+  "apiProtocolVersion":1,"featureFlags":{},"rollouts":[],
+  "fleetRoutes":[{"routeId":"stable-cn-southwest","fleet":"guiyang-mahjong","serverBuild":"replace-build","serverImageDigest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","ruleSetVersion":"guiyang-zhuoji-v1","ruleSetPackageHash":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","protocolVersion":"1","region":"cn-southwest","cell":"cell-a","canaryGroup":"stable","experimentId":null,"stopNewAllocations":false}],
+  "roomTemplates":[],"riskPolicyVersion":"risk-v1"
+}</textarea>
+      <p id="configurationMessage" class="notice">写请求不会执行影子副作用；创建人不能审批自己的草稿。</p>
+      <div class="table-wrap"><table><thead><tr>
+        <th>草稿</th><th>状态</th><th>创建人</th><th>工单</th><th>创建时间</th><th>操作</th>
+      </tr></thead><tbody id="configurationDraftsBody"><tr><td colspan="6" class="empty">等待加载</td></tr></tbody></table></div>
     </section>
 
     <section id="outboxPanel" class="panel" hidden>
@@ -160,7 +182,7 @@
     <form method="dialog">
       <h2>设置只读访问凭证</h2>
       <p>凭证仅保存在当前浏览器标签页，关闭标签页后自动清除。</p>
-      <label>Bearer Token<input id="credential" type="password" autocomplete="off"></label>
+      <label>企业短期访问令牌（仅用于建立 BFF 会话，不会持久化）<input id="credential" type="password" autocomplete="off"></label>
       <div class="dialog-actions"><button value="cancel" class="secondary">取消</button><button id="saveCredential" value="default">连接</button></div>
     </form>
   </dialog>
@@ -175,7 +197,11 @@
       </label>
       <label><span id="actionTargetLabel">目标 ID</span><input id="actionTarget" readonly></label>
       <label>关联工单<input id="actionTicket" placeholder="例如 INC-20260727-001"></label>
+      <label>原因码
+        <select id="actionReasonCode"><option value="OPERATOR_REQUEST">OPERATOR_REQUEST</option><option value="INCIDENT_RESPONSE">INCIDENT_RESPONSE</option><option value="CUSTOMER_DISPUTE">CUSTOMER_DISPUTE</option><option value="RISK_REVIEW">RISK_REVIEW</option></select>
+      </label>
       <label>操作原因<textarea id="actionReason" rows="4" placeholder="至少 10 个字符"></textarea></label>
+      <label>操作说明<textarea id="actionDescription" rows="3" placeholder="说明预期影响和操作范围，至少 10 个字符"></textarea></label>
       <section id="assetParameterFields" class="confirmation" hidden>
         <strong>资产操作必须关联已审批的补偿审查案件：</strong>
         <label>补偿案件<select id="assetCaseId"></select></label>

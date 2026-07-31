@@ -4,6 +4,7 @@
 #include "HAL/PlatformMisc.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
+#include "Misc/Paths.h"
 
 namespace
 {
@@ -60,9 +61,34 @@ bool UGuiyangAgonesLifecycleSubsystem::TryBuildLaunchConfig(
         || !ReadAnnotation(Response, TEXT("mahjong.freebooz/server-instance-id"), OutConfig.ServerInstanceId)
         || !ReadAnnotation(Response, TEXT("mahjong.freebooz/registration-credential"), OutConfig.RegistrationCredential)
         || !ReadAnnotation(Response, TEXT("mahjong.freebooz/lobby-internal-url"), OutConfig.LobbyInternalUrl)
-        || !ReadAnnotation(Response, TEXT("mahjong.freebooz/build-version"), OutConfig.BuildVersion))
+        || !ReadAnnotation(Response, TEXT("mahjong.freebooz/gamedata-internal-url"), OutConfig.GameDataInternalUrl)
+        || !ReadAnnotation(Response, TEXT("mahjong.freebooz/build-version"), OutConfig.BuildVersion)
+        || !ReadAnnotation(Response, TEXT("mahjong.freebooz/ruleset-version"), OutConfig.RuleSetVersion)
+        || !ReadAnnotation(Response, TEXT("mahjong.freebooz/protocol-version"), OutConfig.ProtocolVersion))
     {
         OutError = TEXT("AGONES_ALLOCATION_METADATA_INCOMPLETE");
+        return false;
+    }
+    FString RoomEpochText;
+    FString FencingTokenText;
+    if (!ReadAnnotation(
+            Response,
+            TEXT("mahjong.freebooz/room-epoch"),
+            RoomEpochText)
+        || !LexTryParseString(OutConfig.RoomEpoch, *RoomEpochText)
+        || OutConfig.RoomEpoch < 1)
+    {
+        OutError = TEXT("AGONES_ROOM_EPOCH_INVALID");
+        return false;
+    }
+    if (!ReadAnnotation(
+            Response,
+            TEXT("mahjong.freebooz/fencing-token"),
+            FencingTokenText)
+        || !LexTryParseString(OutConfig.LeaseFencingToken, *FencingTokenText)
+        || OutConfig.LeaseFencingToken < 1)
+    {
+        OutError = TEXT("AGONES_FENCING_TOKEN_INVALID");
         return false;
     }
     OutConfig.AdvertisedIp = Response.Status.Address.TrimStartAndEnd();
@@ -73,10 +99,39 @@ bool UGuiyangAgonesLifecycleSubsystem::TryBuildLaunchConfig(
     OutConfig.Port = GamePort ? GamePort->Port : 0;
     OutConfig.JoinTicketSigningKey = SigningKey;
     OutConfig.MatchResultOutboxPath = MatchResultOutboxPath;
+    // Agones 多 Pod 共用恢复卷时，按实例 ID 派生文件名，避免固定文件名互相覆盖。
+    FString SharedOutboxDirectory = FPlatformMisc::GetEnvironmentVariable(
+        TEXT("MAHJONG_MATCH_RESULT_OUTBOX_DIRECTORY"));
+    SharedOutboxDirectory.TrimStartAndEndInline();
+    if (!SharedOutboxDirectory.IsEmpty())
+        OutConfig.MatchResultOutboxPath = FPaths::Combine(
+            SharedOutboxDirectory, OutConfig.ServerInstanceId + TEXT(".json"));
+    // Fleet 通过 Secret 环境变量注入结算密钥；Agones 注解属于可读元数据，绝不能承载密钥。
+    OutConfig.SettlementSigningKey = FPlatformMisc::GetEnvironmentVariable(TEXT("MAHJONG_SETTLEMENT_SIGNING_KEY"));
+    OutConfig.SettlementSigningKey.TrimStartAndEndInline();
+    OutConfig.RecoveryDirectory =
+        FPlatformMisc::GetEnvironmentVariable(TEXT("MAHJONG_RECOVERY_DIRECTORY")).TrimStartAndEnd();
+    if (OutConfig.RecoveryDirectory.IsEmpty())
+        OutConfig.RecoveryDirectory = FPaths::Combine(
+            FPaths::GetPath(OutConfig.MatchResultOutboxPath), TEXT("recovery"));
+    OutConfig.bAllowLegacyJoinTickets = FPlatformMisc::GetEnvironmentVariable(
+        TEXT("MAHJONG_ALLOW_LEGACY_JOIN_TICKETS")).Equals(TEXT("true"), ESearchCase::IgnoreCase);
+    FString CompatibleBuilds = FPlatformMisc::GetEnvironmentVariable(TEXT("MAHJONG_COMPATIBLE_CLIENT_BUILDS"));
+    CompatibleBuilds.ParseIntoArray(OutConfig.CompatibleClientBuilds, TEXT(","), true);
+    for (FString& Build : OutConfig.CompatibleClientBuilds) Build.TrimStartAndEndInline();
+    OutConfig.CompatibleClientBuilds.RemoveAll([](const FString& Build) { return Build.IsEmpty(); });
+    if (OutConfig.CompatibleClientBuilds.IsEmpty()) OutConfig.CompatibleClientBuilds.Add(OutConfig.BuildVersion);
     if (OutConfig.AdvertisedIp.IsEmpty() || OutConfig.Port <= 0 || OutConfig.Port > 65535
         || OutConfig.JoinTicketSigningKey.Len() < 32
         || OutConfig.RegistrationCredential.Len() < 16
-        || OutConfig.MatchResultOutboxPath.IsEmpty())
+        || OutConfig.MatchResultOutboxPath.IsEmpty()
+        || OutConfig.SettlementSigningKey.Len() < 32
+        || OutConfig.RuleSetVersion.IsEmpty()
+        || OutConfig.ProtocolVersion.IsEmpty()
+        || (!OutConfig.GameDataInternalUrl.StartsWith(TEXT("http://"))
+            && !OutConfig.GameDataInternalUrl.StartsWith(TEXT("https://")))
+        || OutConfig.RecoveryDirectory.IsEmpty()
+        || FPaths::IsRelative(OutConfig.RecoveryDirectory))
     {
         OutError = TEXT("AGONES_ALLOCATION_CONFIGURATION_INVALID");
         return false;
@@ -105,14 +160,24 @@ void UGuiyangAgonesLifecycleSubsystem::Initialize(FSubsystemCollectionBase& Coll
 
     bActive = true;
     Agones->ConnectedDelegate.AddUniqueDynamic(this, &ThisClass::HandleConnected);
+    UE_LOG(LogMahjongServer, Display, TEXT("Agones lifecycle adapter initialized; waiting for server world"));
+}
+
+void UGuiyangAgonesLifecycleSubsystem::StartAfterWorldReady()
+{
+    if (!bActive || bConnectionStarted || !Agones)
+    {
+        return;
+    }
+    bConnectionStarted = true;
     FGameServerDelegate WatchDelegate;
     WatchDelegate.BindDynamic(this, &ThisClass::HandleGameServerUpdated);
     Agones->WatchGameServer(WatchDelegate);
-    // SDK 子系统存在于所有独立服务器进程中，但只在明确选择 Agones 后启动健康上报；
-    // 否则本地 Allocator 服务器会不断访问本来就不存在的 Sidecar。
+    // 地图和监听端口就绪后才启动健康上报与 Connect；Connect 每 5 秒读取 GameServer，
+    // 可覆盖 Sidecar 晚启动。首次成功读取后官方插件调用 Ready，再广播 Connected。
     Agones->HealthPing(Agones->HealthRateSeconds);
     Agones->Connect();
-    UE_LOG(LogMahjongServer, Display, TEXT("Agones lifecycle connection started"));
+    UE_LOG(LogMahjongServer, Display, TEXT("Agones health/watch/connect lifecycle started"));
 }
 
 void UGuiyangAgonesLifecycleSubsystem::Deinitialize()
@@ -125,6 +190,7 @@ void UGuiyangAgonesLifecycleSubsystem::Deinitialize()
     RequestShutdown();
     Agones = nullptr;
     bActive = false;
+    bConnectionStarted = false;
     bReady = false;
     AllocationConfig.Reset();
     AllocationReady.Clear();

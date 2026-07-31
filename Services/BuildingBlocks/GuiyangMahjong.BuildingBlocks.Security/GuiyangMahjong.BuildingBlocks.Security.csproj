@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <!-- 安全上下文不承载 Token、Join Ticket 或私有手牌等敏感值。 -->
+    <Description>跨服务调用者身份、安全级别与脱敏日志上下文。</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\Contracts\GuiyangMahjong.Contracts.Common\GuiyangMahjong.Contracts.Common.csproj" />
+  </ItemGroup>
+</Project>

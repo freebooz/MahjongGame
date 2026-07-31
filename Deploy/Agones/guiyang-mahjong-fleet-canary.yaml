@@ -1,0 +1,70 @@
+apiVersion: agones.dev/v1
+kind: Fleet
+metadata:
+  name: guiyang-mahjong-canary
+  namespace: guiyang-mahjong
+  labels:
+    app.kubernetes.io/name: guiyang-mahjong
+    app.kubernetes.io/component: game-server
+    mahjong.freebooz/release-track: canary
+spec:
+  replicas: 1
+  scheduling: Packed
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: {maxSurge: 1, maxUnavailable: 0}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: guiyang-mahjong
+        app.kubernetes.io/component: game-server
+        mahjong.freebooz/game: guiyang-zhua-ji
+        mahjong.freebooz/region: cn-southwest
+        mahjong.freebooz/server-build: REPLACE_WITH_CANARY_BUILD_VERSION
+        mahjong.freebooz/ruleset-version: REPLACE_WITH_CANARY_RULESET_VERSION
+        mahjong.freebooz/protocol-version: "1"
+        mahjong.freebooz/capacity: "4"
+        mahjong.freebooz/release-track: canary
+        mahjong.freebooz/config-version: "REPLACE_WITH_CONFIG_VERSION"
+    spec:
+      ports:
+        - {name: game, portPolicy: Dynamic, containerPort: 7777, protocol: UDP}
+      health: {disabled: false, initialDelaySeconds: 90, periodSeconds: 5, failureThreshold: 6}
+      sdkServer: {logLevel: Info}
+      template:
+        spec:
+          terminationGracePeriodSeconds: 60
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            runAsGroup: 10001
+            seccompProfile: {type: RuntimeDefault}
+          containers:
+            - name: game-server
+              # Canary 镜像必须使用不可变 digest；异常回滚只停止新分配，不强杀正常旧房间。
+              image: ghcr.io/freebooz/guiyang-mahjong-server@sha256:REPLACE_WITH_CANARY_DIGEST
+              imagePullPolicy: IfNotPresent
+              args:
+                - /Game/Maps/MahjongRoomMap?game=/Script/GuiyangMahjongServer.GuiyangMahjongGameMode?listen
+                - -server
+                - -log
+                - -unattended
+                - -NullRHI
+                - -nosound
+                - -port=7777
+                - -MahjongOrchestrator=Agones
+              env:
+                - {name: MAHJONG_ORCHESTRATOR, value: agones}
+                - {name: MAHJONG_BUILD_VERSION, value: REPLACE_WITH_CANARY_BUILD_VERSION}
+                - name: MAHJONG_JOIN_TICKET_SIGNING_KEY
+                  valueFrom: {secretKeyRef: {name: mahjong-secrets, key: Allocator__JoinTicketSigningKey}}
+                - name: MAHJONG_SETTLEMENT_SIGNING_KEY
+                  valueFrom: {secretKeyRef: {name: mahjong-secrets, key: Allocator__SettlementSigningKey}}
+                - {name: MAHJONG_ALLOW_LEGACY_JOIN_TICKETS, value: "false"}
+              resources:
+                requests: {cpu: 500m, memory: 1Gi}
+                limits: {cpu: "2", memory: 4Gi}
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities: {drop: [ALL]}
+# Stable 与 Canary Fleet 始终使用不同 Build/RuleSet 标识；旧房间在创建时冻结其 Fleet 路由。

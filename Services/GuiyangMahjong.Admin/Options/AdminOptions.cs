@@ -27,9 +27,23 @@ public sealed class AdminOptions
     [Required] public AdminAbacOptions Abac { get; init; } = new();
     [Required] public AuthMonitoringOptions Auth { get; init; } = new();
     [Required] public LobbyMonitoringOptions Lobby { get; init; } = new();
-    [Required] public PlayerDataMonitoringOptions PlayerData { get; init; } = new();
     [Required] public WalletExecutionOptions Wallet { get; init; } = new();
+    /// <summary>Configuration Service 受控命令代理；浏览器永远不能取得此服务端凭据。</summary>
+    [Required] public ConfigurationManagementOptions Configuration { get; init; } = new();
     public AllocatorMonitoringOptions[] Allocators { get; init; } = [];
+}
+
+/// <summary>配置治理上游设置；Admin 只调用业务 API，不连接 Configuration Schema。</summary>
+public sealed class ConfigurationManagementOptions
+{
+    /// <summary>显式启用后才展示和执行发布流程，便于一键回滚到阶段 10 行为。</summary>
+    public bool Enabled { get; init; }
+    /// <summary>集群内 Configuration Service 地址，不允许由浏览器覆盖。</summary>
+    [Required, Url] public string BaseUrl { get; init; } = "http://127.0.0.1:18088";
+    /// <summary>Admin BFF 专用命令凭据，只能从 Secret 注入且不得记录。</summary>
+    public string CommandToken { get; init; } = string.Empty;
+    /// <summary>单次上游调用硬超时秒数；POST 不执行无条件透明重试。</summary>
+    [Range(1, 30)] public int TimeoutSeconds { get; init; } = 5;
 }
 
 /// <summary>
@@ -215,6 +229,20 @@ public sealed class AdminWebSecurityOptions
     [Range(1, 100)] public int EvidenceRequestsPerMinute { get; init; } = 10;
     /// <summary>日志或证据导出每十分钟、每个操作者的最大数量。</summary>
     [Range(1, 30)] public int ExportRequestsPerTenMinutes { get; init; } = 3;
+    /// <summary>是否启用浏览器 BFF 会话；关闭时保留原 Bearer 调用，便于紧急回滚。</summary>
+    public bool BrowserSessionEnabled { get; init; } = true;
+    /// <summary>不透明管理员会话 Cookie 名称；生产环境应保持 __Host- 前缀约束。</summary>
+    [Required, MinLength(3), MaxLength(64)]
+    public string SessionCookieName { get; init; } = "__Host-mahjong-admin";
+    /// <summary>浏览器会话绝对有效期，单位分钟；不得超过企业身份撤销 SLA。</summary>
+    [Range(1, 30)] public int SessionLifetimeMinutes { get; init; } = 10;
+    /// <summary>CSRF 请求头名称；只对 Cookie 认证的非安全方法强制校验。</summary>
+    [Required, MinLength(3), MaxLength(64)]
+    public string CsrfHeaderName { get; init; } = "X-Admin-CSRF";
+    /// <summary>是否将会话绑定到管理员设备摘要；生产环境必须启用。</summary>
+    public bool BindDevice { get; init; } = true;
+    /// <summary>是否将会话绑定到来源网络前缀摘要；生产环境必须启用。</summary>
+    public bool BindIpNetwork { get; init; } = true;
 }
 
 public sealed class AuditArchiveOptions
@@ -303,29 +331,11 @@ public sealed class LobbyMonitoringOptions
     [Required] public string NodeId { get; init; } = "node-local-1";
 }
 
-/// <summary>
-/// PlayerData 只读监控依赖配置；与 Wallet 管理命令凭据严格分离。
-/// </summary>
-public sealed class PlayerDataMonitoringOptions
-{
-    /// <summary>是否把 PlayerData 作为管理台只读监控来源；未启用时不会发起网络请求。</summary>
-    public bool Enabled { get; init; }
-
-    /// <summary>PlayerData 服务根地址，仅由服务端使用且不会出现在来源错误摘要中。</summary>
-    [Required, Url] public string BaseUrl { get; init; } = "http://127.0.0.1:18084";
-
-    /// <summary>只读监控专用凭据；不得复用 Wallet 管理命令凭据。</summary>
-    public string MonitoringToken { get; init; } = string.Empty;
-
-    /// <summary>PlayerData 单次监控请求硬超时，包含响应正文读取时间。</summary>
-    [Range(1, 30)] public int TimeoutSeconds { get; init; } = 5;
-}
-
 public sealed class WalletExecutionOptions
 {
     public bool Enabled { get; init; }
     [Required, Url] public string BaseUrl { get; init; } =
-        "http://127.0.0.1:18084";
+        "http://127.0.0.1:18086";
     public string CommandToken { get; init; } = string.Empty;
     [Range(1, 30)] public int TimeoutSeconds { get; init; } = 5;
 }

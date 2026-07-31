@@ -2,17 +2,31 @@ using System.Text.Json.Serialization;
 
 namespace GuiyangMahjong.Lobby.Domain;
 
-/// <summary>房间生命周期状态机的稳定线协议值；迁移规则由 RoomStateMachine 集中维护。</summary>
-[JsonConverter(typeof(JsonStringEnumConverter<RoomLifecycle>))]
+/// <summary>
+/// 房间控制面状态机的稳定协议值。
+/// 状态值描述 Room 模块而非 Dedicated Server 内的麻将局面；迁移规则由 RoomStateMachine 集中维护。
+/// </summary>
+[JsonConverter(typeof(RoomLifecycleJsonConverter))]
 public enum RoomLifecycle
 {
-    Creating,
-    Allocating,
-    Waiting,
-    Playing,
-    Settling,
-    Closed,
-    Failed
+    Created = 0,
+    Waiting = 1,
+    Ready = 2,
+    Allocating = 3,
+    Starting = 4,
+    Playing = 5,
+    Suspended = 6,
+    Recovering = 7,
+    Settling = 8,
+    Finished = 9,
+    Terminating = 10,
+    Aborted = 11,
+    Archived = 12,
+
+    // 以下别名只用于读取升级前 JSON/调用方源码，新的状态写入统一使用上方规范名称。
+    Creating = Created,
+    Closed = Finished,
+    Failed = Aborted
 }
 
 /// <summary>Lobby 可预期错误分类；API 通过稳定机器码映射，不能把内部异常直接替代该枚举。</summary>
@@ -36,8 +50,20 @@ public enum LobbyErrorCode
     InternalError
 }
 
-/// <summary>从 Auth 令牌解析出的最小玩家身份；不包含访问令牌、设备或网络地址。</summary>
-public sealed record PlayerIdentity(string PlayerId, string DisplayName, string Provider);
+/// <summary>
+/// 从 Auth 访问令牌解析出的最小玩家调用身份。
+/// SessionId 与两个 Epoch 只保存经过签名验证的会话水位，供 Join Ticket 绑定和撤销判断；
+/// 不包含访问令牌、刷新令牌、设备原始标识或网络地址。
+/// </summary>
+public sealed record PlayerIdentity(
+    string PlayerId,
+    string DisplayName,
+    string Provider,
+    string SessionId = "legacy-session",
+    long SessionEpoch = 0,
+    long SecurityEpoch = 0,
+    string ClientBuild = "legacy",
+    string ProtocolVersion = "0");
 
 /// <summary>房间密码的 PBKDF2 持久化值；Salt/Hash 使用 Base64，Iterations 是创建时冻结的迭代次数。</summary>
 public sealed record ProtectedPassword(string SaltBase64, string HashBase64, int Iterations);
@@ -55,7 +81,11 @@ public sealed record GameServerRoute(
     string ServerIp,
     int ServerPort,
     string JoinTicket,
-    DateTimeOffset TicketExpireAtUtc);
+    DateTimeOffset TicketExpireAtUtc,
+    long RoomEpoch = 1,
+    string BuildVersion = "",
+    string RuleSetVersion = "",
+    int ProtocolVersion = 1);
 
 /// <summary>
 /// Lobby 房间聚合的不可变快照。
@@ -76,9 +106,10 @@ public sealed record LobbyRoom
     public required int MaximumPlayers { get; init; }
     public required Dictionary<string, object?> RuleSnapshot { get; init; }
 
-    // 生命周期和玩家数组共同表示当前权威房间状态；玩家标识去重且最多 MaximumPlayers 个。
+    // 生命周期、玩家和座位共同表示当前权威房间状态；玩家标识去重且最多 MaximumPlayers 个。
     public required RoomLifecycle Lifecycle { get; init; }
     public required string[] PlayerIds { get; init; }
+    public Rooms.RoomSeat[] Seats { get; init; } = [];
 
     // 敏感/路由字段：密码和结果凭据只保存哈希，Route 仅包含当前有效加入路由。
     public ProtectedPassword? Password { get; init; }
@@ -87,9 +118,15 @@ public sealed record LobbyRoom
     public string? ResultCredentialHash { get; init; }
     public string? PendingServerInstanceId { get; init; }
 
-    // MatchId 每场分配唯一；StateSequence 单调递增，时间均使用服务端 UTC。
+    // MatchId 每场分配唯一；StateSequence 是旧接口名，StateVersion 是同一乐观并发版本的规范只读别名。
     public string MatchId { get; init; } = Guid.Empty.ToString();
     public long StateSequence { get; init; }
+    public long StateVersion => StateSequence;
+
+    // RoomEpoch 是 DS 路由 fencing token；初始为 1，每次重新分配先递增再写入新路由。
+    public long RoomEpoch { get; init; } = 1;
+    public string RuleSetVersion { get; init; } = "legacy-v1";
+    public string BuildVersion { get; init; } = "unassigned";
     public DateTimeOffset CreatedAtUtc { get; init; }
     public DateTimeOffset UpdatedAtUtc { get; init; }
     public DateTimeOffset? EmptySinceUtc { get; init; }
@@ -126,15 +163,35 @@ public sealed record MatchPlayerResult(
     int TotalScore);
 
 /// <summary>
+/// Dedicated Server 在单局结束后披露的洗牌公平性证明。
+/// 开局前只允许服务端本地保存 SeedCommitment；本结构随最终结算进入内部持久审计，不得向未结束牌局暴露。
+/// </summary>
+public sealed record ShuffleAuditProof(
+    string Algorithm,
+    int RoundId,
+    string SeedHex,
+    string ServerNonceHex,
+    string SeedCommitment,
+    string DeckOrderDigest,
+    string RuleId,
+    int RuleVersion,
+    string RuleHash,
+    DateTimeOffset CreatedAtUtc,
+    DateTimeOffset RevealedAtUtc);
+
+/// <summary>
 /// Dedicated Server 提交的整场结果。
 /// ResultSequence 对同一比赛单调递增，Players 必须覆盖房间参与者且不能由普通运营修改。
+/// ShuffleProofs 和 EventChainDigest 共同证明每局承诺、披露及顺序未被静默替换。
 /// </summary>
 public sealed record MatchResultReport(
     string RoomId,
     string ServerInstanceId,
     long ResultSequence,
     int CompletedRounds,
-    MatchPlayerResult[] Players);
+    MatchPlayerResult[] Players,
+    ShuffleAuditProof[]? ShuffleProofs = null,
+    string? EventChainDigest = null);
 
 /// <summary>结果接收回执；Duplicate 表示同序号同载荷的幂等重放，Accepted=false 不代表已结算。</summary>
 public sealed record MatchResultAck(
@@ -142,6 +199,47 @@ public sealed record MatchResultAck(
     string MatchId,
     long ResultSequence,
     bool Accepted,
+    bool Duplicate);
+
+/// <summary>GameData 发送的结算权威校验请求；CredentialSha256 是一次性结果凭据的不可逆摘要。</summary>
+public sealed record SettlementAuthorityRequest(
+    string MatchId,
+    string RoomId,
+    string ServerInstanceId,
+    long RoomEpoch,
+    string RuleSetVersion,
+    string ServerBuild,
+    int RoundNo,
+    string CredentialSha256);
+
+/// <summary>Lobby 返回的当前单一权威实例与参与者集合；不返回房间密码、Ticket 或凭据。</summary>
+public sealed record SettlementAuthorityResponse(
+    bool Authorized,
+    string MatchId,
+    string RoomId,
+    string ServerInstanceId,
+    long RoomEpoch,
+    string RuleSetVersion,
+    string ServerBuild,
+    int ExpectedRoundNo,
+    string[] PlayerIds,
+    string? FailureCode = null);
+
+/// <summary>GameData 事务提交后的房间关闭通知；SettlementId 只用于审计关联，不能修改结果。</summary>
+public sealed record ExternalSettlementCommittedRequest(
+    string MatchId,
+    string RoomId,
+    int RoundNo,
+    int SettlementVersion,
+    string SettlementId,
+    DateTimeOffset CommittedAtUtc);
+
+/// <summary>Lobby 对外部结算回调的幂等确认。</summary>
+public sealed record ExternalSettlementCommittedAck(
+    string MatchId,
+    string RoomId,
+    string SettlementId,
+    bool Closed,
     bool Duplicate);
 
 /// <summary>
@@ -155,7 +253,9 @@ public sealed record GameServerRegistration(
     string ListenIp,
     int ListenPort,
     string BuildVersion,
-    string RegistrationCredential);
+    string RegistrationCredential,
+    long RoomEpoch = 0,
+    long FencingToken = 0);
 
 /// <summary>
 /// 注册成功回执。
@@ -167,7 +267,9 @@ public sealed record GameServerRegistrationAck(
     int HeartbeatIntervalSeconds,
     string HeartbeatCredential,
     string ResultCredential,
-    ManagedRoomBootstrap RoomBootstrap);
+    ManagedRoomBootstrap RoomBootstrap,
+    long RoomEpoch = 1,
+    long FencingToken = 1);
 
 /// <summary>游戏服启动所需房间规则快照；PasswordProtected 只表明策略，不下发密码或哈希。</summary>
 public sealed record ManagedRoomBootstrap(
@@ -180,7 +282,10 @@ public sealed record ManagedRoomBootstrap(
     bool PublicRoom,
     bool AutoStart,
     bool PasswordProtected,
-    Dictionary<string, object?> RuleSnapshot);
+    Dictionary<string, object?> RuleSnapshot,
+    long RoomEpoch = 1,
+    string RuleSetVersion = "legacy-v1",
+    int ProtocolVersion = 1);
 
 /// <summary>
 /// Dedicated Server 发往 Lobby 的房间运行心跳。
@@ -209,6 +314,14 @@ public sealed record ManagedRoomBootstrap(
 /// <param name="ProcessCpuSampleWindowMilliseconds">CPU 利用率所覆盖的最近采样窗口，单位毫秒。</param>
 /// <param name="RpcMethods">固定白名单 RPC 方法的累计调用、异常与延迟分位统计。</param>
 /// <param name="Settlement">Dedicated Server 当前观察到的显式结算投影。</param>
+/// <param name="RoomEpoch">DS 启动时获得的路由代际；重新分配后必须与房间当前值完全一致。</param>
+/// <param name="FencingToken">Allocator 实例租约令牌；当前与 RoomEpoch 同步递增，旧实例不得续租。</param>
+/// <param name="ActionSequence">当前权威动作单调序号；旧 DS 未提供时为 null。</param>
+/// <param name="StateVersion">当前牌局状态版本；用于识别陈旧操作。</param>
+/// <param name="SnapshotVersion">最近成功快照版本；没有快照时为 null。</param>
+/// <param name="SnapshotCreatedAtUtc">最近成功快照的 DS UTC 时间。</param>
+/// <param name="RecoveryState">受控恢复状态，例如 Healthy、Recovering 或 Failed。</param>
+/// <param name="LastTraceId">最近一次权威状态变化的 TraceId，不得包含凭据。</param>
 public sealed record GameServerHeartbeat(
     string RoomId,
     string HeartbeatCredential,
@@ -230,7 +343,15 @@ public sealed record GameServerHeartbeat(
     int TelemetrySchemaVersion = 1,
     double? ProcessCpuSampleWindowMilliseconds = null,
     RpcMethodTelemetry[]? RpcMethods = null,
-    SettlementRuntimeTelemetry? Settlement = null);
+    SettlementRuntimeTelemetry? Settlement = null,
+    long RoomEpoch = 0,
+    long FencingToken = 0,
+    long? ActionSequence = null,
+    long? StateVersion = null,
+    int? SnapshotVersion = null,
+    DateTimeOffset? SnapshotCreatedAtUtc = null,
+    string? RecoveryState = null,
+    string? LastTraceId = null);
 
 /// <summary>
 /// 单个固定 RPC 方法自进程启动以来的有界累计指标；MethodName 只能来自代码白名单，
@@ -287,6 +408,9 @@ public sealed record SettlementRuntimeTelemetry(
 /// <param name="DisconnectReason">受控掉线原因；连接正常或未知时为 null。</param>
 /// <param name="ConnectionStateSequence">玩家连接状态单调序号，用于对重复心跳去重。</param>
 /// <param name="ConnectionEventId">本次连接状态变化的幂等事件标识。</param>
+/// <param name="PacketLossPercent">服务端观测丢包率百分比，范围 0～100。</param>
+/// <param name="IllegalActionCount">本实例累计拒绝的非法玩家动作数。</param>
+/// <param name="ReconnectCount">本实例观察到的成功重连次数。</param>
 public sealed record PlayerRuntimeTelemetry(
     string PlayerId,
     int SeatIndex,
@@ -299,7 +423,10 @@ public sealed record PlayerRuntimeTelemetry(
     DateTimeOffset? ReconnectedAtUtc = null,
     string? DisconnectReason = null,
     long? ConnectionStateSequence = null,
-    string? ConnectionEventId = null);
+    string? ConnectionEventId = null,
+    double? PacketLossPercent = null,
+    long? IllegalActionCount = null,
+    int? ReconnectCount = null);
 
 /// <summary>
 /// Lobby 写入监控存储并提供给 Admin 的房间运行快照。
@@ -327,6 +454,13 @@ public sealed record PlayerRuntimeTelemetry(
 /// <param name="NetworkEgressBytesPerSecond">相邻有效心跳间的应用出站字节速率。</param>
 /// <param name="RpcMethods">固定方法白名单的 RPC 分类指标。</param>
 /// <param name="Settlement">当前显式结算状态投影。</param>
+/// <param name="ActionSequence">当前权威动作序号。</param>
+/// <param name="StateVersion">当前权威状态版本。</param>
+/// <param name="RoomEpoch">房间路由代际；旧实例数据不得覆盖更高代际。</param>
+/// <param name="SnapshotVersion">最近有效快照版本。</param>
+/// <param name="SnapshotCreatedAtUtc">最近快照创建时间。</param>
+/// <param name="RecoveryState">崩溃恢复状态摘要。</param>
+/// <param name="LastTraceId">最近权威变化的跨服务 TraceId。</param>
 public sealed record RoomRuntimeTelemetry(
     string RoomId,
     string ServerInstanceId,
@@ -349,7 +483,14 @@ public sealed record RoomRuntimeTelemetry(
     double? NetworkIngressBytesPerSecond = null,
     double? NetworkEgressBytesPerSecond = null,
     RpcMethodTelemetry[]? RpcMethods = null,
-    SettlementRuntimeTelemetry? Settlement = null);
+    SettlementRuntimeTelemetry? Settlement = null,
+    long? ActionSequence = null,
+    long? StateVersion = null,
+    long? RoomEpoch = null,
+    int? SnapshotVersion = null,
+    DateTimeOffset? SnapshotCreatedAtUtc = null,
+    string? RecoveryState = null,
+    string? LastTraceId = null);
 
 /// <summary>
 /// 房间事件时间线的持久化条目。
@@ -407,6 +548,15 @@ public sealed record AdminUpdateRoomControlResult(
 /// <summary>Allocator 通知的实例故障；原因必须脱敏，Lobby 据此迁移关联房间并写时间线。</summary>
 public sealed record GameServerFailure(
     string ServerInstanceId,
+    string RoomId,
+    string Reason,
+    long RoomEpoch = 0);
+
+/// <summary>
+/// 内部 DS 重新分配命令。
+/// Reason 进入结构化审计；RoomId 必须由受信控制面提供，普通玩家不能调用该命令。
+/// </summary>
+public sealed record GameServerReallocationRequest(
     string RoomId,
     string Reason);
 

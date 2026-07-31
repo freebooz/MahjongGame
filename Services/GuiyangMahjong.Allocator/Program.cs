@@ -5,6 +5,7 @@ using System.Net;
 using GuiyangMahjong.Allocator.Api;
 using GuiyangMahjong.Allocator.Domain;
 using GuiyangMahjong.Allocator.Options;
+using GuiyangMahjong.Allocator.Providers;
 using GuiyangMahjong.Allocator.Security;
 using GuiyangMahjong.Allocator.Services;
 using GuiyangMahjong.Observability;
@@ -36,6 +37,12 @@ builder.Services
                              && !string.IsNullOrWhiteSpace(options.Agones.FleetName)
                              && Uri.TryCreate(options.Agones.ApiServer, UriKind.Absolute, out _)),
         "Allocator Agones namespace, fleet, and API server are required in Agones mode.")
+    .Validate(options => !options.Agones.DynamicFleetConfiguration.Enabled
+                         || (options.Backend == AllocatorBackendMode.Agones
+                             && options.Agones.DynamicFleetConfiguration.ReadToken.Length >= 32
+                             && options.Agones.DynamicFleetConfiguration.SigningKey.Length >= 32
+                             && Uri.TryCreate(options.Agones.DynamicFleetConfiguration.BaseUrl, UriKind.Absolute, out _)),
+        "Allocator dynamic Fleet routing requires Agones mode, a valid Configuration URL, and dedicated 32+ character credentials.")
     .Validate(options => string.IsNullOrEmpty(options.MonitoringReadOnlyToken)
                          || options.MonitoringReadOnlyToken.Length >= 32,
         "Allocator:MonitoringReadOnlyToken must be empty or contain at least 32 characters.")
@@ -63,10 +70,22 @@ builder.Services
                     options.ManagementCommandToken,
                     StringComparison.Ordinal)),
         "Allocator topology registration requires a dedicated 32+ character credential.")
+    .Validate(options => options.SettlementSigningKey.Length >= 32
+                         && options.GameDataRecoveryToken.Length >= 32,
+        "Allocator settlement signing and GameData recovery credentials require at least 32 characters.")
     .ValidateOnStart();
 
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddHttpClient();
+builder.Services.AddHttpClient("configuration-fleet", (provider, client) =>
+{
+    var config = provider.GetRequiredService<IOptions<AllocatorOptions>>().Value.Agones.DynamicFleetConfiguration;
+    client.BaseAddress = new Uri(config.BaseUrl.TrimEnd('/') + "/", UriKind.Absolute);
+    client.Timeout = TimeSpan.FromSeconds(Math.Min(config.PollSeconds, 30));
+});
+builder.Services.AddSingleton<AgonesFleetConfigurationState>();
+builder.Services.AddSingleton<IAgonesFleetRouteResolver>(provider => provider.GetRequiredService<AgonesFleetConfigurationState>());
+builder.Services.AddHostedService<AgonesFleetConfigurationPoller>();
 builder.Services.AddSingleton<PortLeasePool>();
 builder.Services.AddSingleton<InstanceCredentialService>();
 builder.Services.AddSingleton<GameServerProcessLauncher>();
@@ -76,6 +95,15 @@ builder.Services.AddSingleton<IAgonesAllocationClient>(provider =>
     provider.GetRequiredService<IOptions<AllocatorOptions>>().Value.Backend == AllocatorBackendMode.Agones
         ? ActivatorUtilities.CreateInstance<KubernetesAgonesAllocationClient>(provider)
         : new DisabledAgonesAllocationClient());
+builder.Services.AddSingleton<IGameServerProvider>(provider =>
+    provider.GetRequiredService<IOptions<AllocatorOptions>>().Value.Backend switch
+    {
+        AllocatorBackendMode.LocalProcess =>
+            ActivatorUtilities.CreateInstance<LocalProcessGameServerProvider>(provider),
+        AllocatorBackendMode.Agones =>
+            ActivatorUtilities.CreateInstance<AgonesGameServerProvider>(provider),
+        _ => throw new InvalidOperationException("Unsupported Allocator provider mode.")
+    });
 builder.Services.AddSingleton<IInstanceFailureNotifier, LobbyInstanceFailureNotifier>();
 builder.Services.AddSingleton<IAllocatorStateStore, JsonAllocatorStateStore>();
 builder.Services.AddSingleton<MatchResultOutboxRecovery>();

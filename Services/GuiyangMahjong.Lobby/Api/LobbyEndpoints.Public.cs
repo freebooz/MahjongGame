@@ -1,7 +1,9 @@
 using System.Text.Json;
 using GuiyangMahjong.Lobby.Domain;
+using GuiyangMahjong.Lobby.Lobby;
 using GuiyangMahjong.Lobby.Options;
 using GuiyangMahjong.Lobby.Realtime;
+using GuiyangMahjong.Lobby.Reconnection;
 using GuiyangMahjong.Lobby.Security;
 using GuiyangMahjong.Lobby.Services;
 using Microsoft.Extensions.Options;
@@ -50,8 +52,8 @@ public static partial class LobbyEndpoints
 
         v1.MapGet("/rooms", async (
             CancellationToken cancellationToken,
-            LobbyService lobbyService) =>
-            Results.Ok(await lobbyService.ListRoomsAsync(cancellationToken)));
+            LobbyReadService lobby) =>
+            Results.Ok(await lobby.ListRoomsAsync(cancellationToken)));
 
         v1.MapPost("/rooms", async (
             HttpContext context,
@@ -194,11 +196,11 @@ public static partial class LobbyEndpoints
         v1.MapPost("/reconnect/route", async (
             HttpContext context,
             ReconnectRouteRequest request,
-            LobbyService lobbyService,
+            ReconnectionService reconnection,
             CancellationToken cancellationToken) =>
         {
             RequireIdempotencyKey(context);
-            return Results.Ok(await lobbyService.GetReconnectRouteAsync(
+            return Results.Ok(await reconnection.GetRouteAsync(
                 RequestIdMiddleware.GetRequestId(context),
                 PlayerAuthenticationMiddleware.GetPlayer(context),
                 request,

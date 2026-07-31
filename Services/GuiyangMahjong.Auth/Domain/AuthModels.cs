@@ -141,7 +141,9 @@ public sealed record AuthIdentity(
     string DisplayName,
     string Provider,
     DateTimeOffset CreatedAtUtc,
-    DateTimeOffset UpdatedAtUtc);
+    DateTimeOffset UpdatedAtUtc,
+    long SessionEpoch = 0,
+    long SecurityEpoch = 0);
 
 /// <summary>
 /// 刷新会话持久化实体。
@@ -153,7 +155,17 @@ public sealed record RefreshSession(
     byte[] TokenHash,
     DateTimeOffset ExpiresAtUtc,
     DateTimeOffset CreatedAtUtc,
-    DateTimeOffset? RevokedAtUtc);
+    DateTimeOffset? RevokedAtUtc,
+    string FamilyId = "",
+    string? ParentSessionId = null,
+    string DeviceId = "",
+    long SessionEpoch = 0,
+    long SecurityEpoch = 0,
+    string? ReplacedBySessionId = null,
+    string? RevocationReason = null,
+    DateTimeOffset? ReuseDetectedAtUtc = null,
+    string SessionMode = "MultiDevice",
+    int MaximumActiveSessions = 4);
 
 /// <summary>脱敏登录历史；DeviceId 是内部设备引用，MaskedIp 不能还原完整地址。</summary>
 public sealed record AuthLoginEvent(
@@ -215,9 +227,13 @@ public enum RefreshRotationStatus
     Invalid,
     Expired,
     Revoked,
+    ReuseDetected,
     Frozen,
     Banned
 }
 
 /// <summary>刷新轮换结果；失败状态下 Identity 通常为空，调用方不得沿用旧访问令牌。</summary>
-public sealed record RefreshRotationResult(RefreshRotationStatus Status, AuthIdentity? Identity);
+public sealed record RefreshRotationResult(
+    RefreshRotationStatus Status,
+    AuthIdentity? Identity,
+    RefreshSession? ReplacementSession = null);

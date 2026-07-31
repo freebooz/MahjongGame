@@ -30,7 +30,10 @@ services:
       MIGRATION_DB_PASSWORD: ${MIGRATION_DB_PASSWORD:?MIGRATION_DB_PASSWORD is required}
       AUTH_DB_PASSWORD: ${AUTH_DB_PASSWORD:?AUTH_DB_PASSWORD is required}
       LOBBY_DB_PASSWORD: ${LOBBY_DB_PASSWORD:?LOBBY_DB_PASSWORD is required}
-      PLAYER_DATA_DB_PASSWORD: ${PLAYER_DATA_DB_PASSWORD:?PLAYER_DATA_DB_PASSWORD is required}
+      GAME_DATA_DB_PASSWORD: ${GAME_DATA_DB_PASSWORD:?GAME_DATA_DB_PASSWORD is required}
+      ECONOMY_DB_PASSWORD: ${ECONOMY_DB_PASSWORD:?ECONOMY_DB_PASSWORD is required}
+      CONFIGURATION_DB_PASSWORD: ${CONFIGURATION_DB_PASSWORD:?CONFIGURATION_DB_PASSWORD is required}
+      WORKERS_DB_PASSWORD: ${WORKERS_DB_PASSWORD:?WORKERS_DB_PASSWORD is required}
       ADMIN_DB_PASSWORD: ${ADMIN_DB_PASSWORD:?ADMIN_DB_PASSWORD is required}
       MONITOR_DB_PASSWORD: ${MONITOR_DB_PASSWORD:?MONITOR_DB_PASSWORD is required}
       AUDIT_DB_PASSWORD: ${AUDIT_DB_PASSWORD:?AUDIT_DB_PASSWORD is required}
@@ -39,8 +42,13 @@ services:
       - ../../Deploy/postgres/least-privilege:/migration/least-privilege:ro
       - ../../Services/GuiyangMahjong.Auth/Storage:/migration/auth:ro
       - ../../Services/GuiyangMahjong.Lobby/Storage:/migration/lobby:ro
-      - ../../Services/GuiyangMahjong.PlayerData/Storage:/migration/player-data:ro
       - ../../Services/GuiyangMahjong.Admin/Storage:/migration/admin:ro
+      - ../../Services/Apps/GuiyangMahjong.GameData/Storage:/migration/game-data:ro
+      - ../../Services/Apps/GuiyangMahjong.Economy/Storage:/migration/economy:ro
+      - ../../Services/Apps/GuiyangMahjong.Economy/Migrations:/migration/economy-stage:ro
+      - ../../Services/Apps/GuiyangMahjong.Configuration/Storage:/migration/configuration:ro
+      - ../../Services/Apps/GuiyangMahjong.Workers/Storage:/migration/workers:ro
+      - ../../Docs/architecture/sql:/migration/stage-sql:ro
     entrypoint: ["/bin/sh", "-ec"]
     command:
       - |
@@ -48,14 +56,20 @@ services:
         $$base -f /migration/least-privilege/001_roles.sql
         $$base -f /migration/auth/schema.sql
         $$base -f /migration/lobby/schema.sql
-        $$base -f /migration/player-data/schema.sql
         $$base -f /migration/admin/schema.sql
+        $$base -f /migration/game-data/schema.sql
+        $$base -f /migration/economy/schema.sql
+        $$base -f /migration/configuration/schema.sql
+        $$base -f /migration/workers/schema.sql
         $$base -f /migration/least-privilege/002_grants.sql
         $$base \
           -v migration_password="$$MIGRATION_DB_PASSWORD" \
           -v auth_password="$$AUTH_DB_PASSWORD" \
           -v lobby_password="$$LOBBY_DB_PASSWORD" \
-          -v player_data_password="$$PLAYER_DATA_DB_PASSWORD" \
+          -v game_data_password="$$GAME_DATA_DB_PASSWORD" \
+          -v economy_password="$$ECONOMY_DB_PASSWORD" \
+          -v configuration_password="$$CONFIGURATION_DB_PASSWORD" \
+          -v workers_password="$$WORKERS_DB_PASSWORD" \
           -v admin_password="$$ADMIN_DB_PASSWORD" \
           -v monitor_password="$$MONITOR_DB_PASSWORD" \
           -v audit_password="$$AUDIT_DB_PASSWORD" \
@@ -83,6 +97,125 @@ services:
     security_opt: ["no-new-privileges:true"]
     logging: *logging
 
+  nats:
+    image: nats:2.12.12-alpine
+    command: ["--config", "/etc/nats/nats.conf"]
+    environment:
+      # 本地凭据只从环境注入；生产环境由 Kubernetes Secret 和独立账号权限替代。
+      NATS_USERNAME: ${NATS_USERNAME:?NATS_USERNAME is required}
+      NATS_PASSWORD: ${NATS_PASSWORD:?NATS_PASSWORD is required}
+    volumes:
+      - ../nats/local.conf:/etc/nats/nats.conf:ro
+      - nats-data:/data/jetstream
+    ports:
+      - "127.0.0.1:${NATS_CLIENT_PORT:-14222}:4222"
+      - "127.0.0.1:${NATS_MONITOR_PORT:-18222}:8222"
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--spider", "http://127.0.0.1:8222/healthz?js-enabled-only=true"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+    cpus: ${NATS_CPUS:-1.0}
+    mem_limit: ${NATS_MEMORY:-1g}
+    pids_limit: 256
+    security_opt: ["no-new-privileges:true"]
+    logging: *logging
+
+  nats-exporter:
+    image: natsio/prometheus-nats-exporter:0.17.3
+    command: ["-varz", "-jsz=all", "http://nats:8222"]
+    ports: ["127.0.0.1:${NATS_EXPORTER_PORT:-17777}:7777"]
+    depends_on:
+      nats: {condition: service_healthy}
+    restart: unless-stopped
+    cpus: ${NATS_EXPORTER_CPUS:-0.25}
+    mem_limit: ${NATS_EXPORTER_MEMORY:-128m}
+    pids_limit: 64
+    read_only: true
+    security_opt: ["no-new-privileges:true"]
+    logging: *logging
+
+  workers:
+    image: ${IMAGE_REGISTRY:-local}/guiyang-mahjong-workers:${MAHJONG_VERSION:-dev}
+    build:
+      context: ../..
+      dockerfile: Services/Apps/GuiyangMahjong.Workers/Dockerfile
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      Observability__Enabled: ${OBSERVABILITY_ENABLED:-false}
+      Observability__OtlpEndpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://host.docker.internal:4317}
+      Observability__TraceSampleRatio: ${OTEL_TRACE_SAMPLE_RATIO:-0.1}
+      Workers__PostgresConnectionString: Host=postgres;Port=5432;Database=mahjong;Username=mahjong_workers;Password=${WORKERS_DB_PASSWORD};Options=-c role=mahjong_workers_rw
+      Workers__ApplyDatabaseMigrations: "false"
+      Workers__NatsUrl: nats://nats:4222
+      Workers__NatsUsername: ${NATS_USERNAME:?NATS_USERNAME is required}
+      Workers__NatsPassword: ${NATS_PASSWORD:?NATS_PASSWORD is required}
+      Workers__StreamReplicas: "1"
+      # Compose 是单节点开发拓扑；该开关不得复制到 Kubernetes 生产清单。
+      Workers__AllowSingleNodeStream: "true"
+      Workers__OutboxSources__0__Name: identity
+      Workers__OutboxSources__0__Schema: identity_integration
+      Workers__OutboxSources__0__ConnectionString: Host=postgres;Port=5432;Database=mahjong;Username=mahjong_workers;Password=${WORKERS_DB_PASSWORD};Options=-c role=mahjong_workers_rw
+      Workers__OutboxSources__1__Name: lobby
+      Workers__OutboxSources__1__Schema: lobby_integration
+      Workers__OutboxSources__1__ConnectionString: Host=postgres;Port=5432;Database=mahjong;Username=mahjong_workers;Password=${WORKERS_DB_PASSWORD};Options=-c role=mahjong_workers_rw
+      Workers__OutboxSources__2__Name: game-data
+      Workers__OutboxSources__2__Schema: game_data_integration
+      Workers__OutboxSources__2__ConnectionString: Host=postgres;Port=5432;Database=mahjong;Username=mahjong_workers;Password=${WORKERS_DB_PASSWORD};Options=-c role=mahjong_workers_rw
+      Workers__OutboxSources__3__Name: configuration
+      Workers__OutboxSources__3__Schema: configuration_integration
+      Workers__OutboxSources__3__ConnectionString: Host=postgres;Port=5432;Database=mahjong;Username=mahjong_workers;Password=${WORKERS_DB_PASSWORD};Options=-c role=mahjong_workers_rw
+    depends_on:
+      postgres-migration: {condition: service_completed_successfully}
+      nats: {condition: service_healthy}
+    extra_hosts: ["host.docker.internal:host-gateway"]
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "--show-error", "http://127.0.0.1:8080/health/ready"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+    cpus: ${WORKERS_CPUS:-1.0}
+    mem_limit: ${WORKERS_MEMORY:-512m}
+    pids_limit: 256
+    read_only: true
+    tmpfs: ["/tmp:rw,noexec,nosuid,size=64m"]
+    security_opt: ["no-new-privileges:true"]
+    logging: *logging
+
+  configuration:
+    image: ${IMAGE_REGISTRY:-local}/guiyang-mahjong-configuration:${MAHJONG_VERSION:-dev}
+    build:
+      context: ../..
+      dockerfile: Services/Apps/GuiyangMahjong.Configuration/Dockerfile
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      Observability__Enabled: ${OBSERVABILITY_ENABLED:-false}
+      Observability__OtlpEndpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://host.docker.internal:4317}
+      ConfigurationService__PersistenceMode: Postgres
+      ConfigurationService__ApplyDatabaseMigrations: "false"
+      ConfigurationService__PostgresConnectionString: Host=postgres;Port=5432;Database=mahjong;Username=mahjong_configuration;Password=${CONFIGURATION_DB_PASSWORD};Options=-c role=mahjong_configuration_rw
+      ConfigurationService__SigningKey: ${CONFIGURATION_SIGNING_KEY:?CONFIGURATION_SIGNING_KEY is required}
+      ConfigurationService__AdminCommandToken: ${CONFIGURATION_ADMIN_TOKEN:?CONFIGURATION_ADMIN_TOKEN is required}
+      ConfigurationService__ServiceReadToken: ${CONFIGURATION_READ_TOKEN:?CONFIGURATION_READ_TOKEN is required}
+    depends_on:
+      postgres-migration: {condition: service_completed_successfully}
+      nats: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "--show-error", "http://127.0.0.1:8080/health/ready"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+    cpus: ${CONFIGURATION_CPUS:-0.5}
+    mem_limit: ${CONFIGURATION_MEMORY:-256m}
+    pids_limit: 128
+    read_only: true
+    tmpfs: ["/tmp:rw,noexec,nosuid,size=32m"]
+    security_opt: ["no-new-privileges:true"]
+    logging: *logging
+
   auth:
     image: ${IMAGE_REGISTRY:-local}/guiyang-mahjong-auth:${MAHJONG_VERSION:-dev}
     build:
@@ -90,7 +223,7 @@ services:
       dockerfile: Services/GuiyangMahjong.Auth/Dockerfile
     environment:
       ASPNETCORE_ENVIRONMENT: Production
-      # 五个控制面服务使用同一 Collector；默认关闭，部署可观测性栈后显式开启。
+      # 控制面服务使用同一 Collector；默认关闭，部署可观测性栈后显式开启。
       Observability__Enabled: ${OBSERVABILITY_ENABLED:-false}
       Observability__OtlpEndpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://host.docker.internal:4317}
       Observability__TraceSampleRatio: ${OTEL_TRACE_SAMPLE_RATIO:-0.1}
@@ -105,7 +238,8 @@ services:
       postgres-migration: {condition: service_completed_successfully}
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    ports: ["${AUTH_PORT:-18082}:8080"]
+    # 旧服务仅绑定 loopback，保留紧急回滚入口但不再直接暴露到公网网卡。
+    ports: ["127.0.0.1:${AUTH_PORT:-18082}:8080"]
     healthcheck:
       test: ["CMD", "curl", "--fail", "--silent", "--show-error", "http://127.0.0.1:8080/health/ready"]
       interval: 5s
@@ -131,6 +265,11 @@ services:
       Observability__Enabled: ${OBSERVABILITY_ENABLED:-false}
       Observability__OtlpEndpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT_GAME_NODE:-http://127.0.0.1:4317}
       Observability__TraceSampleRatio: ${OTEL_TRACE_SAMPLE_RATIO:-0.1}
+      # Compose 明确使用本地进程 Provider；Lobby 仍只访问统一 Allocation Service HTTP 契约。
+      Allocator__Backend: LocalProcess
+      Allocator__StartupTimeoutSeconds: ${GAME_SERVER_STARTUP_TIMEOUT_SECONDS:-30}
+      Allocator__AllowLegacyInitialFencingToken: ${ALLOW_LEGACY_INITIAL_FENCING_TOKEN:-true}
+      Allocator__ValidateOperatingSystemPortAvailability: "true"
       Allocator__PortStart: ${GAME_PORT_START:-19000}
       Allocator__PortEnd: ${GAME_PORT_END:-19099}
       Allocator__AdvertisedIp: ${ADVERTISED_IP:?ADVERTISED_IP is required}
@@ -138,14 +277,18 @@ services:
       Allocator__GameServerWorkingDirectory: /opt/guiyang-mahjong/server
       Allocator__GameServerPrefixArguments__0: ${GAME_SERVER_MAP:?GAME_SERVER_MAP is required}
       Allocator__MatchResultOutboxDirectory: /var/lib/guiyang-mahjong/outbox
+      Allocator__RecoveryDirectory: /var/lib/guiyang-mahjong/recovery
       Allocator__StateFilePath: /var/lib/guiyang-mahjong/state/instances.json
       # Allocator 与 Lobby 通过 Compose 服务名通信，避免依赖 Docker Desktop 宿主机网关地址。
       Allocator__LobbyInternalUrl: http://lobby:8080
+      Allocator__GameDataInternalUrl: http://game-data:8080
       Allocator__ServiceToken: ${ALLOCATOR_SERVICE_TOKEN:?ALLOCATOR_SERVICE_TOKEN is required}
       Allocator__MonitoringReadOnlyToken: ${ADMIN_TOPOLOGY_ALLOCATOR_TOKEN:?ADMIN_TOPOLOGY_ALLOCATOR_TOKEN is required}
       Allocator__ManagementCommandToken: ${ALLOCATOR_MANAGEMENT_COMMAND_TOKEN:?ALLOCATOR_MANAGEMENT_COMMAND_TOKEN is required}
       Allocator__LobbyCallbackToken: ${LOBBY_INTERNAL_TOKEN:?LOBBY_INTERNAL_TOKEN is required}
       Allocator__JoinTicketSigningKey: ${JOIN_TICKET_SIGNING_KEY:?JOIN_TICKET_SIGNING_KEY is required}
+      Allocator__SettlementSigningKey: ${SETTLEMENT_SIGNING_KEY:?SETTLEMENT_SIGNING_KEY is required}
+      Allocator__GameDataRecoveryToken: ${GAMEDATA_RECOVERY_TOKEN:?GAMEDATA_RECOVERY_TOKEN is required}
       Allocator__RegionId: ${MAHJONG_REGION_ID:-local}
       Allocator__ClusterId: ${MAHJONG_CLUSTER_ID:-local-linux}
       Allocator__NodeId: ${MAHJONG_NODE_ID:-game-node}
@@ -201,6 +344,9 @@ services:
       Lobby__InternalServiceToken: ${LOBBY_INTERNAL_TOKEN:?LOBBY_INTERNAL_TOKEN is required}
       Lobby__MonitoringReadOnlyToken: ${ADMIN_TOPOLOGY_LOBBY_TOKEN:?ADMIN_TOPOLOGY_LOBBY_TOKEN is required}
       Lobby__ManagementCommandToken: ${LOBBY_MANAGEMENT_COMMAND_TOKEN:?LOBBY_MANAGEMENT_COMMAND_TOKEN is required}
+      Lobby__Settlement__Mode: ${LOBBY_SETTLEMENT_MODE:-GameData}
+      Lobby__Settlement__GameDataBaseUrl: http://game-data:8080
+      Lobby__Settlement__AuthorityToken: ${GAMEDATA_LOBBY_AUTHORITY_TOKEN:?GAMEDATA_LOBBY_AUTHORITY_TOKEN is required}
       Lobby__AccessRevocationTtlMinutes: ${LOBBY_ACCESS_REVOCATION_TTL_MINUTES:-120}
       Lobby__RegionId: ${MAHJONG_REGION_ID:-local}
       Lobby__ClusterId: ${MAHJONG_CLUSTER_ID:-local-linux}
@@ -213,15 +359,21 @@ services:
       Lobby__TopologyRegistration__SourceId: ${MAHJONG_LOBBY_ID:-lobby-local-1}
       Lobby__TopologyRegistration__Generation: ${MAHJONG_DEPLOYMENT_GENERATION:-1}
       Lobby__Allocator__Enabled: "true"
+      Lobby__AllowLegacyClientVersionContext: "false"
       Lobby__Allocator__BaseUrl: http://game-node:${ALLOCATOR_PORT:-18081}
       Lobby__Allocator__ServiceToken: ${ALLOCATOR_SERVICE_TOKEN:?ALLOCATOR_SERVICE_TOKEN is required}
       Lobby__Allocator__GameServerBuildVersion: ${MAHJONG_VERSION:-dev}
+      Lobby__Allocator__GameType: guiyang-zhua-ji
+      Lobby__Allocator__Region: ${MAHJONG_REGION_ID:-local}
+      Lobby__Allocator__RuleSetVersion: ${MAHJONG_RULESET_VERSION:-guiyang-zhuoji-v1}
+      Lobby__Allocator__ProtocolVersion: ${MAHJONG_GAME_PROTOCOL_VERSION:-1}
+      Lobby__Allocator__RequestedCapacity: 4
     depends_on:
       postgres-migration: {condition: service_completed_successfully}
       redis: {condition: service_healthy}
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    ports: ["${LOBBY_PORT:-18080}:8080"]
+    ports: ["127.0.0.1:${LOBBY_PORT:-18080}:8080"]
     healthcheck:
       test: ["CMD", "curl", "--fail", "--silent", "--show-error", "http://127.0.0.1:8080/health/ready"]
       interval: 5s
@@ -236,47 +388,173 @@ services:
     security_opt: ["no-new-privileges:true"]
     logging: *logging
 
-  player-data:
-    image: ${IMAGE_REGISTRY:-local}/guiyang-mahjong-player-data:${MAHJONG_VERSION:-dev}
+  game-data:
+    image: ${IMAGE_REGISTRY:-local}/guiyang-mahjong-game-data:${MAHJONG_VERSION:-dev}
     build:
       context: ../..
-      dockerfile: Services/GuiyangMahjong.PlayerData/Dockerfile
+      dockerfile: Services/Apps/GuiyangMahjong.GameData/Dockerfile
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       Observability__Enabled: ${OBSERVABILITY_ENABLED:-false}
       Observability__OtlpEndpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://host.docker.internal:4317}
       Observability__TraceSampleRatio: ${OTEL_TRACE_SAMPLE_RATIO:-0.1}
-      PlayerData__PersistenceMode: Postgres
-      PlayerData__ApplyDatabaseMigrations: "false"
-      PlayerData__PostgresConnectionString: Host=postgres;Port=5432;Database=mahjong;Username=mahjong_player_data;Password=${PLAYER_DATA_DB_PASSWORD};Options=-c role=mahjong_player_data_rw
-      PlayerData__SourceIngestionToken: ${PLAYER_DATA_SOURCE_INGESTION_TOKEN:?PLAYER_DATA_SOURCE_INGESTION_TOKEN is required}
-      PlayerData__AdminCommandToken: ${PLAYER_DATA_ADMIN_COMMAND_TOKEN:?PLAYER_DATA_ADMIN_COMMAND_TOKEN is required}
-      PlayerData__ChatGatewayToken: ${PLAYER_DATA_CHAT_GATEWAY_TOKEN:?PLAYER_DATA_CHAT_GATEWAY_TOKEN is required}
-      PlayerData__MonitoringToken: ${PLAYER_DATA_MONITORING_TOKEN:?PLAYER_DATA_MONITORING_TOKEN is required}
-      PlayerData__AuthBaseUrl: http://auth:8080
-      PlayerData__AuthMonitoringToken: ${MONITORING_READ_ONLY_TOKEN:?MONITORING_READ_ONLY_TOKEN is required}
-      PlayerData__AdminProjectionBaseUrl: http://admin:8080
-      PlayerData__AdminEvidenceIngestionToken: ${ADMIN_EVIDENCE_INGESTION_TOKEN:?ADMIN_EVIDENCE_INGESTION_TOKEN is required}
-      PlayerData__ProjectionEnabled: "true"
-      PlayerData__ProjectionPollMilliseconds: ${PLAYER_DATA_PROJECTION_POLL_MS:-1000}
-      PlayerData__ProjectionMaxAttempts: ${PLAYER_DATA_PROJECTION_MAX_ATTEMPTS:-10}
+      GameData__PersistenceMode: Postgres
+      GameData__ApplyDatabaseMigrations: "false"
+      GameData__PostgresConnectionString: Host=postgres;Port=5432;Database=mahjong;Username=mahjong_game_data;Password=${GAME_DATA_DB_PASSWORD};Options=-c role=mahjong_game_data_rw
+      GameData__LobbyBaseUrl: http://lobby:8080
+      GameData__LobbyAuthorityToken: ${GAMEDATA_LOBBY_AUTHORITY_TOKEN:?GAMEDATA_LOBBY_AUTHORITY_TOKEN is required}
+      GameData__MonitoringToken: ${GAMEDATA_MONITORING_TOKEN:?GAMEDATA_MONITORING_TOKEN is required}
+      GameData__SettlementSigningKey: ${SETTLEMENT_SIGNING_KEY:?SETTLEMENT_SIGNING_KEY is required}
+      GameData__AllocatorRecoveryToken: ${GAMEDATA_RECOVERY_TOKEN:?GAMEDATA_RECOVERY_TOKEN is required}
+      GameData__EvidenceStorage__Mode: FileSystem
+      GameData__EvidenceStorage__RootDirectory: /var/lib/guiyang-mahjong/recovery
+    volumes:
+      - ${MAHJONG_DATA_ROOT:-/var/lib/guiyang-mahjong}/allocator:/var/lib/guiyang-mahjong:ro
     depends_on:
       postgres-migration: {condition: service_completed_successfully}
-      auth: {condition: service_healthy}
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    ports: ["${PLAYER_DATA_PORT:-18084}:8080"]
+      lobby: {condition: service_healthy}
+    ports: ["127.0.0.1:${GAMEDATA_PORT:-18085}:8080"]
     healthcheck:
       test: ["CMD", "curl", "--fail", "--silent", "--show-error", "http://127.0.0.1:8080/health/ready"]
       interval: 5s
       timeout: 3s
       retries: 30
     restart: unless-stopped
-    cpus: ${PLAYER_DATA_CPUS:-1.0}
-    mem_limit: ${PLAYER_DATA_MEMORY:-512m}
+    cpus: ${GAMEDATA_CPUS:-1.0}
+    mem_limit: ${GAMEDATA_MEMORY:-512m}
     pids_limit: 256
     read_only: true
     tmpfs: ["/tmp:rw,noexec,nosuid,size=64m"]
+    security_opt: ["no-new-privileges:true"]
+    logging: *logging
+
+  community:
+    image: ${IMAGE_REGISTRY:-local}/guiyang-mahjong-community:${MAHJONG_VERSION:-dev}
+    build:
+      context: ../..
+      dockerfile: Services/Apps/GuiyangMahjong.Community/Dockerfile
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      Observability__Enabled: ${OBSERVABILITY_ENABLED:-false}
+      Observability__OtlpEndpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://host.docker.internal:4317}
+      Community__ChatGatewayToken: ${COMMUNITY_CHAT_GATEWAY_TOKEN:?COMMUNITY_CHAT_GATEWAY_TOKEN is required}
+      Community__AuthBaseUrl: http://auth:8080
+      Community__AuthMonitoringToken: ${MONITORING_READ_ONLY_TOKEN:?MONITORING_READ_ONLY_TOKEN is required}
+      Community__AuthTimeoutSeconds: ${COMMUNITY_AUTH_TIMEOUT_SECONDS:-5}
+    depends_on:
+      auth: {condition: service_healthy}
+    ports: ["127.0.0.1:${COMMUNITY_PORT:-18087}:8080"]
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "--show-error", "http://127.0.0.1:8080/health/ready"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+    cpus: ${COMMUNITY_CPUS:-0.5}
+    mem_limit: ${COMMUNITY_MEMORY:-256m}
+    pids_limit: 128
+    read_only: true
+    tmpfs: ["/tmp:rw,noexec,nosuid,size=32m"]
+    security_opt: ["no-new-privileges:true"]
+    logging: *logging
+
+  economy:
+    image: ${IMAGE_REGISTRY:-local}/guiyang-mahjong-economy:${MAHJONG_VERSION:-dev}
+    build:
+      context: ../..
+      dockerfile: Services/Apps/GuiyangMahjong.Economy/Dockerfile
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      Observability__Enabled: ${OBSERVABILITY_ENABLED:-false}
+      Observability__OtlpEndpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://host.docker.internal:4317}
+      Economy__PersistenceMode: Postgres
+      Economy__ApplyDatabaseMigrations: "false"
+      Economy__PostgresConnectionString: Host=postgres;Port=5432;Database=mahjong;Username=mahjong_economy;Password=${ECONOMY_DB_PASSWORD};Options=-c role=mahjong_economy_rw
+      Economy__SourceIngestionToken: ${ECONOMY_SOURCE_TOKEN:?ECONOMY_SOURCE_TOKEN is required}
+      Economy__AdminCommandToken: ${ECONOMY_ADMIN_TOKEN:?ECONOMY_ADMIN_TOKEN is required}
+      Economy__MonitoringToken: ${ECONOMY_MONITORING_TOKEN:?ECONOMY_MONITORING_TOKEN is required}
+    depends_on:
+      postgres-migration: {condition: service_completed_successfully}
+    ports: ["127.0.0.1:${ECONOMY_PORT:-18086}:8080"]
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "--show-error", "http://127.0.0.1:8080/health/ready"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+    cpus: ${ECONOMY_CPUS:-1.0}
+    mem_limit: ${ECONOMY_MEMORY:-512m}
+    pids_limit: 256
+    read_only: true
+    tmpfs: ["/tmp:rw,noexec,nosuid,size=64m"]
+    security_opt: ["no-new-privileges:true"]
+    logging: *logging
+
+  edge-gateway:
+    image: ${IMAGE_REGISTRY:-local}/guiyang-mahjong-edge-gateway:${MAHJONG_VERSION:-dev}
+    build:
+      context: ../..
+      dockerfile: Services/Apps/GuiyangMahjong.EdgeGateway/Dockerfile
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      Observability__Enabled: ${OBSERVABILITY_ENABLED:-false}
+      Observability__OtlpEndpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://host.docker.internal:4317}
+      Observability__TraceSampleRatio: ${OTEL_TRACE_SAMPLE_RATIO:-0.1}
+      # 玩家 Access Token 在网关和下游各验证一次；密钥只通过环境注入，不写入镜像或日志。
+      EdgeGateway__PlayerTokens__LegacySigningKey: ${PLAYER_TOKEN_SIGNING_KEY:?PLAYER_TOKEN_SIGNING_KEY is required}
+      EdgeGateway__PlayerTokens__JwtSigningKey: ${PLAYER_TOKEN_SIGNING_KEY:?PLAYER_TOKEN_SIGNING_KEY is required}
+      EdgeGateway__PlayerTokens__JwtIssuer: ${PLAYER_JWT_ISSUER:-}
+      EdgeGateway__PlayerTokens__JwtAudience: ${PLAYER_JWT_AUDIENCE:-}
+      EdgeGateway__MaximumRequestBodyBytes: ${EDGE_MAXIMUM_REQUEST_BODY_BYTES:-1048576}
+      EdgeGateway__RouteTimeoutMilliseconds: ${EDGE_ROUTE_TIMEOUT_MILLISECONDS:-10000}
+      EdgeGateway__ClientContract__MinimumClientVersion: ${EDGE_MINIMUM_CLIENT_VERSION:-1.0.0}
+      EdgeGateway__ClientContract__SupportedProtocolVersions__0: ${EDGE_PROTOCOL_VERSION:-1}
+      EdgeGateway__ClientContract__AllowedChannels__0: default
+      EdgeGateway__ClientContract__AllowedChannels__1: development
+      EdgeGateway__ClientContract__AllowedChannels__2: appstore
+      EdgeGateway__ClientContract__AllowedChannels__3: googleplay
+      EdgeGateway__DistributedRateLimit__Enabled: "true"
+      EdgeGateway__DistributedRateLimit__ConnectionString: redis:6379,abortConnect=false
+      EdgeGateway__DistributedRateLimit__KeyPrefix: guiyang:edge:ratelimit:v1
+      EdgeGateway__DistributedRateLimit__PermitLimit: ${EDGE_DISTRIBUTED_PERMIT_LIMIT:-1000}
+      EdgeGateway__DistributedRateLimit__WindowSeconds: ${EDGE_RATE_LIMIT_WINDOW_SECONDS:-60}
+      EdgeGateway__DistributedRateLimit__FailClosed: "true"
+      # 动态配置故障时网关继续使用持久化 LKG；签名密钥与读取凭据仅从环境 Secret 注入。
+      EdgeGateway__DynamicConfiguration__Enabled: "true"
+      EdgeGateway__DynamicConfiguration__BaseUrl: http://configuration:8080
+      EdgeGateway__DynamicConfiguration__ReadToken: ${CONFIGURATION_READ_TOKEN:?CONFIGURATION_READ_TOKEN is required}
+      EdgeGateway__DynamicConfiguration__SigningKey: ${CONFIGURATION_SIGNING_KEY:?CONFIGURATION_SIGNING_KEY is required}
+      EdgeGateway__DynamicConfiguration__LastKnownGoodPath: /var/lib/guiyang-mahjong/configuration/edge-lkg.json
+      # 容器直接接收玩家连接；如前置 Ingress/LB，必须显式覆盖可信代理 IP/CIDR。
+      EdgeGateway__TrustedProxies__0: 127.0.0.1
+      EdgeGateway__TrustedProxies__1: ::1
+      # 框架层放行后由网关输出统一 JSON；生产域名通过 EDGE_ALLOWED_HOSTS 注入。
+      AllowedHosts: "*"
+      EdgeGateway__AllowedHosts: "${EDGE_ALLOWED_HOSTS:-localhost;127.0.0.1}"
+      ReverseProxy__Clusters__auth__Destinations__primary__Address: http://auth:8080
+      ReverseProxy__Clusters__lobby__Destinations__primary__Address: http://lobby:8080
+    depends_on:
+      configuration: {condition: service_healthy}
+      auth: {condition: service_healthy}
+      lobby: {condition: service_healthy}
+      redis: {condition: service_healthy}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    # EdgeGateway 是唯一玩家 HTTP 公网入口；Dedicated Server UDP 仍由 game-node 直接发布。
+    ports: ["${EDGE_GATEWAY_PORT:-18085}:8080"]
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "--show-error", "http://127.0.0.1:8080/health/ready"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+    cpus: ${EDGE_GATEWAY_CPUS:-1.0}
+    mem_limit: ${EDGE_GATEWAY_MEMORY:-512m}
+    pids_limit: 256
+    read_only: true
+    tmpfs: ["/tmp:rw,noexec,nosuid,size=64m"]
+    volumes:
+      - edge-configuration-lkg:/var/lib/guiyang-mahjong/configuration
     security_opt: ["no-new-privileges:true"]
     logging: *logging
 
@@ -321,6 +599,13 @@ services:
       Admin__Abac__HighValueCompensationThreshold: ${ADMIN_HIGH_VALUE_COMPENSATION_THRESHOLD:-100000}
       Admin__Abac__BreakGlassMaximumMinutes: "15"
       Admin__WebSecurity__RequireHttps: "true"
+      # 浏览器只保存 HttpOnly 会话 Cookie；CSRF 值仅驻留页面内存，管理员会话由 PostgreSQL 跨副本共享。
+      Admin__WebSecurity__BrowserSessionEnabled: ${ADMIN_BROWSER_SESSION_ENABLED:-true}
+      Admin__WebSecurity__SessionCookieName: ${ADMIN_SESSION_COOKIE_NAME:-__Host-mahjong-admin}
+      Admin__WebSecurity__SessionLifetimeMinutes: ${ADMIN_SESSION_LIFETIME_MINUTES:-10}
+      Admin__WebSecurity__CsrfHeaderName: ${ADMIN_CSRF_HEADER_NAME:-X-Admin-CSRF}
+      Admin__WebSecurity__BindDevice: "true"
+      Admin__WebSecurity__BindIpNetwork: "true"
       Admin__RealtimeCapacity__DefaultPageSize: ${ADMIN_DEFAULT_PAGE_SIZE:-100}
       Admin__RealtimeCapacity__MaximumPageSize: ${ADMIN_MAXIMUM_PAGE_SIZE:-200}
       Admin__RealtimeCapacity__MaximumRooms: ${ADMIN_MAXIMUM_ROOMS:-10000}
@@ -362,8 +647,11 @@ services:
       Admin__Management__ApplyDatabaseMigrations: "false"
       Admin__Management__PostgresConnectionString: Host=postgres;Port=5432;Database=mahjong;Username=mahjong_admin;Password=${ADMIN_DB_PASSWORD};Options=-c role=mahjong_admin_rw
       Admin__Wallet__Enabled: "true"
-      Admin__Wallet__BaseUrl: http://player-data:8080
-      Admin__Wallet__CommandToken: ${PLAYER_DATA_ADMIN_COMMAND_TOKEN:?PLAYER_DATA_ADMIN_COMMAND_TOKEN is required}
+      Admin__Wallet__BaseUrl: http://economy:8080
+      Admin__Wallet__CommandToken: ${ECONOMY_ADMIN_TOKEN:?ECONOMY_ADMIN_TOKEN is required}
+      Admin__Configuration__Enabled: "true"
+      Admin__Configuration__BaseUrl: http://configuration:8080
+      Admin__Configuration__CommandToken: ${CONFIGURATION_ADMIN_TOKEN:?CONFIGURATION_ADMIN_TOKEN is required}
       Admin__Wallet__TimeoutSeconds: ${ADMIN_WALLET_TIMEOUT_SECONDS:-5}
       Admin__Auth__Enabled: "true"
       Admin__Auth__BaseUrl: http://auth:8080
@@ -378,10 +666,11 @@ services:
       Admin__Allocators__0__MonitoringToken: ${ADMIN_TOPOLOGY_ALLOCATOR_TOKEN:?ADMIN_TOPOLOGY_ALLOCATOR_TOKEN is required}
       Admin__Allocators__0__ManagementCommandToken: ${ALLOCATOR_MANAGEMENT_COMMAND_TOKEN:?ALLOCATOR_MANAGEMENT_COMMAND_TOKEN is required}
     depends_on:
+      configuration: {condition: service_healthy}
       auth: {condition: service_healthy}
       lobby: {condition: service_healthy}
       game-node: {condition: service_healthy}
-      player-data: {condition: service_healthy}
+      economy: {condition: service_healthy}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports: ["${ADMIN_PORT:-18083}:8080"]
@@ -402,3 +691,5 @@ services:
 volumes:
   postgres-data:
   redis-data:
+  nats-data:
+  edge-configuration-lkg:

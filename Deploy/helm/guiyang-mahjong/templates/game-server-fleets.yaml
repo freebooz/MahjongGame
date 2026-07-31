@@ -1,0 +1,34 @@
+{{- range $track, $fleet := dict "stable" .Values.gameServer.stable "canary" .Values.gameServer.canary }}
+{{- if $fleet.enabled }}
+apiVersion: agones.dev/v1
+kind: Fleet
+metadata:
+  name: {{ $fleet.fleet }}
+  labels: {mahjong.freebooz/release-track: {{ $track | quote }}}
+spec:
+  replicas: {{ $fleet.replicas }}
+  scheduling: Packed
+  template:
+    metadata:
+      labels:
+        agones.dev/fleet: {{ $fleet.fleet | quote }}
+        mahjong.freebooz/release-track: {{ $track | quote }}
+        mahjong.freebooz/server-build: {{ $fleet.build | quote }}
+        mahjong.freebooz/ruleset-version: {{ $fleet.ruleset | quote }}
+        mahjong.freebooz/protocol-version: {{ $.Values.gameServer.protocolVersion | quote }}
+        mahjong.freebooz/region: {{ $.Values.gameServer.region | quote }}
+    spec:
+      ports: [{name: game, portPolicy: Dynamic, containerPort: 7777, protocol: UDP}]
+      template:
+        spec:
+          containers:
+            - name: game-server
+              image: {{ printf "ghcr.io/freebooz/guiyang-mahjong-server@%s" $fleet.imageDigest | quote }}
+              args: ["-server", "-unattended", "-NullRHI", "-nosound", "-port=7777", "-MahjongOrchestrator=Agones"]
+              resources:
+                requests: {cpu: 500m, memory: 1Gi}
+                limits: {cpu: "2", memory: 4Gi}
+              securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: [ALL]}}
+---
+{{- end }}
+{{- end }}

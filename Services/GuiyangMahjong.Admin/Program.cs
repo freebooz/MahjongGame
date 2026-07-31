@@ -7,6 +7,7 @@ using GuiyangMahjong.Admin.Options;
 using GuiyangMahjong.Admin.Security;
 using GuiyangMahjong.Admin.Services;
 using GuiyangMahjong.Admin.Storage;
+using GuiyangMahjong.Admin.TrustSafety;
 using GuiyangMahjong.Observability;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.HttpOverrides;
@@ -208,6 +209,17 @@ builder.Services
             && string.IsNullOrEmpty(options.ReadOnlyAccessToken)
             && options.WebSecurity.RequireHttps),
         "Production Admin requires HTTPS enterprise OIDC, MFA, <=10 minute sessions, and no local shared tokens.")
+    .Validate(options => options.WebSecurity.SessionLifetimeMinutes
+            <= options.EnterpriseIdentity.RevocationSlaMinutes,
+        "Administrator browser session lifetime must not exceed the enterprise identity revocation SLA.")
+    .Validate(options => !builder.Environment.IsProduction()
+            || !options.WebSecurity.BrowserSessionEnabled
+            || (options.WebSecurity.RequireHttps
+                && options.WebSecurity.SessionCookieName.StartsWith("__Host-", StringComparison.Ordinal)
+                && options.WebSecurity.BindDevice
+                && options.WebSecurity.BindIpNetwork
+                && options.Management.PersistenceMode == "Postgres"),
+        "Production browser sessions require __Host- secure cookies, device/IP binding, and PostgreSQL persistence.")
     .Validate(options => !builder.Environment.IsProduction()
         || !options.AuditArchive.Enabled
         || (!string.IsNullOrWhiteSpace(
@@ -241,15 +253,6 @@ builder.Services
         "Admin:Auth:MonitoringToken must contain at least 32 characters when enabled.")
     .Validate(options => !options.Lobby.Enabled || options.Lobby.MonitoringToken.Length >= 32,
         "Admin:Lobby:MonitoringToken must contain at least 32 characters when enabled.")
-    .Validate(options => !options.PlayerData.Enabled
-            || options.PlayerData.MonitoringToken.Length >= 32,
-        "Admin:PlayerData:MonitoringToken must contain at least 32 characters when enabled.")
-    .Validate(options => string.IsNullOrEmpty(options.PlayerData.MonitoringToken)
-            || !string.Equals(
-                options.PlayerData.MonitoringToken,
-                options.Wallet.CommandToken,
-                StringComparison.Ordinal),
-        "PlayerData monitoring credential must differ from the Wallet command credential.")
     .Validate(options => !options.CentralLogs.Enabled
             || options.CentralLogs.QueryToken.Length >= 32,
         "Enabled central log queries require a dedicated 32+ character read-only token.")
@@ -315,7 +318,9 @@ builder.Services.AddRateLimiter(options =>
     options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(
         context =>
         {
-            if (!context.Request.Path.StartsWithSegments("/admin/v1"))
+            if (!context.Request.Path.StartsWithSegments("/admin/v1")
+                && !context.Request.Path.StartsWithSegments("/admin/operations/v1")
+                && !context.Request.Path.StartsWithSegments("/admin/bff/v1"))
             {
                 return RateLimitPartition.GetNoLimiter("non-admin");
             }
@@ -369,6 +374,7 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
 builder.Services.ConfigureHttpJsonOptions(options =>
     options.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 builder.Services.AddHttpClient();
+builder.Services.AddSingleton<ConfigurationManagementClient>();
 builder.Services.AddHttpClient(
     nameof(AuditArchiveDispatcher),
     (provider, client) =>
@@ -380,7 +386,6 @@ builder.Services.AddHttpClient(
     });
 builder.Services.AddSingleton<ILobbyMonitoringClient, HttpLobbyMonitoringClient>();
 builder.Services.AddSingleton<IAllocatorMonitoringClient, HttpAllocatorMonitoringClient>();
-builder.Services.AddSingleton<IPlayerDataMonitoringClient, HttpPlayerDataMonitoringClient>();
 builder.Services.AddSingleton<ICentralLogQueryClient, LokiCentralLogQueryClient>();
 builder.Services.AddSingleton<IChatArchiveQueryClient, HttpChatArchiveQueryClient>();
 builder.Services.AddSingleton<IReplayArchiveClient, HttpReplayArchiveClient>();
@@ -391,8 +396,18 @@ builder.Services.AddSingleton<IPlayerDirectoryClient, HttpPlayerDirectoryClient>
 builder.Services.AddSingleton<MonitoringSourceReliabilityService>();
 builder.Services.AddSingleton<MonitoringAggregationService>();
 builder.Services.AddSingleton<PlayerMonitoringService>();
+builder.Services.AddSingleton<AdminDataRedactionService>();
+builder.Services.AddSingleton<TrustSafetyReadModelService>();
 builder.Services.AddSingleton<AdminRealtimeEventHub>();
 builder.Services.AddHostedService<AdminRealtimeSnapshotPublisher>();
+builder.Services.AddSingleton<IAdminBrowserSessionStore>(provider =>
+{
+    var settings = provider.GetRequiredService<IOptions<AdminOptions>>().Value.Management;
+    return settings.PersistenceMode == "Postgres"
+        ? new PostgresAdminBrowserSessionStore(NpgsqlDataSource.Create(settings.PostgresConnectionString))
+        : new InMemoryAdminBrowserSessionStore();
+});
+builder.Services.AddSingleton<AdminBrowserSessionService>();
 builder.Services.AddSingleton<IAdminActionStore>(provider =>
 {
     var management = provider.GetRequiredService<IOptions<AdminOptions>>().Value.Management;
@@ -441,6 +456,8 @@ builder.Services.AddSingleton<IAuditArchiveOutboxStore>(provider =>
         : new InMemoryAuditArchiveOutboxStore();
 });
 builder.Services.AddHostedService<AdminActionStoreInitializer>();
+// 本地允许迁移时先由动作存储应用完整 Schema，再验证浏览器会话表；生产两者都只做就绪校验。
+builder.Services.AddHostedService<AdminBrowserSessionStoreInitializer>();
 builder.Services.AddSingleton<AdminActionWorkflow>();
 builder.Services.AddSingleton<IAdminCommandExecutor, HttpAdminCommandExecutor>();
 builder.Services.AddSingleton<AdminCommandDispatcher>();
@@ -475,7 +492,9 @@ app.Use(async (context, next) =>
         "camera=(), microphone=(), geolocation=(), payment=(), usb=()";
     context.Response.Headers["Cross-Origin-Opener-Policy"] = "same-origin";
     context.Response.Headers["Cross-Origin-Resource-Policy"] = "same-origin";
-    if (context.Request.Path.StartsWithSegments("/admin/v1"))
+    if (context.Request.Path.StartsWithSegments("/admin/v1")
+        || context.Request.Path.StartsWithSegments("/admin/operations/v1")
+        || context.Request.Path.StartsWithSegments("/admin/bff/v1"))
         context.Response.Headers.CacheControl = "no-store";
     try
     {
@@ -562,7 +581,9 @@ app.UseStaticFiles();
 app.UseAuthentication();
 app.UseRateLimiter();
 app.UseMiddleware<AdminAuthenticationMiddleware>();
+app.MapAdminBffEndpoints();
 app.MapAdminEndpoints();
+app.MapTrustSafetyEndpoints();
 app.MapPlayerEvidenceEndpoints();
 app.Run();
 

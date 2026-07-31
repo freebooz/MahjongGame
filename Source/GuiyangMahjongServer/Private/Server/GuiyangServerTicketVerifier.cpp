@@ -64,6 +64,11 @@ FGuiyangJoinTicketValidator::FGuiyangJoinTicketValidator(const FGuiyangGameServe
     , ExpectedRoomId(Config.RoomId)
     , ExpectedMatchId(Config.MatchId)
     , ExpectedServerInstanceId(Config.ServerInstanceId)
+    , CompatibleClientBuilds(Config.CompatibleClientBuilds)
+    , ExpectedProtocolVersion(Config.ProtocolVersion)
+    , ExpectedRuleSetVersion(Config.RuleSetVersion)
+    , ExpectedRoomEpoch(Config.RoomEpoch)
+    , bAllowLegacyTickets(Config.bAllowLegacyJoinTickets)
 {
 }
 
@@ -106,6 +111,11 @@ bool FGuiyangJoinTicketValidator::ValidateAndConsume(const FString& Ticket, cons
     PayloadBytes.Add(0);
     const FString PayloadJson = UTF8_TO_TCHAR(reinterpret_cast<const ANSICHAR*>(PayloadBytes.GetData()));
     TSharedPtr<FJsonObject> Payload;
+    double ParsedRoomEpoch = 0.0;
+    double ParsedSeatId = INDEX_NONE;
+    double ParsedSessionEpoch = 0.0;
+    double ParsedSecurityEpoch = 0.0;
+    double ParsedProtocolVersion = 0.0;
     const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(PayloadJson);
     if (!FJsonSerializer::Deserialize(Reader, Payload) || !Payload.IsValid()
         || !Payload->TryGetStringField(TEXT("playerId"), OutClaims.PlayerId)
@@ -113,11 +123,49 @@ bool FGuiyangJoinTicketValidator::ValidateAndConsume(const FString& Ticket, cons
         || !Payload->TryGetStringField(TEXT("roomId"), OutClaims.RoomId)
         || !Payload->TryGetStringField(TEXT("matchId"), OutClaims.MatchId)
         || !Payload->TryGetStringField(TEXT("serverInstanceId"), OutClaims.ServerInstanceId)
+        || !Payload->TryGetNumberField(TEXT("roomEpoch"), ParsedRoomEpoch)
         || !Payload->TryGetStringField(TEXT("nonce"), OutClaims.Nonce)
         || !Payload->TryGetNumberField(TEXT("expiresAtUnixSeconds"), OutClaims.ExpiresAtUnixSeconds))
     {
         OutError = TEXT("JOIN_TICKET_INVALID");
         return false;
+    }
+    OutClaims.RoomEpoch = static_cast<int64>(ParsedRoomEpoch);
+    if (ParsedRoomEpoch != static_cast<double>(OutClaims.RoomEpoch))
+    {
+        OutError = TEXT("JOIN_TICKET_INVALID");
+        return false;
+    }
+
+    const bool bHasStrongClaims =
+        Payload->TryGetStringField(TEXT("ticketId"), OutClaims.TicketId)
+        && Payload->TryGetNumberField(TEXT("seatId"), ParsedSeatId)
+        && Payload->TryGetStringField(TEXT("sessionId"), OutClaims.SessionId)
+        && Payload->TryGetNumberField(TEXT("sessionEpoch"), ParsedSessionEpoch)
+        && Payload->TryGetNumberField(TEXT("securityEpoch"), ParsedSecurityEpoch)
+        && Payload->TryGetStringField(TEXT("clientBuild"), OutClaims.ClientBuild)
+        && Payload->TryGetNumberField(TEXT("protocolVersion"), ParsedProtocolVersion)
+        && Payload->TryGetStringField(TEXT("ruleSetVersion"), OutClaims.RuleSetVersion)
+        && Payload->TryGetNumberField(TEXT("issuedAtUnixSeconds"), OutClaims.IssuedAtUnixSeconds);
+    if (!bHasStrongClaims && !bAllowLegacyTickets)
+    {
+        OutError = TEXT("JOIN_TICKET_STRONG_CLAIMS_REQUIRED");
+        return false;
+    }
+    if (bHasStrongClaims)
+    {
+        OutClaims.SeatId = static_cast<int32>(ParsedSeatId);
+        OutClaims.SessionEpoch = static_cast<int64>(ParsedSessionEpoch);
+        OutClaims.SecurityEpoch = static_cast<int64>(ParsedSecurityEpoch);
+        OutClaims.ProtocolVersion = FString::Printf(TEXT("%d"), static_cast<int32>(ParsedProtocolVersion));
+        if (ParsedSeatId != OutClaims.SeatId
+            || ParsedSessionEpoch != static_cast<double>(OutClaims.SessionEpoch)
+            || ParsedSecurityEpoch != static_cast<double>(OutClaims.SecurityEpoch)
+            || ParsedProtocolVersion != static_cast<double>(static_cast<int32>(ParsedProtocolVersion)))
+        {
+            OutError = TEXT("JOIN_TICKET_INVALID");
+            return false;
+        }
     }
 
     // 票据必须同时绑定玩家、房间、比赛和本次服务器实例，不能跨服复用。
@@ -126,7 +174,15 @@ bool FGuiyangJoinTicketValidator::ValidateAndConsume(const FString& Ticket, cons
         || OutClaims.DisplayName.TrimStartAndEnd().Len() > 24
         || OutClaims.RoomId != ExpectedRoomId
         || OutClaims.MatchId != ExpectedMatchId
-        || OutClaims.ServerInstanceId != ExpectedServerInstanceId)
+        || OutClaims.ServerInstanceId != ExpectedServerInstanceId
+        || OutClaims.RoomEpoch != ExpectedRoomEpoch
+        || (bHasStrongClaims && (OutClaims.SeatId < 0 || OutClaims.SeatId >= 4
+            || OutClaims.TicketId.Len() != 32
+            || OutClaims.SessionId.Len() != 32
+            || OutClaims.SessionEpoch < 0 || OutClaims.SecurityEpoch < 0
+            || !CompatibleClientBuilds.Contains(OutClaims.ClientBuild)
+            || OutClaims.ProtocolVersion != ExpectedProtocolVersion
+            || OutClaims.RuleSetVersion != ExpectedRuleSetVersion)))
     {
         OutError = TEXT("JOIN_TICKET_SCOPE_MISMATCH");
         return false;
@@ -134,7 +190,10 @@ bool FGuiyangJoinTicketValidator::ValidateAndConsume(const FString& Ticket, cons
     OutClaims.DisplayName.TrimStartAndEndInline();
     // 除了过期检查，也拒绝有效期异常长的票据，限制密钥泄露后的攻击窗口。
     if (OutClaims.ExpiresAtUnixSeconds <= NowUnixSeconds
-        || OutClaims.ExpiresAtUnixSeconds > NowUnixSeconds + 120)
+        || OutClaims.ExpiresAtUnixSeconds > NowUnixSeconds + 120
+        || (bHasStrongClaims && (OutClaims.IssuedAtUnixSeconds > NowUnixSeconds + 30
+            || OutClaims.IssuedAtUnixSeconds < NowUnixSeconds - 120
+            || OutClaims.IssuedAtUnixSeconds >= OutClaims.ExpiresAtUnixSeconds)))
     {
         OutError = TEXT("JOIN_TICKET_EXPIRED");
         return false;

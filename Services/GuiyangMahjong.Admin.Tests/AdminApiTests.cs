@@ -23,6 +23,7 @@ public sealed class AdminWebApplicationFactory : WebApplicationFactory<Program>
     public const string PlayerApproverToken = "test-only-player-approver-token-that-is-long-enough";
     public const string ChatComplianceToken = "test-only-chat-compliance-token-that-is-long-enough";
     public const string EvidenceToken = "test-only-evidence-ingestion-token-that-is-long-enough";
+    public const string GovernanceToken = "test-only-governance-operator-token-that-is-long-enough";
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -63,6 +64,14 @@ public sealed class AdminWebApplicationFactory : WebApplicationFactory<Program>
                 ["Admin:Principals:4:AccessToken"] = ChatComplianceToken,
                 ["Admin:Principals:4:Roles:0"] = "player.viewer",
                 ["Admin:Principals:4:Roles:1"] = "chat.compliance",
+                ["Admin:Principals:5:OperatorId"] = "governance-operator",
+                ["Admin:Principals:5:AccessToken"] = GovernanceToken,
+                ["Admin:Principals:5:Roles:0"] = "room.viewer",
+                ["Admin:Principals:5:Roles:1"] = "player.viewer",
+                ["Admin:Principals:5:Roles:2"] = "governance.publisher",
+                ["Admin:Principals:5:Roles:3"] = "refund.operator",
+                ["Admin:Principals:5:Roles:4"] = "sanction.batch-operator",
+                ["Admin:Principals:5:Roles:5"] = "governance.approver",
                 // 集成测试使用进程内假客户端，但仍按生产语义启用来源，确保可靠性边界执行实时校验。
                 ["Admin:Auth:Enabled"] = "true",
                 ["Admin:Auth:MonitoringToken"] =

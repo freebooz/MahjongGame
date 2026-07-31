@@ -51,6 +51,23 @@ CREATE TABLE IF NOT EXISTS player_data.wallet_transactions (
 CREATE INDEX IF NOT EXISTS ix_wallet_transactions_player
     ON player_data.wallet_transactions(player_id, completed_at_utc DESC);
 
+-- 阶段 8.3 完成切换后，旧表只允许读取和迁移核对；数据库门禁防止遗留代码形成长期双写。
+CREATE OR REPLACE FUNCTION player_data.reject_legacy_economy_write()
+RETURNS TRIGGER LANGUAGE plpgsql AS $$
+BEGIN
+    RAISE EXCEPTION 'Asset and reward writes are owned by Economy after stage 8.3';
+END;
+$$;
+DROP TRIGGER IF EXISTS trg_reject_legacy_wallet_balance_write ON player_data.wallet_balances;
+CREATE TRIGGER trg_reject_legacy_wallet_balance_write BEFORE INSERT OR UPDATE OR DELETE
+ON player_data.wallet_balances FOR EACH STATEMENT EXECUTE FUNCTION player_data.reject_legacy_economy_write();
+DROP TRIGGER IF EXISTS trg_reject_legacy_reward_write ON player_data.reward_grants;
+CREATE TRIGGER trg_reject_legacy_reward_write BEFORE INSERT OR UPDATE OR DELETE
+ON player_data.reward_grants FOR EACH STATEMENT EXECUTE FUNCTION player_data.reject_legacy_economy_write();
+DROP TRIGGER IF EXISTS trg_reject_legacy_wallet_transaction_write ON player_data.wallet_transactions;
+CREATE TRIGGER trg_reject_legacy_wallet_transaction_write BEFORE INSERT OR UPDATE OR DELETE
+ON player_data.wallet_transactions FOR EACH STATEMENT EXECUTE FUNCTION player_data.reject_legacy_economy_write();
+
 CREATE TABLE IF NOT EXISTS player_data.evidence_events (
     event_id UUID PRIMARY KEY,
     player_id VARCHAR(128) NOT NULL,
@@ -76,6 +93,36 @@ CREATE TABLE IF NOT EXISTS player_data.evidence_events (
 CREATE INDEX IF NOT EXISTS ix_player_data_evidence_player
     ON player_data.evidence_events(
         player_id, evidence_type, occurred_at_utc DESC);
+
+-- 阶段8.5后举报和支付证据由Admin/TrustSafety专用读模型直接摄取，遗留代码不得写回旧表。
+CREATE OR REPLACE FUNCTION player_data.reject_migrated_backoffice_evidence_write()
+RETURNS TRIGGER LANGUAGE plpgsql AS $$
+BEGIN
+    IF NEW.evidence_type IN ('Report', 'PaymentOrder') THEN
+        RAISE EXCEPTION 'Report and PaymentOrder evidence are owned by Admin/TrustSafety after stage 8.5';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+DROP TRIGGER IF EXISTS trg_reject_migrated_backoffice_evidence_write ON player_data.evidence_events;
+CREATE TRIGGER trg_reject_migrated_backoffice_evidence_write
+BEFORE INSERT OR UPDATE ON player_data.evidence_events
+FOR EACH ROW EXECUTE FUNCTION player_data.reject_migrated_backoffice_evidence_write();
+
+-- 阶段8.2切换后Replay由GameData独占；数据库门禁防止遗留代码绕过兼容适配器继续写旧表。
+CREATE OR REPLACE FUNCTION player_data.reject_replay_evidence_write()
+RETURNS TRIGGER LANGUAGE plpgsql AS $$
+BEGIN
+    IF NEW.evidence_type = 'Replay' THEN
+        RAISE EXCEPTION 'Replay evidence is owned by GameData after stage 8.2';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+DROP TRIGGER IF EXISTS trg_reject_replay_evidence_write ON player_data.evidence_events;
+CREATE TRIGGER trg_reject_replay_evidence_write
+BEFORE INSERT OR UPDATE ON player_data.evidence_events
+FOR EACH ROW EXECUTE FUNCTION player_data.reject_replay_evidence_write();
 
 CREATE TABLE IF NOT EXISTS player_data.projection_outbox (
     event_id UUID PRIMARY KEY

@@ -11,6 +11,7 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\GuiyangMahjong.Observability\GuiyangMahjong.Observability.csproj" />
+    <ProjectReference Include="..\Contracts\GuiyangMahjong.Contracts.Events\GuiyangMahjong.Contracts.Events.csproj" />
   </ItemGroup>
   <ItemGroup>
     <Content Include="..\..\Contracts\OpenAPI\auth-v1.openapi.yaml"

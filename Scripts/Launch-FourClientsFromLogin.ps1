@@ -6,8 +6,9 @@
 param(
     [Parameter(Mandatory)]
     [string]$ClientExecutable,
-    [string]$AuthBaseUrl = 'http://127.0.0.1:18082',
-    [string]$LobbyBaseUrl = 'http://127.0.0.1:18080',
+    [string]$ApiBaseUrl = 'http://127.0.0.1:18085',
+    [string]$RealtimeBaseUrl = '',
+    [string]$PatchBaseUrl = '',
     [string]$SessionRoot = '',
     [ValidateRange(10, 60)]
     [int]$LoginScreenTimeoutSeconds = 30
@@ -43,7 +44,10 @@ function Test-LoopbackHttpUrl([string]$Value) {
         $uri.Host -in @('localhost', '127.0.0.1', '::1'))
 }
 
-foreach ($endpoint in @($AuthBaseUrl, $LobbyBaseUrl)) {
+if ([string]::IsNullOrWhiteSpace($RealtimeBaseUrl)) {
+    $RealtimeBaseUrl = $ApiBaseUrl
+}
+foreach ($endpoint in @($ApiBaseUrl, $RealtimeBaseUrl) + @($PatchBaseUrl | Where-Object { $_ })) {
     $uri = $null
     $isValidEndpoint = [Uri]::TryCreate(
         $endpoint, [UriKind]::Absolute, [ref]$uri)
@@ -54,7 +58,7 @@ foreach ($endpoint in @($AuthBaseUrl, $LobbyBaseUrl)) {
         throw "Non-loopback HTTP is forbidden. Use HTTPS for remote services: $endpoint"
     }
 }
-$allowLocalReviewHttp = Test-LoopbackHttpUrl $AuthBaseUrl
+$allowLocalReviewHttp = Test-LoopbackHttpUrl $ApiBaseUrl
 
 $positions = @(@(0, 0), @(1920, 0), @(0, 1080), @(1920, 1080))
 $processes = @()
@@ -74,14 +78,17 @@ for ($index = 0; $index -lt 4; ++$index) {
         '-Multiprocess',
         "-UserDir=$userDirectory",
         '-MahjongAuthMode=RemoteAuth',
-        "-MahjongAuthBaseUrl=$AuthBaseUrl",
         '-MahjongLobbyBackend=RemoteLobby',
-        "-MahjongLobbyBaseUrl=$LobbyBaseUrl",
+        "-MahjongApiBaseUrl=$ApiBaseUrl",
+        "-MahjongRealtimeBaseUrl=$RealtimeBaseUrl",
         '-log',
         "-AbsLog=$logPath"
     )
     if ($allowLocalReviewHttp) {
-        $arguments += '-MahjongAllowInsecureLoopbackAuth'
+        $arguments += '-MahjongAllowInsecureLoopbackApi'
+    }
+    if (![string]::IsNullOrWhiteSpace($PatchBaseUrl)) {
+        $arguments += "-MahjongPatchBaseUrl=$PatchBaseUrl"
     }
     $process = Start-Process -FilePath $client -ArgumentList $arguments -PassThru
     $processes += [pscustomobject]@{

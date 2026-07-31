@@ -40,6 +40,18 @@
 
 ## 降噪、静默与升级
 
+## MahjongNatsJetStreamUnavailable
+
+先检查三个 NATS Pod、JetStream `/healthz`、PVC 容量和网络策略，再检查 exporter 本身。业务写事务不得因该告警回滚；确认各服务的 `platform_outbox` 持续保留未发布记录。恢复后观察发布确认、Outbox 积压和 Durable Consumer Pending 是否收敛，禁止手工把未确认消息标成已发布。
+
+## MahjongJetStreamConsumerLagHigh
+
+按 `consumer` 定位战绩、排行榜或审计投影，核对 Worker 副本、Inbox 数据库延迟、毒消息和下游锁等待。可水平扩容 Worker，但不得删除 Durable Consumer 或跳过 Inbox；乱序事件应由 `aggregate_version` 检查转为无副作用确认。
+
+## MahjongWorkerDeadLetterDetected
+
+查询 `worker_integration.failed_events` 的事件 ID、Subject、错误摘要和 TraceId，确认是未知 Schema、内容损坏还是超过最大投递次数。修复消费者后通过受控工单重新投递原事件；不得编辑结算载荷、生成新事件 ID 规避幂等或直接修改投影结果。
+
 - 相同 `alertname + severity + service` 合并；Critical 抑制同名 Warning。
 - 仅对已登记维护窗口创建有时限静默，静默必须关联工单和负责人。
 - Critical 首次等待 15 秒、30 分钟重复；Warning 默认 4 小时重复。持续两个重复周期或影响多个服务时升级值班负责人和安全/支付/客服相关负责人。

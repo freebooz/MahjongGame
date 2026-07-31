@@ -2,7 +2,7 @@
  * SSE 增量同步层：按 Last-Event-ID 断点续传，超窗时请求受控全量刷新。
  */
 import {
-  appendPager,byId,requestRefresh,resetPage,setConnection,state
+  adminHeaders,appendPager,byId,requestRefresh,resetPage,setConnection,state
 } from "./admin-console-state";
 import {renderInstances,renderPlayers,renderRooms} from "./admin-console-dashboard";
 
@@ -60,14 +60,14 @@ function consumeSseFrame(frame:string){
   applyRealtimeEvent(eventType,JSON.parse(data));
   if(id)state.eventId=id;
 }
-// fetch 流允许携带企业 Bearer 和 Last-Event-ID；断线按指数退避续传，超窗由 resync 事件收敛。
+// fetch 流使用 BFF Cookie；兼容回滚模式才附加内存 Bearer，断线按指数退避续传。
 export async function connectRealtime(){
-  if(!state.token||!state.me?.realtime?.sseEnabled)return;
+  if(!state.authenticated||!state.me?.realtime?.sseEnabled)return;
   const controller=new AbortController();state.eventAbort=controller;
-  const headers:any={Authorization:`Bearer ${state.token}`,Accept:"text/event-stream"};
+  const headers:any={...adminHeaders(),Accept:"text/event-stream"};
   if(state.eventId)headers["Last-Event-ID"]=state.eventId;
   try{
-    const response=await fetch("/admin/v1/events",{headers,signal:controller.signal});
+    const response=await fetch("/admin/v1/events",{headers,credentials:"same-origin",signal:controller.signal});
     if(!response.ok)throw new Error(`SSE ${response.status}`);
     state.eventReconnectMilliseconds=1000;
     const reader=response.body.getReader(),decoder=new TextDecoder();let buffer="";
@@ -82,7 +82,7 @@ export async function connectRealtime(){
     if(controller.signal.aborted)return;
     setConnection(false,"实时推送中断，正在断点重连");
   }
-  if(!controller.signal.aborted&&state.token){
+  if(!controller.signal.aborted&&state.authenticated){
     const delay=state.eventReconnectMilliseconds;
     state.eventReconnectMilliseconds=Math.min(delay*2,30000);
     setTimeout(connectRealtime,delay);

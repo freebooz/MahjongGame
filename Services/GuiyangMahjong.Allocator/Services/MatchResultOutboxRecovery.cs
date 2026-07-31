@@ -56,6 +56,15 @@ public sealed record MatchResultRecoveryAck(
     bool Accepted,
     bool Duplicate);
 
+/// <summary>GameData 对强结算恢复的确认；其业务键必须与 Outbox 信封完全一致后才能删除文件。</summary>
+public sealed record GameDataSettlementRecoveryAck(
+    string SettlementId,
+    string MatchId,
+    int RoundNo,
+    int SettlementVersion,
+    DateTimeOffset CommittedAtUtc,
+    bool Duplicate);
+
 /// <summary>
 /// 扫描 Dedicated Server 遗留结算文件并可靠重投 Lobby。
 /// 文件大小、版本、标识和时间先校验；只有 Lobby 明确接受或确认重复后才删除文件，
@@ -67,7 +76,7 @@ public sealed class MatchResultOutboxRecovery(
     TimeProvider timeProvider,
     ILogger<MatchResultOutboxRecovery> logger)
 {
-    private const long MaximumOutboxBytes = 64 * 1024;
+    private const long MaximumOutboxBytes = 256 * 1024;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private readonly AllocatorOptions options = options.Value;
     private readonly string outboxDirectory = MatchResultOutboxPaths.GetDirectory(options.Value);
@@ -94,7 +103,8 @@ public sealed class MatchResultOutboxRecovery(
 
     private async Task TryRecoverAsync(string path, CancellationToken cancellationToken)
     {
-        MatchResultOutboxEnvelope envelope;
+        string rawEnvelope;
+        int version;
         try
         {
             var file = new FileInfo(path);
@@ -103,10 +113,28 @@ public sealed class MatchResultOutboxRecovery(
                 logger.LogError("结算 outbox 文件大小非法 Path={Path} Bytes={Bytes}", path, file.Length);
                 return;
             }
-            await using var stream = new FileStream(
-                path, FileMode.Open, FileAccess.Read, FileShare.Read, 16 * 1024, FileOptions.Asynchronous);
-            envelope = await JsonSerializer.DeserializeAsync<MatchResultOutboxEnvelope>(
-                    stream, JsonOptions, cancellationToken)
+            rawEnvelope = await File.ReadAllTextAsync(path, cancellationToken);
+            using var document = JsonDocument.Parse(rawEnvelope);
+            version = document.RootElement.GetProperty("version").GetInt32();
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException
+            or JsonException or InvalidOperationException)
+        {
+            logger.LogError(exception, "结算 outbox 无法读取或识别版本 Path={Path}", path);
+            return;
+        }
+
+        // v2 是 DS 已签名的完整强信封。Allocator 只验证安全边界并原样转交，不能重算或改写结果。
+        if (version == 2)
+        {
+            await TryRecoverGameDataAsync(path, rawEnvelope, cancellationToken);
+            return;
+        }
+
+        MatchResultOutboxEnvelope envelope;
+        try
+        {
+            envelope = JsonSerializer.Deserialize<MatchResultOutboxEnvelope>(rawEnvelope, JsonOptions)
                 ?? throw new JsonException("结算 outbox 内容为空");
             Validate(path, envelope);
         }
@@ -163,6 +191,94 @@ public sealed class MatchResultOutboxRecovery(
             logger.LogWarning(exception,
                 "结算 outbox 恢复暂时失败 MatchId={MatchId} InstanceId={InstanceId}",
                 envelope.MatchId, envelope.Report.ServerInstanceId);
+        }
+    }
+
+    /// <summary>
+    /// 恢复 v2 强结算。只在 GameData 明确确认同一 match/round/version 后删除文件；
+    /// 网络超时或不确定响应一律保留文件，以数据库唯一约束承接下一轮幂等重试。
+    /// </summary>
+    private async Task TryRecoverGameDataAsync(
+        string path,
+        string rawEnvelope,
+        CancellationToken cancellationToken)
+    {
+        string matchId;
+        string serverInstanceId;
+        int roundNo;
+        int settlementVersion;
+        string rawReport;
+        try
+        {
+            using var document = JsonDocument.Parse(rawEnvelope);
+            var report = document.RootElement.GetProperty("report");
+            matchId = document.RootElement.GetProperty("matchId").GetString() ?? string.Empty;
+            serverInstanceId = report.GetProperty("server_instance_id").GetString() ?? string.Empty;
+            roundNo = report.GetProperty("round_no").GetInt32();
+            settlementVersion = report.GetProperty("settlement_version").GetInt32();
+            var reportMatchId = report.GetProperty("match_id").GetString();
+            var signature = report.GetProperty("server_signature").GetString();
+            var credentialHash = report.GetProperty("workload_credential_hash").GetString();
+            if (!Guid.TryParse(matchId, out _) || matchId != reportMatchId
+                || !Guid.TryParse(serverInstanceId, out _)
+                || !string.Equals(Path.GetFileNameWithoutExtension(path), serverInstanceId,
+                    OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)
+                || roundNo is < 1 or > 16 || settlementVersion is < 1 or > 100
+                || signature is not { Length: 64 } || credentialHash is not { Length: 64 })
+                throw new InvalidDataException("v2 结算 outbox 作用域或签名摘要非法");
+            rawReport = report.GetRawText();
+        }
+        catch (Exception exception) when (exception is JsonException or InvalidOperationException
+            or InvalidDataException)
+        {
+            logger.LogError(exception, "v2 结算 outbox 校验失败 Path={Path}", path);
+            return;
+        }
+
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Post,
+                $"{options.GameDataInternalUrl.TrimEnd('/')}/internal/settlements/{matchId}/recovery")
+            {
+                Content = new StringContent(rawReport, System.Text.Encoding.UTF8, "application/json")
+            };
+            request.Headers.Authorization = new AuthenticationHeaderValue(
+                "Bearer", options.GameDataRecoveryToken);
+            request.Headers.Add("X-Request-Id", Guid.NewGuid().ToString("N"));
+            request.Headers.Add("X-Correlation-Id", Guid.NewGuid().ToString("N"));
+            request.Headers.Add("Idempotency-Key", $"{matchId}:{roundNo}:{settlementVersion}");
+            using var response = await httpClientFactory.CreateClient(nameof(MatchResultOutboxRecovery))
+                .SendAsync(request, cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                logger.LogWarning(
+                    "GameData 暂未接受 v2 结算 outbox MatchId={MatchId} InstanceId={InstanceId} Status={Status}",
+                    matchId, serverInstanceId, (int)response.StatusCode);
+                return;
+            }
+            var acknowledgement = await response.Content.ReadFromJsonAsync<GameDataSettlementRecoveryAck>(
+                JsonOptions, cancellationToken);
+            if (acknowledgement is null || acknowledgement.MatchId != matchId
+                || acknowledgement.RoundNo != roundNo
+                || acknowledgement.SettlementVersion != settlementVersion)
+            {
+                logger.LogWarning(
+                    "GameData 返回的 v2 结算确认不匹配 MatchId={MatchId} InstanceId={InstanceId}",
+                    matchId, serverInstanceId);
+                return;
+            }
+            File.Delete(path);
+            logger.LogInformation(
+                "v2 结算 outbox 已恢复 MatchId={MatchId} InstanceId={InstanceId} Version={Version} Duplicate={Duplicate}",
+                matchId, serverInstanceId, settlementVersion, acknowledgement.Duplicate);
+        }
+        catch (Exception exception) when (exception is HttpRequestException or IOException
+            or UnauthorizedAccessException or TaskCanceledException)
+        {
+            if (exception is TaskCanceledException && cancellationToken.IsCancellationRequested) throw;
+            logger.LogWarning(exception,
+                "v2 结算 outbox 恢复暂时失败 MatchId={MatchId} InstanceId={InstanceId}",
+                matchId, serverInstanceId);
         }
     }
 

@@ -12,7 +12,7 @@ import {
 
 // 并行刷新权限允许的各面板；每个请求独立收敛错误，单点故障不会中断整页更新。
 export async function refresh(){
-  if(!state.token){setConnection(false,"需要凭证");return;}
+  if(!state.authenticated){setConnection(false,"需要管理员身份与 MFA");return;}
   try{
     state.me=await request("/admin/v1/me");
     // /me 水位在分页快照之前读取；SSE 从该序列续传，覆盖快照加载期间发生的变化。
@@ -80,7 +80,8 @@ export async function refresh(){
     appendPager("instancesBody",9,"instances",instancePage);
     renderOutbox(outbox);renderCases(cases);renderAssetOperations(assetOperations);
     renderSourceHealth(health||overview.reliability);
-    const sectionErrors=[
+    // 显式固定元组类型，避免面板编号被推断成错误文案的一部分并掩盖独立降级提示。
+    const sectionErrors:Array<[string,number,string|null]>=[
       ["playersBody",9,results[1].error],["roomsBody",8,results[2].error],
       ["instancesBody",9,results[3].error]
     ];

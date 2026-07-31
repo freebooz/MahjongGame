@@ -57,7 +57,10 @@ public sealed class RuntimeTelemetryContractTests
                     null,
                     "NetworkInterrupted",
                     3,
-                    connectionEventId)
+                    connectionEventId,
+                    1.25,
+                    4,
+                    2)
             ],
             1,
             250,
@@ -72,7 +75,17 @@ public sealed class RuntimeTelemetryContractTests
                 null,
                 null,
                 null,
-                null));
+                null)) with
+        {
+            RoomEpoch = 1,
+            FencingToken = 1,
+            ActionSequence = 88,
+            StateVersion = 34,
+            SnapshotVersion = 7,
+            SnapshotCreatedAtUtc = fixture.Time.GetUtcNow().AddSeconds(-2),
+            RecoveryState = "Healthy",
+            LastTraceId = "trace-runtime-contract"
+        };
 
         await fixture.Service.RecordGameServerHeartbeatAsync(
             Guid.NewGuid().ToString(),
@@ -105,6 +118,12 @@ public sealed class RuntimeTelemetryContractTests
         Assert.Equal(100, rpcMethod.ReceivedCount);
         Assert.Equal(3.5, rpcMethod.P95DurationMilliseconds);
         Assert.Equal("Calculating", runtime.Settlement?.Status);
+        Assert.Equal(88, runtime.ActionSequence);
+        Assert.Equal(34, runtime.StateVersion);
+        Assert.Equal(1, runtime.RoomEpoch);
+        Assert.Equal(7, runtime.SnapshotVersion);
+        Assert.Equal("Healthy", runtime.RecoveryState);
+        Assert.Equal("trace-runtime-contract", runtime.LastTraceId);
 
         var player = Assert.Single(runtime.Players);
         Assert.Equal(fixture.Owner.PlayerId, player.PlayerId);
@@ -116,6 +135,9 @@ public sealed class RuntimeTelemetryContractTests
         Assert.Equal("NetworkInterrupted", player.DisconnectReason);
         Assert.Equal(3, player.ConnectionStateSequence);
         Assert.Equal(connectionEventId, player.ConnectionEventId);
+        Assert.Equal(1.25, player.PacketLossPercent);
+        Assert.Equal(4, player.IllegalActionCount);
+        Assert.Equal(2, player.ReconnectCount);
     }
 
     /// <summary>

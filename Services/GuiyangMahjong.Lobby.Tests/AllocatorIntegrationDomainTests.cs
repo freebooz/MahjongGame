@@ -21,7 +21,7 @@ public sealed class AllocatorIntegrationDomainTests
     public async Task Route_IsUnavailableUntilRegistrationThenGetsShortLivedTicket()
     {
         var fixture = CreateFixture();
-        var owner = new PlayerIdentity("owner-route", "Owner", "Guest");
+        var owner = StrongPlayer("owner-route");
         var created = await fixture.Service.CreateRoomAsync(
             Guid.NewGuid().ToString(), owner, NewCreateRequest(), CancellationToken.None);
 
@@ -46,11 +46,14 @@ public sealed class AllocatorIntegrationDomainTests
         Assert.Equal(room.MatchId, acknowledgement.RoomBootstrap.MatchId);
         Assert.Equal(owner.PlayerId, acknowledgement.RoomBootstrap.OwnerPlayerId);
         Assert.Equal(4, acknowledgement.RoomBootstrap.RoundCount);
+        Assert.Equal(room.RoomEpoch, acknowledgement.RoomEpoch);
+        Assert.Equal(room.RoomEpoch, acknowledgement.RoomBootstrap.RoomEpoch);
         Assert.Equal("GuiyangMainstreamV1", acknowledgement.RoomBootstrap.RuleSnapshot["ruleId"]!.ToString());
 
         var route = await fixture.Service.GetRouteAsync(
             Guid.NewGuid().ToString(), owner, created.RoomCode, CancellationToken.None);
         Assert.Equal(fixture.Allocator.ServerInstanceId, route.ServerInstanceId);
+        Assert.Equal(room.RoomEpoch, route.RoomEpoch);
         Assert.NotEmpty(route.JoinTicket);
         Assert.True(route.TicketExpireAtUtc > fixture.Time.GetUtcNow());
         var encodedPayload = route.JoinTicket.Split('.', 2)[0]
@@ -63,6 +66,7 @@ public sealed class AllocatorIntegrationDomainTests
             Encoding.UTF8.GetString(Convert.FromBase64String(encodedPayload)));
         Assert.Equal(owner.PlayerId, payload.RootElement.GetProperty("playerId").GetString());
         Assert.Equal(owner.DisplayName, payload.RootElement.GetProperty("displayName").GetString());
+        Assert.Equal(room.RoomEpoch, payload.RootElement.GetProperty("roomEpoch").GetInt64());
     }
 
     [Fact]
@@ -102,6 +106,80 @@ public sealed class AllocatorIntegrationDomainTests
         Assert.False(acknowledgement.RoomBootstrap.PublicRoom);
         Assert.Equal("3", acknowledgement.RoomBootstrap.RuleSnapshot["baseScore"]!.ToString());
         Assert.Equal("21", acknowledgement.RoomBootstrap.RuleSnapshot["turnTimeoutSeconds"]!.ToString());
+    }
+
+    [Fact]
+    public async Task Reallocation_IncrementsEpoch_RejectsOldServerAndAcceptsReplacement()
+    {
+        var fixture = CreateFixture();
+        var owner = new PlayerIdentity(
+            "owner-reallocation",
+            "Owner",
+            "Guest");
+        var created = await fixture.Service.CreateRoomAsync(
+            "create-reallocation",
+            owner,
+            NewCreateRequest(),
+            CancellationToken.None);
+        var initial = await fixture.Store.GetRoomByIdAsync(
+            created.RoomId,
+            CancellationToken.None);
+        Assert.NotNull(initial);
+        await fixture.Service.RegisterGameServerAsync(
+            "register-initial",
+            new GameServerRegistration(
+                fixture.Allocator.ServerInstanceId,
+                initial.RoomId,
+                initial.MatchId,
+                "127.0.0.1",
+                19000,
+                "test",
+                "credential",
+                initial.RoomEpoch),
+            CancellationToken.None);
+
+        await fixture.Service.ReallocateGameServerAsync(
+            "reallocate-epoch-2",
+            initial.RoomId,
+            "心跳超时，创建替换实例",
+            CancellationToken.None);
+        var recovering = await fixture.Store.GetRoomByIdAsync(
+            initial.RoomId,
+            CancellationToken.None);
+        Assert.NotNull(recovering);
+        Assert.Equal(2, recovering.RoomEpoch);
+        Assert.NotEqual(
+            fixture.Allocator.ServerInstanceId,
+            recovering.PendingServerInstanceId);
+
+        await Assert.ThrowsAsync<LobbyOperationException>(() =>
+            fixture.Service.RegisterGameServerAsync(
+                "register-stale",
+                new GameServerRegistration(
+                    fixture.Allocator.ServerInstanceId,
+                    recovering.RoomId,
+                    recovering.MatchId,
+                    "127.0.0.1",
+                    19000,
+                    "test",
+                    "credential",
+                    1),
+                CancellationToken.None));
+        var accepted = await fixture.Service.RegisterGameServerAsync(
+            "register-replacement",
+            new GameServerRegistration(
+                recovering.PendingServerInstanceId!,
+                recovering.RoomId,
+                recovering.MatchId,
+                "127.0.0.1",
+                19000,
+                "test",
+                "credential",
+                recovering.RoomEpoch),
+            CancellationToken.None);
+
+        Assert.True(accepted.Accepted);
+        Assert.Equal(2, accepted.RoomEpoch);
     }
 
     [Fact]
@@ -250,7 +328,7 @@ public sealed class AllocatorIntegrationDomainTests
     public async Task ReconnectRoute_UsesAuthenticatedPlayerMappingInsteadOfClientHints()
     {
         var fixture = CreateFixture();
-        var owner = new PlayerIdentity("owner-reconnect", "Owner", "Guest");
+        var owner = StrongPlayer("owner-reconnect");
         var created = await fixture.Service.CreateRoomAsync(
             Guid.NewGuid().ToString(), owner, NewCreateRequest(), CancellationToken.None);
         var room = await fixture.Store.GetRoomByIdAsync(created.RoomId, CancellationToken.None);
@@ -297,7 +375,7 @@ public sealed class AllocatorIntegrationDomainTests
         await fixture.Service.RecordGameServerHeartbeatAsync(
             Guid.NewGuid().ToString(), fixture.Allocator.ServerInstanceId,
             NewHeartbeat(room.RoomId, "Settling"), CancellationToken.None);
-        var report = new MatchResultReport(
+        var report = TestShuffleFairness.CreateReport(
             room.RoomId,
             fixture.Allocator.ServerInstanceId,
             42,
@@ -357,7 +435,7 @@ public sealed class AllocatorIntegrationDomainTests
         await fixture.Service.RecordGameServerHeartbeatAsync(
             Guid.NewGuid().ToString(), fixture.Allocator.ServerInstanceId,
             NewHeartbeat(room.RoomId, "Settling"), CancellationToken.None);
-        var report = new MatchResultReport(
+        var report = TestShuffleFairness.CreateReport(
             room.RoomId, fixture.Allocator.ServerInstanceId, 88, 4,
             [new MatchPlayerResult(owner.PlayerId, 0, 1, 20)]);
         fixture.Allocator.DrainFailuresRemaining = 1;
@@ -404,6 +482,17 @@ public sealed class AllocatorIntegrationDomainTests
         return new Fixture(service, store, monitoring, allocator, time);
     }
 
+    /// <summary>构造带真实会话和网关版本上下文的玩家，避免测试依赖生产禁用的旧直连开关。</summary>
+    private static PlayerIdentity StrongPlayer(string playerId) => new(
+        playerId,
+        "Owner",
+        "Guest",
+        Guid.NewGuid().ToString("N"),
+        0,
+        0,
+        "test",
+        "1");
+
     private static CreateRoomRequest NewCreateRequest() => new(
         4,
         true,
@@ -444,10 +533,39 @@ public sealed class AllocatorIntegrationDomainTests
             Task.FromResult(new AllocatorAllocation(
                 requestId, roomId, ServerInstanceId, 19000, "Starting"));
 
+        public Task<AllocatorAllocation> AllocateForEpochAsync(
+            string requestId,
+            string roomId,
+            string matchId,
+            long roomEpoch,
+            CancellationToken cancellationToken)
+        {
+            var serverInstanceId = roomEpoch == 1
+                ? ServerInstanceId
+                : Guid.NewGuid().ToString();
+            return Task.FromResult(new AllocatorAllocation(
+                requestId,
+                roomId,
+                serverInstanceId,
+                19000,
+                "Starting",
+                roomEpoch,
+                requestId,
+                roomEpoch));
+        }
+
         public Task<AllocatorRegistrationAck> ConfirmRegistrationAsync(
             string requestId, GameServerRegistration request, CancellationToken cancellationToken) =>
             Task.FromResult(new AllocatorRegistrationAck(
-                requestId, request.ServerInstanceId, true, 3, "heartbeat-credential"));
+                requestId,
+                request.ServerInstanceId,
+                true,
+                3,
+                "heartbeat-credential",
+                request.RoomEpoch == 0 ? 1 : request.RoomEpoch,
+                request.FencingToken == 0
+                    ? request.RoomEpoch == 0 ? 1 : request.RoomEpoch
+                    : request.FencingToken));
 
         public Task RecordHeartbeatAsync(
             string requestId,

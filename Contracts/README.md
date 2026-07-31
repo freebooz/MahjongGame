@@ -8,7 +8,7 @@
 | 目录 | 职责 |
 | --- | --- |
 | `Authentication` | Auth 生产、Lobby 等消费者使用的身份与令牌线格式 |
-| `Monitoring` | Dedicated Server、Lobby、Admin 之间的运行遥测 Schema |
+| `Monitoring` | Dedicated Server、Lobby、Admin 之间的运行遥测 Schema，以及洗牌公平性审计规范 |
 | `OpenAPI` | HTTP API 的版本化 OpenAPI 描述 |
 
 ## 变更规则
@@ -19,3 +19,8 @@
 - 生产者和消费者必须在各自测试项目中独立验证同一契约，不得通过引用对方生产程序集
   共享实现；
 - 契约变更必须触发服务构建、契约测试与相关 Docker 镜像构建矩阵。
+
+当前安全审计契约：
+
+- `Monitoring/shuffle-fairness-v1.md`：定义开局承诺、局后披露、牌墙摘要和审计事件链；
+- `OpenAPI/lobby-v1.openapi.yaml`：定义最终结算中的 `shuffleProofs` 与 `eventChainDigest` 线格式。

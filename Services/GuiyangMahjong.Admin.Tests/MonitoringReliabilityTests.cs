@@ -118,7 +118,6 @@ public sealed class MonitoringReliabilityTests
         var aggregation = new MonitoringAggregationService(
             new ReliableLobbyClient(),
             new FailingAllocatorClient(),
-            new DisabledPlayerDataClient(),
             service,
             Microsoft.Extensions.Options.Options.Create(admin),
             TimeProvider.System);
@@ -146,7 +145,6 @@ public sealed class MonitoringReliabilityTests
         var aggregation = new MonitoringAggregationService(
             new ReliableLobbyClient(),
             allocator,
-            new DisabledPlayerDataClient(),
             reliability,
             Microsoft.Extensions.Options.Options.Create(admin),
             TimeProvider.System);
@@ -191,10 +189,6 @@ public sealed class MonitoringReliabilityTests
             {
                 Enabled = true,
                 MonitoringToken = "test-lobby-monitoring-token-that-is-long-enough"
-            },
-            PlayerData = new PlayerDataMonitoringOptions
-            {
-                Enabled = false
             },
             Allocators =
             [
@@ -290,9 +284,4 @@ public sealed class MonitoringReliabilityTests
         }
     }
 
-    private sealed class DisabledPlayerDataClient : IPlayerDataMonitoringClient
-    {
-        public Task<bool> CheckReadyAsync(CancellationToken cancellationToken) =>
-            Task.FromResult(false);
-    }
 }

@@ -11,7 +11,8 @@ namespace GuiyangMahjong.Admin.Security;
 /// </summary>
 public sealed class AdminAuthenticationMiddleware(
     RequestDelegate next,
-    IOptions<AdminOptions> options)
+    IOptions<AdminOptions> options,
+    AdminBrowserSessionService browserSessions)
 {
     private readonly AdminAbacOptions abac = options.Value.Abac;
     private readonly byte[] expected =
@@ -29,15 +30,57 @@ public sealed class AdminAuthenticationMiddleware(
             .ToArray();
     private readonly EnterpriseIdentityOptions enterprise =
         options.Value.EnterpriseIdentity;
+    private readonly AdminWebSecurityOptions webSecurity =
+        options.Value.WebSecurity;
 
     /// <summary>
-    /// 保护 /admin/v1：生产验证企业身份、MFA、令牌年龄、角色和 ABAC Claims，
+    /// 保护 BFF、兼容 API 与 Operations API：生产验证企业身份、MFA、令牌年龄、角色和 ABAC Claims，
     /// 非生产可固定时间比较静态令牌。失败立即返回且不设置 AdminPrincipal。
     /// </summary>
     public async Task InvokeAsync(HttpContext context)
     {
-        if (!context.Request.Path.StartsWithSegments("/admin/v1"))
+        var isAdminPath = context.Request.Path.StartsWithSegments("/admin/v1")
+            || context.Request.Path.StartsWithSegments("/admin/operations/v1")
+            || context.Request.Path.StartsWithSegments("/admin/bff/v1");
+        if (!isAdminPath)
         {
+            await next(context);
+            return;
+        }
+
+        // 会话创建必须重新出示已完成 MFA 的短期 Bearer，不能用旧 Cookie 自我续期。
+        var isSessionExchange = context.Request.Path.Equals("/admin/bff/v1/session")
+            && HttpMethods.IsPost(context.Request.Method);
+        if (webSecurity.BrowserSessionEnabled
+            && !isSessionExchange
+            && context.Request.Cookies.TryGetValue(webSecurity.SessionCookieName, out var sessionToken))
+        {
+            var session = await browserSessions.ValidateAsync(
+                sessionToken,
+                context,
+                context.RequestAborted);
+            if (session is null)
+            {
+                await RejectAsync(
+                    context,
+                    StatusCodes.Status401Unauthorized,
+                    "ADMIN_SESSION_INVALID",
+                    "Administrator session is expired, revoked, or has an anomalous device or network binding.");
+                return;
+            }
+            // Cookie 会自动附加到跨站请求，因此所有产生副作用的方法都必须额外验证内存 CSRF 值。
+            if (!IsSafeMethod(context.Request.Method)
+                && !browserSessions.ValidateCsrf(session, context))
+            {
+                await RejectAsync(
+                    context,
+                    StatusCodes.Status403Forbidden,
+                    "ADMIN_CSRF_REJECTED",
+                    "The administrator CSRF proof is missing or invalid.");
+                return;
+            }
+            AdminPrincipalContext.Set(context, session.Principal);
+            context.Items["GuiyangMahjong.AdminAuthMode"] = "BrowserSession";
             await next(context);
             return;
         }
@@ -125,6 +168,13 @@ public sealed class AdminAuthenticationMiddleware(
                     mfaSatisfied,
                     ParseUtc(context.User.FindFirstValue(
                         abac.BreakGlassUntilClaim))));
+            // BFF 会话不得比当前企业凭证活得更久，否则管理员离职、角色回收或令牌撤销窗口会被 Cookie 绕过。
+            if (long.TryParse(context.User.FindFirstValue("exp"), out var expiresAtSeconds))
+            {
+                context.Items["GuiyangMahjong.AdminCredentialExpiresAtUtc"] =
+                    DateTimeOffset.FromUnixTimeSeconds(expiresAtSeconds);
+            }
+            context.Items["GuiyangMahjong.AdminAuthMode"] = "EnterpriseBearer";
             await next(context);
             return;
         }
@@ -164,8 +214,13 @@ public sealed class AdminAuthenticationMiddleware(
         }
 
         AdminPrincipalContext.Set(context, principal);
+        context.Items["GuiyangMahjong.AdminAuthMode"] = "LocalBearer";
         await next(context);
     }
+
+    /// <summary>GET、HEAD 和 OPTIONS 不改变服务端状态，其余方法在 Cookie 模式下一律要求 CSRF。</summary>
+    private static bool IsSafeMethod(string method) =>
+        HttpMethods.IsGet(method) || HttpMethods.IsHead(method) || HttpMethods.IsOptions(method);
 
     /// <summary>将多值或分隔字符串 Claim 统一为严格区分大小写的属性集合，避免客户端自行扩张范围。</summary>
     private static IReadOnlySet<string> ReadAttributeSet(
@@ -191,12 +246,20 @@ public sealed class AdminAuthenticationMiddleware(
             ? parsed
             : null;
 
-    private static async Task RejectAsync(
+    private async Task RejectAsync(
         HttpContext context,
         int statusCode,
         string code,
         string message)
     {
+        if (webSecurity.BrowserSessionEnabled)
+        {
+            await browserSessions.RecordRejectionAsync(
+                context,
+                context.User.FindFirstValue(enterprise.OperatorIdClaim) ?? "unknown",
+                code,
+                context.RequestAborted);
+        }
         context.Response.StatusCode = statusCode;
         await context.Response.WriteAsJsonAsync(new
         {

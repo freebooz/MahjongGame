@@ -1,6 +1,10 @@
 using GuiyangMahjong.Lobby.Api;
+using GuiyangMahjong.Lobby.Lobby;
+using GuiyangMahjong.Lobby.Matchmaking;
 using GuiyangMahjong.Lobby.Options;
 using GuiyangMahjong.Lobby.Realtime;
+using GuiyangMahjong.Lobby.Reconnection;
+using GuiyangMahjong.Lobby.Rooms;
 using GuiyangMahjong.Lobby.Security;
 using GuiyangMahjong.Lobby.Services;
 using GuiyangMahjong.Lobby.Storage;
@@ -21,6 +25,15 @@ builder.Services
     .AddOptions<LobbyOptions>()
     .Bind(builder.Configuration.GetSection(LobbyOptions.SectionName))
     .ValidateDataAnnotations()
+    .Validate(
+        options => options.PreviousTokenValidationKeys.All(
+            key => key is { Length: >= 32 })
+                   && options.PreviousTokenValidationKeys
+                       .Append(options.TokenSigningKey)
+                       .Distinct(StringComparer.Ordinal)
+                       .Count()
+                      == options.PreviousTokenValidationKeys.Length + 1,
+        "Lobby previous token validation keys must be unique and contain at least 32 characters.")
     .Validate(options => options.JoinTicketSigningKey.Length >= 32,
         "Lobby:JoinTicketSigningKey must contain at least 32 characters.")
     .Validate(options => options.InternalServiceToken.Length >= 32,
@@ -55,6 +68,11 @@ builder.Services
                     StringComparison.Ordinal)),
         "Lobby topology registration requires a dedicated 32+ character credential.")
     .Validate(options => options.TokenSigningKey.Length >= 32, "Lobby:TokenSigningKey 至少需要 32 个字符")
+    .Validate(options => options.Settlement.Mode is "Legacy" or "Shadow" or "GameData",
+        "Lobby:Settlement:Mode 只允许 Legacy、Shadow 或 GameData。")
+    .Validate(options => options.Settlement.Mode == "Legacy"
+                         || options.Settlement.AuthorityToken.Length >= 32,
+        "Shadow/GameData 模式必须配置用途隔离的 GameData AuthorityToken。")
     .Validate(options =>
         !builder.Environment.IsProduction()
         || !options.TokenSigningKey.StartsWith("development-only", StringComparison.OrdinalIgnoreCase),
@@ -109,6 +127,21 @@ builder.Services.AddSingleton<ILobbyStore>(provider =>
 
     return ActivatorUtilities.CreateInstance<RedisPostgresLobbyStore>(provider);
 });
+// 模块化端口暂由兼容聚合存储适配，后续调用方可以逐步停止依赖 ILobbyStore 大接口。
+builder.Services.AddSingleton<IRoomReader>(
+    provider => provider.GetRequiredService<ILobbyStore>());
+builder.Services.AddSingleton<IRoomWriter>(
+    provider => provider.GetRequiredService<ILobbyStore>());
+builder.Services.AddSingleton<LobbyReadService>();
+builder.Services.AddSingleton<ReconnectionService>();
+builder.Services.AddSingleton<IMatchmakingTicketStore>(provider =>
+    provider.GetRequiredService<IOptions<LobbyOptions>>().Value.Persistence.Mode
+        .Equals("RedisPostgres", StringComparison.OrdinalIgnoreCase)
+        ? ActivatorUtilities.CreateInstance<PostgresMatchmakingTicketStore>(provider)
+        : ActivatorUtilities.CreateInstance<InMemoryMatchmakingTicketStore>(provider));
+builder.Services.AddSingleton<
+    IMatchmakingExpansionPolicy,
+    FixedMatchmakingExpansionPolicy>();
 builder.Services.AddSingleton<IRoomMonitoringStore>(provider =>
     provider.GetRequiredService<IOptions<LobbyOptions>>().Value.Persistence.Mode
         .Equals("RedisPostgres", StringComparison.OrdinalIgnoreCase)
