@@ -84,6 +84,9 @@ public static class MahjongObservabilityExtensions
                     new TraceIdRatioBasedSampler(
                         Math.Clamp(settings.TraceSampleRatio, 0, 1))))
                 .AddSource(MahjongTelemetry.ActivitySourceName)
+                // 消息发布与消费使用独立 Source，确保 HTTP → Outbox → JetStream → Inbox 链路可关联。
+                .AddSource("GuiyangMahjong.Messaging")
+                .AddSource("GuiyangMahjong.Workers")
                 .AddAspNetCoreInstrumentation(instrumentation =>
                 {
                     instrumentation.Filter = context =>
@@ -103,6 +106,8 @@ public static class MahjongObservabilityExtensions
                 metrics
                     .AddMeter(MahjongTelemetry.MeterName)
                     .AddMeter("GuiyangMahjong.Admin.Monitoring")
+                    .AddMeter("GuiyangMahjong.Messaging")
+                    .AddMeter("GuiyangMahjong.Workers")
                     .AddAspNetCoreInstrumentation()
                     .AddHttpClientInstrumentation();
                 if (settings.RuntimeMetricsEnabled)

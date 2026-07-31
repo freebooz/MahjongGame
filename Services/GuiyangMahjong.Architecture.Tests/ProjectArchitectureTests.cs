@@ -589,6 +589,44 @@ public sealed class ProjectArchitectureTests
     }
 
     /// <summary>
+    /// 验证阶段9的消息边界：Workers 只能依赖契约与 BuildingBlocks，不能引用任一业务服务实现；
+    /// 同时禁止在 MVP 中并行引入 Kafka/RabbitMQ，避免形成多套投递和运维语义。
+    /// </summary>
+    [Fact]
+    public void ReliableMessaging_UsesSingleTransportAndKeepsWorkersOutOfBusinessImplementations()
+    {
+        var servicesRoot = Path.Combine(FindProjectRoot(), "Services");
+        var workersProject = Path.Combine(
+            servicesRoot,
+            "Apps",
+            "GuiyangMahjong.Workers",
+            "GuiyangMahjong.Workers.csproj");
+        var document = XDocument.Load(workersProject);
+        var projectDirectory = Path.GetDirectoryName(workersProject)!;
+        var references = document.Descendants("ProjectReference")
+            .Select(reference => Path.GetFileNameWithoutExtension(Path.GetFullPath(
+                Path.Combine(projectDirectory, reference.Attribute("Include")!.Value))))
+            .ToArray();
+        Assert.DoesNotContain(references, reference =>
+            BusinessServiceNames.Contains(reference, StringComparer.Ordinal)
+            || reference == "GuiyangMahjong.GameData");
+
+        var productionProjects = Directory.EnumerateFiles(
+            servicesRoot,
+            "*.csproj",
+            SearchOption.AllDirectories)
+            .Where(path => !path.Contains(".Tests", StringComparison.OrdinalIgnoreCase));
+        var packages = productionProjects
+            .SelectMany(path => XDocument.Load(path).Descendants("PackageReference"))
+            .Select(reference => reference.Attribute("Include")?.Value ?? string.Empty)
+            .ToArray();
+        Assert.Contains(packages, package => package.Equals("NATS.Net", StringComparison.Ordinal));
+        Assert.DoesNotContain(packages, package =>
+            package.Contains("Kafka", StringComparison.OrdinalIgnoreCase)
+            || package.Contains("RabbitMQ", StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
     /// 检查测试工程和源码不再使用程序集别名；兼容性必须通过 Contracts
     /// 中的机器契约验证，而不是共享被测服务内部类型。
     /// </summary>

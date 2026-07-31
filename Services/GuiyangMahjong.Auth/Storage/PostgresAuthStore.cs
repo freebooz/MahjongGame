@@ -1,9 +1,11 @@
 // PostgreSQL Auth 存储：事务化处理身份绑定、刷新令牌轮换、会话撤销和账号管理状态。
 // 刷新令牌只保存不可逆摘要，轮换必须单次消费；并发冲突不得产生两个有效后继令牌。
+using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text.Json;
 using GuiyangMahjong.Auth.Domain;
 using GuiyangMahjong.Auth.Players;
+using GuiyangMahjong.Contracts.Common;
 using GuiyangMahjong.Contracts.Events;
 using Npgsql;
 using NpgsqlTypes;
@@ -41,6 +43,7 @@ public sealed class PostgresAuthStore(NpgsqlDataSource postgres)
                    AND to_regclass('player.player_profiles') IS NOT NULL
                    AND to_regclass('integration.auth_devices') IS NOT NULL
                    AND to_regclass('integration.identity_outbox') IS NOT NULL
+                   AND to_regclass('identity_integration.platform_outbox') IS NOT NULL
                 """);
             return await command.ExecuteScalarAsync(cancellationToken) is true;
         }
@@ -152,6 +155,7 @@ public sealed class PostgresAuthStore(NpgsqlDataSource postgres)
               UPDATE session.auth_refresh_sessions
               SET revoked_at_utc=$1, revocation_reason='SessionPolicy'
               WHERE player_id=$2 AND revoked_at_utc IS NULL AND expires_at_utc>$1
+              RETURNING session_id
               """
             : """
               WITH active AS (
@@ -165,7 +169,9 @@ public sealed class PostgresAuthStore(NpgsqlDataSource postgres)
               SET revoked_at_utc=$1, revocation_reason='SessionPolicy'
               FROM active
               WHERE target.session_id=active.session_id
+              RETURNING target.session_id
               """;
+        var policyRevokedSessionIds = new List<string>();
         await using (var enforcePolicy = new NpgsqlCommand(policySql, connection, transaction))
         {
             enforcePolicy.Parameters.AddWithValue(now);
@@ -173,7 +179,10 @@ public sealed class PostgresAuthStore(NpgsqlDataSource postgres)
             if (session.SessionMode != "SingleDevice")
                 enforcePolicy.Parameters.AddWithValue(
                     Math.Max(0, session.MaximumActiveSessions - 1));
-            await enforcePolicy.ExecuteNonQueryAsync(cancellationToken);
+            await using var policyReader =
+                await enforcePolicy.ExecuteReaderAsync(cancellationToken);
+            while (await policyReader.ReadAsync(cancellationToken))
+                policyRevokedSessionIds.Add(policyReader.GetString(0));
         }
         await using var command = new NpgsqlCommand(
             """
@@ -188,6 +197,24 @@ public sealed class PostgresAuthStore(NpgsqlDataSource postgres)
             transaction);
         AddSessionParameters(command, session);
         await command.ExecuteNonQueryAsync(cancellationToken);
+        foreach (var revokedSessionId in policyRevokedSessionIds)
+        {
+            await AppendSessionRevocationOutboxAsync(
+                connection,
+                transaction,
+                revokedSessionId,
+                session.PlayerId,
+                "SessionPolicy",
+                now,
+                traceId: null,
+                correlationId: session.FamilyId,
+                cancellationToken);
+        }
+        await AppendSessionCreatedOutboxAsync(
+            connection,
+            transaction,
+            session,
+            cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return SessionCreationStatus.Created;
     }
@@ -350,6 +377,21 @@ public sealed class PostgresAuthStore(NpgsqlDataSource postgres)
             """, connection, transaction);
         AddSessionParameters(insert, effectiveReplacement);
         await insert.ExecuteNonQueryAsync(cancellationToken);
+        await AppendSessionRevocationOutboxAsync(
+            connection,
+            transaction,
+            currentSessionId,
+            playerId,
+            "Rotated",
+            now,
+            traceId: null,
+            correlationId: familyId,
+            cancellationToken);
+        await AppendSessionCreatedOutboxAsync(
+            connection,
+            transaction,
+            effectiveReplacement,
+            cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return new RefreshRotationResult(
             RefreshRotationStatus.Rotated,
@@ -1312,34 +1354,100 @@ public sealed class PostgresAuthStore(NpgsqlDataSource postgres)
         string? correlationId,
         CancellationToken cancellationToken)
     {
-        var payload = JsonSerializer.Serialize(
-            new
-            {
-                session_id = sessionId,
-                player_id = playerId,
-                reason_code = reasonCode,
-                revoked_at = revokedAt
-            },
-            JsonOptions);
+        var payload = new SessionRevoked(
+            SessionId.Parse(sessionId),
+            PlayerId.Parse(playerId),
+            reasonCode,
+            revokedAt);
+        var envelope = EventEnvelope.Create(
+            payload,
+            "session",
+            sessionId,
+            aggregateVersion: 0,
+            "identity-app",
+            ResolveTraceId(traceId),
+            ResolveCorrelationId(correlationId),
+            revokedAt);
+        await AppendPlatformOutboxAsync(
+            connection,
+            transaction,
+            envelope,
+            cancellationToken);
+    }
+
+    /// <summary>
+    /// 在新 Refresh Session 与身份策略同一事务中追加 SessionCreated；
+    /// 信封不包含 Token Hash、IP 或原始设备指纹。
+    /// </summary>
+    private static Task AppendSessionCreatedOutboxAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        RefreshSession session,
+        CancellationToken cancellationToken)
+    {
+        var payload = new SessionCreated(
+            SessionId.Parse(session.SessionId),
+            PlayerId.Parse(session.PlayerId),
+            DeviceId.Parse(session.DeviceId),
+            session.ExpiresAtUtc);
+        var envelope = EventEnvelope.Create(
+            payload,
+            "session",
+            session.SessionId,
+            Math.Max(0, session.SessionEpoch),
+            "identity-app",
+            ResolveTraceId(null),
+            ResolveCorrelationId(session.FamilyId),
+            session.CreatedAtUtc);
+        return AppendPlatformOutboxAsync(
+            connection,
+            transaction,
+            envelope,
+            cancellationToken);
+    }
+
+    /// <summary>
+    /// 写入统一 Outbox；完整信封与业务会话共享事务，NATS 是否可用不会影响登录事务提交。
+    /// </summary>
+    private static async Task AppendPlatformOutboxAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        EventEnvelope envelope,
+        CancellationToken cancellationToken)
+    {
         await using var command = new NpgsqlCommand(
             """
-            INSERT INTO integration.identity_outbox(
-                event_id, event_type, schema_version, aggregate_type,
-                aggregate_id, occurred_at_utc, trace_id, correlation_id, payload)
-            VALUES ($1,$2,$3,'Session',$4,$5,$6,$7,$8)
+            INSERT INTO identity_integration.platform_outbox(
+                event_id,event_type,schema_version,aggregate_type,aggregate_id,
+                aggregate_version,payload_json,occurred_at,created_at,status,
+                attempt_count,next_attempt_at)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$8,'Pending',0,$8)
             """,
             connection,
             transaction);
-        command.Parameters.AddWithValue(Guid.NewGuid());
-        command.Parameters.AddWithValue(PlatformEventTypes.SessionRevoked);
-        command.Parameters.AddWithValue(SessionRevoked.SchemaVersion);
-        command.Parameters.AddWithValue(sessionId);
-        command.Parameters.AddWithValue(revokedAt);
-        command.Parameters.AddWithValue((object?)traceId ?? DBNull.Value);
-        command.Parameters.AddWithValue((object?)correlationId ?? DBNull.Value);
-        command.Parameters.AddWithValue(NpgsqlDbType.Jsonb, payload);
+        command.Parameters.AddWithValue(envelope.EventId.Value);
+        command.Parameters.AddWithValue(envelope.EventType);
+        command.Parameters.AddWithValue(envelope.SchemaVersion);
+        command.Parameters.AddWithValue(envelope.AggregateType);
+        command.Parameters.AddWithValue(envelope.AggregateId);
+        command.Parameters.AddWithValue(envelope.AggregateVersion);
+        command.Parameters.AddWithValue(
+            NpgsqlDbType.Jsonb,
+            JsonSerializer.Serialize(envelope, JsonOptions));
+        command.Parameters.AddWithValue(envelope.OccurredAt);
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
+
+    private static string ResolveTraceId(string? traceId) =>
+        !string.IsNullOrWhiteSpace(traceId)
+            ? traceId
+            : Activity.Current?.TraceId.ToString()
+              ?? ActivityTraceId.CreateRandom().ToString();
+
+    private static CorrelationId ResolveCorrelationId(string? correlationId) =>
+        CorrelationId.TryParse(correlationId, out var parsed)
+            ? parsed
+            : CorrelationId.New();
 
     private static bool FixedTimeEquals(byte[] left, byte[] right) =>
         left.Length == right.Length && CryptographicOperations.FixedTimeEquals(left, right);

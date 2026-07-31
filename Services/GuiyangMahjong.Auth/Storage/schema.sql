@@ -238,3 +238,28 @@ CREATE TABLE IF NOT EXISTS integration.identity_outbox (
 CREATE INDEX IF NOT EXISTS ix_identity_outbox_pending
     ON integration.identity_outbox(next_retry_at_utc, occurred_at_utc)
     WHERE published_at_utc IS NULL;
+
+-- 阶段 9 标准 Outbox 使用 Identity 独占 Schema，避免与 Lobby 的 integration 名称发生共享写表。
+CREATE SCHEMA IF NOT EXISTS identity_integration;
+CREATE TABLE IF NOT EXISTS identity_integration.platform_outbox (
+    event_id TEXT PRIMARY KEY,
+    event_type TEXT NOT NULL,
+    schema_version INTEGER NOT NULL CHECK (schema_version > 0),
+    aggregate_type TEXT NOT NULL,
+    aggregate_id TEXT NOT NULL,
+    aggregate_version BIGINT NOT NULL CHECK (aggregate_version >= 0),
+    payload_json JSONB NOT NULL,
+    occurred_at TIMESTAMPTZ NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL,
+    status TEXT NOT NULL CHECK (status IN ('Pending','Processing','Published','Failed')),
+    attempt_count INTEGER NOT NULL DEFAULT 0 CHECK (attempt_count >= 0),
+    next_attempt_at TIMESTAMPTZ NOT NULL,
+    lock_owner TEXT NULL,
+    lease_expires_at TIMESTAMPTZ NULL,
+    published_at TIMESTAMPTZ NULL,
+    error_summary TEXT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_identity_platform_outbox_dispatch
+    ON identity_integration.platform_outbox(status, next_attempt_at, lease_expires_at);
+CREATE TABLE IF NOT EXISTS identity_integration.platform_outbox_archive
+    (LIKE identity_integration.platform_outbox INCLUDING ALL);

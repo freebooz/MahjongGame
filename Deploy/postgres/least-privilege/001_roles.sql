@@ -11,6 +11,7 @@ BEGIN
         'mahjong_lobby_rw',
         'mahjong_player_data_rw',
         'mahjong_game_data_rw',
+        'mahjong_workers_rw',
         'mahjong_admin_rw',
         'mahjong_monitor_ro',
         'mahjong_audit_append',
@@ -30,6 +31,7 @@ BEGIN
         'mahjong_lobby',
         'mahjong_player_data',
         'mahjong_game_data',
+        'mahjong_workers',
         'mahjong_admin',
         'mahjong_monitor',
         'mahjong_audit_writer',
@@ -50,6 +52,7 @@ GRANT mahjong_auth_rw TO mahjong_auth;
 GRANT mahjong_lobby_rw TO mahjong_lobby;
 GRANT mahjong_player_data_rw TO mahjong_player_data;
 GRANT mahjong_game_data_rw TO mahjong_game_data;
+GRANT mahjong_workers_rw TO mahjong_workers;
 GRANT mahjong_admin_rw TO mahjong_admin;
 GRANT mahjong_monitor_ro TO mahjong_monitor;
 GRANT mahjong_audit_append TO mahjong_audit_writer;
@@ -60,6 +63,7 @@ COMMENT ON ROLE mahjong_auth_rw IS 'Auth 业务表最小读写权限';
 COMMENT ON ROLE mahjong_lobby_rw IS 'Lobby 房间业务表最小读写权限';
 COMMENT ON ROLE mahjong_player_data_rw IS 'PlayerData 资产与证据表最小读写权限';
 COMMENT ON ROLE mahjong_game_data_rw IS 'GameData 结算、战绩、证据目录、排行榜与 Outbox 最小读写权限';
+COMMENT ON ROLE mahjong_workers_rw IS 'BackgroundWorkers 仅处理服务 Outbox、Worker Inbox、投影与人工失败事件';
 COMMENT ON ROLE mahjong_admin_rw IS 'Admin 管理工作流读写权限，审计账本仅追加';
 COMMENT ON ROLE mahjong_monitor_ro IS '跨域只读监控权限，不具备写入或 DDL';
 COMMENT ON ROLE mahjong_audit_append IS '审计账本追加权限，禁止修改和清空历史';

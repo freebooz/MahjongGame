@@ -2,6 +2,27 @@ groups:
   - name: mahjong-dedicated-server
     interval: 15s
     rules:
+      - alert: MahjongNatsJetStreamUnavailable
+        expr: up{job="nats-jetstream"} == 0
+        for: 2m
+        labels: {severity: critical, service: messaging}
+        annotations:
+          summary: "NATS JetStream 监控端点不可用；业务事务仍应保留在 Outbox"
+          runbook_url: "Docs/RUNBOOKS/OBSERVABILITY_ALERTS.md#mahjongnatsjetstreamunavailable"
+      - alert: MahjongJetStreamConsumerLagHigh
+        expr: max by (consumer) (mahjong_jetstream_consumer_lag) > 1000
+        for: 5m
+        labels: {severity: warning, service: workers}
+        annotations:
+          summary: "JetStream Durable Consumer 积压超过 1000 条"
+          runbook_url: "Docs/RUNBOOKS/OBSERVABILITY_ALERTS.md#mahjongjetstreamconsumerlaghigh"
+      - alert: MahjongWorkerDeadLetterDetected
+        expr: increase(mahjong_worker_dead_letter_total[5m]) > 0
+        for: 0m
+        labels: {severity: critical, service: workers}
+        annotations:
+          summary: "Worker 检测到毒消息并进入人工失败队列"
+          runbook_url: "Docs/RUNBOOKS/OBSERVABILITY_ALERTS.md#mahjongworkerdeadletterdetected"
       - alert: MahjongHeartbeatMissing
         expr: (time() - mahjong_room_heartbeat_last_seen_seconds > 30) or on() (absent(mahjong_room_heartbeat_last_seen_seconds) and absent_over_time(mahjong_room_heartbeat_received_total[30s]))
         for: 0s

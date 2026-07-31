@@ -403,7 +403,9 @@ public sealed class PostgresGameDataStore(NpgsqlDataSource dataSource) : IGameDa
         command.Parameters.AddWithValue(envelope.AggregateType);
         command.Parameters.AddWithValue(envelope.AggregateId);
         command.Parameters.AddWithValue(envelope.AggregateVersion);
-        command.Parameters.AddWithValue(envelope.Payload.GetRawText());
+        // Outbox 必须保存完整信封，Worker 才能校验 event_id、版本、Trace 和 Correlation；
+        // 仅保存 payload 会破坏跨服务追踪，并使 Subject 伪装检查失效。
+        command.Parameters.AddWithValue(JsonSerializer.Serialize(envelope, JsonOptions));
         command.Parameters.AddWithValue(envelope.OccurredAt);
         await command.ExecuteNonQueryAsync(cancellationToken);
     }

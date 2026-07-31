@@ -30,7 +30,8 @@
                       and '$(MahjongSchemaServiceName)' != 'Lobby'
                       and '$(MahjongSchemaServiceName)' != 'PlayerData'
                       and '$(MahjongSchemaServiceName)' != 'Admin'
-                      and '$(MahjongSchemaServiceName)' != 'GameData'"
+                      and '$(MahjongSchemaServiceName)' != 'GameData'
+                      and '$(MahjongSchemaServiceName)' != 'Workers'"
            Text="MahjongSchemaServiceName '$(MahjongSchemaServiceName)' 未进入中央四服务白名单；新增数据库服务必须先更新 Services/Directory.Build.targets。" />
     <Error Condition="!Exists('$(MahjongSchemaSourcePath)')"
            Text="数据库 Schema 源文件不存在：$(MahjongSchemaSourcePath)" />

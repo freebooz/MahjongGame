@@ -32,6 +32,7 @@ services:
       LOBBY_DB_PASSWORD: ${LOBBY_DB_PASSWORD:?LOBBY_DB_PASSWORD is required}
       PLAYER_DATA_DB_PASSWORD: ${PLAYER_DATA_DB_PASSWORD:?PLAYER_DATA_DB_PASSWORD is required}
       GAME_DATA_DB_PASSWORD: ${GAME_DATA_DB_PASSWORD:?GAME_DATA_DB_PASSWORD is required}
+      WORKERS_DB_PASSWORD: ${WORKERS_DB_PASSWORD:?WORKERS_DB_PASSWORD is required}
       ADMIN_DB_PASSWORD: ${ADMIN_DB_PASSWORD:?ADMIN_DB_PASSWORD is required}
       MONITOR_DB_PASSWORD: ${MONITOR_DB_PASSWORD:?MONITOR_DB_PASSWORD is required}
       AUDIT_DB_PASSWORD: ${AUDIT_DB_PASSWORD:?AUDIT_DB_PASSWORD is required}
@@ -43,6 +44,7 @@ services:
       - ../../Services/GuiyangMahjong.PlayerData/Storage:/migration/player-data:ro
       - ../../Services/GuiyangMahjong.Admin/Storage:/migration/admin:ro
       - ../../Services/Apps/GuiyangMahjong.GameData/Storage:/migration/game-data:ro
+      - ../../Services/Apps/GuiyangMahjong.Workers/Storage:/migration/workers:ro
     entrypoint: ["/bin/sh", "-ec"]
     command:
       - |
@@ -53,6 +55,7 @@ services:
         $$base -f /migration/player-data/schema.sql
         $$base -f /migration/admin/schema.sql
         $$base -f /migration/game-data/schema.sql
+        $$base -f /migration/workers/schema.sql
         $$base -f /migration/least-privilege/002_grants.sql
         $$base \
           -v migration_password="$$MIGRATION_DB_PASSWORD" \
@@ -60,6 +63,7 @@ services:
           -v lobby_password="$$LOBBY_DB_PASSWORD" \
           -v player_data_password="$$PLAYER_DATA_DB_PASSWORD" \
           -v game_data_password="$$GAME_DATA_DB_PASSWORD" \
+          -v workers_password="$$WORKERS_DB_PASSWORD" \
           -v admin_password="$$ADMIN_DB_PASSWORD" \
           -v monitor_password="$$MONITOR_DB_PASSWORD" \
           -v audit_password="$$AUDIT_DB_PASSWORD" \
@@ -84,6 +88,90 @@ services:
     cpus: ${REDIS_CPUS:-1.0}
     mem_limit: ${REDIS_MEMORY:-1g}
     pids_limit: 256
+    security_opt: ["no-new-privileges:true"]
+    logging: *logging
+
+  nats:
+    image: nats:2.12.12-alpine
+    command: ["--config", "/etc/nats/nats.conf"]
+    environment:
+      # 本地凭据只从环境注入；生产环境由 Kubernetes Secret 和独立账号权限替代。
+      NATS_USERNAME: ${NATS_USERNAME:?NATS_USERNAME is required}
+      NATS_PASSWORD: ${NATS_PASSWORD:?NATS_PASSWORD is required}
+    volumes:
+      - ../nats/local.conf:/etc/nats/nats.conf:ro
+      - nats-data:/data/jetstream
+    ports:
+      - "127.0.0.1:${NATS_CLIENT_PORT:-14222}:4222"
+      - "127.0.0.1:${NATS_MONITOR_PORT:-18222}:8222"
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--spider", "http://127.0.0.1:8222/healthz?js-enabled-only=true"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+    cpus: ${NATS_CPUS:-1.0}
+    mem_limit: ${NATS_MEMORY:-1g}
+    pids_limit: 256
+    security_opt: ["no-new-privileges:true"]
+    logging: *logging
+
+  nats-exporter:
+    image: natsio/prometheus-nats-exporter:0.17.3
+    command: ["-varz", "-jsz=all", "http://nats:8222"]
+    ports: ["127.0.0.1:${NATS_EXPORTER_PORT:-17777}:7777"]
+    depends_on:
+      nats: {condition: service_healthy}
+    restart: unless-stopped
+    cpus: ${NATS_EXPORTER_CPUS:-0.25}
+    mem_limit: ${NATS_EXPORTER_MEMORY:-128m}
+    pids_limit: 64
+    read_only: true
+    security_opt: ["no-new-privileges:true"]
+    logging: *logging
+
+  workers:
+    image: ${IMAGE_REGISTRY:-local}/guiyang-mahjong-workers:${MAHJONG_VERSION:-dev}
+    build:
+      context: ../..
+      dockerfile: Services/Apps/GuiyangMahjong.Workers/Dockerfile
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      Observability__Enabled: ${OBSERVABILITY_ENABLED:-false}
+      Observability__OtlpEndpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://host.docker.internal:4317}
+      Observability__TraceSampleRatio: ${OTEL_TRACE_SAMPLE_RATIO:-0.1}
+      Workers__PostgresConnectionString: Host=postgres;Port=5432;Database=mahjong;Username=mahjong_workers;Password=${WORKERS_DB_PASSWORD};Options=-c role=mahjong_workers_rw
+      Workers__ApplyDatabaseMigrations: "false"
+      Workers__NatsUrl: nats://nats:4222
+      Workers__NatsUsername: ${NATS_USERNAME:?NATS_USERNAME is required}
+      Workers__NatsPassword: ${NATS_PASSWORD:?NATS_PASSWORD is required}
+      Workers__StreamReplicas: "1"
+      # Compose 是单节点开发拓扑；该开关不得复制到 Kubernetes 生产清单。
+      Workers__AllowSingleNodeStream: "true"
+      Workers__OutboxSources__0__Name: identity
+      Workers__OutboxSources__0__Schema: identity_integration
+      Workers__OutboxSources__0__ConnectionString: Host=postgres;Port=5432;Database=mahjong;Username=mahjong_workers;Password=${WORKERS_DB_PASSWORD};Options=-c role=mahjong_workers_rw
+      Workers__OutboxSources__1__Name: lobby
+      Workers__OutboxSources__1__Schema: lobby_integration
+      Workers__OutboxSources__1__ConnectionString: Host=postgres;Port=5432;Database=mahjong;Username=mahjong_workers;Password=${WORKERS_DB_PASSWORD};Options=-c role=mahjong_workers_rw
+      Workers__OutboxSources__2__Name: game-data
+      Workers__OutboxSources__2__Schema: game_data_integration
+      Workers__OutboxSources__2__ConnectionString: Host=postgres;Port=5432;Database=mahjong;Username=mahjong_workers;Password=${WORKERS_DB_PASSWORD};Options=-c role=mahjong_workers_rw
+    depends_on:
+      postgres-migration: {condition: service_completed_successfully}
+      nats: {condition: service_healthy}
+    extra_hosts: ["host.docker.internal:host-gateway"]
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "--show-error", "http://127.0.0.1:8080/health/ready"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+    cpus: ${WORKERS_CPUS:-1.0}
+    mem_limit: ${WORKERS_MEMORY:-512m}
+    pids_limit: 256
+    read_only: true
+    tmpfs: ["/tmp:rw,noexec,nosuid,size=64m"]
     security_opt: ["no-new-privileges:true"]
     logging: *logging
 
@@ -526,3 +614,4 @@ services:
 volumes:
   postgres-data:
   redis-data:
+  nats-data:

@@ -115,6 +115,10 @@ CREATE TABLE IF NOT EXISTS game_data_integration.platform_outbox (
 CREATE INDEX IF NOT EXISTS ix_game_data_outbox_dispatch
     ON game_data_integration.platform_outbox(status, next_attempt_at, lease_expires_at);
 
+-- Worker 归档只移动已确认发布记录；业务结算和战绩表不参与该清理事务。
+CREATE TABLE IF NOT EXISTS game_data_integration.platform_outbox_archive
+    (LIKE game_data_integration.platform_outbox INCLUDING ALL);
+
 -- 权威结算、战绩、证据和补偿历史只允许追加；治理删除必须停写、备份并由迁移身份执行。
 CREATE OR REPLACE FUNCTION settlement.reject_immutable_mutation()
 RETURNS TRIGGER LANGUAGE plpgsql AS $$

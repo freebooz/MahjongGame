@@ -6,7 +6,8 @@ REVOKE ALL ON SCHEMA
     auth, session, player, integration,
     lobby, room, matchmaking,
     player_data, admin_monitor,
-    settlement, game_record, replay, leaderboard, game_data_integration
+    settlement, game_record, replay, leaderboard, game_data_integration,
+    identity_integration, lobby_integration, worker_integration, worker_projection
 FROM PUBLIC;
 GRANT USAGE ON SCHEMA public TO
     mahjong_lobby_rw, mahjong_monitor_ro;
@@ -19,6 +20,10 @@ GRANT USAGE ON SCHEMA player_data TO
     mahjong_player_data_rw, mahjong_monitor_ro;
 GRANT USAGE ON SCHEMA settlement, game_record, replay, leaderboard, game_data_integration TO
     mahjong_game_data_rw, mahjong_monitor_ro;
+-- Producer 只能向自己的事务 Outbox 追加；Worker 只能领取、标记和归档 Outbox，不能读取业务表。
+GRANT USAGE ON SCHEMA identity_integration TO mahjong_auth_rw, mahjong_workers_rw, mahjong_monitor_ro;
+GRANT USAGE ON SCHEMA lobby_integration TO mahjong_lobby_rw, mahjong_workers_rw, mahjong_monitor_ro;
+GRANT USAGE ON SCHEMA worker_integration, worker_projection TO mahjong_workers_rw, mahjong_monitor_ro;
 GRANT USAGE ON SCHEMA admin_monitor TO
     mahjong_admin_rw, mahjong_monitor_ro,
     mahjong_audit_append, mahjong_archive_dispatch;
@@ -36,6 +41,10 @@ ALTER SCHEMA game_record OWNER TO mahjong_migration;
 ALTER SCHEMA replay OWNER TO mahjong_migration;
 ALTER SCHEMA leaderboard OWNER TO mahjong_migration;
 ALTER SCHEMA game_data_integration OWNER TO mahjong_migration;
+ALTER SCHEMA identity_integration OWNER TO mahjong_migration;
+ALTER SCHEMA lobby_integration OWNER TO mahjong_migration;
+ALTER SCHEMA worker_integration OWNER TO mahjong_migration;
+ALTER SCHEMA worker_projection OWNER TO mahjong_migration;
 ALTER SCHEMA admin_monitor OWNER TO mahjong_migration;
 
 REVOKE ALL ON TABLE
@@ -46,6 +55,19 @@ REVOKE ALL ON ALL TABLES IN SCHEMA auth, session, player, integration FROM PUBLI
 REVOKE ALL ON ALL TABLES IN SCHEMA lobby, room, matchmaking FROM PUBLIC;
 REVOKE ALL ON ALL TABLES IN SCHEMA player_data, admin_monitor FROM PUBLIC;
 REVOKE ALL ON ALL TABLES IN SCHEMA settlement, game_record, replay, leaderboard, game_data_integration FROM PUBLIC;
+REVOKE ALL ON ALL TABLES IN SCHEMA identity_integration, lobby_integration, worker_integration, worker_projection FROM PUBLIC;
+
+-- 事务生产者只有 INSERT 权限；SELECT/UPDATE/DELETE 仅交给发布 Worker，阻止业务服务伪造已发布状态。
+GRANT INSERT ON identity_integration.platform_outbox TO mahjong_auth_rw;
+GRANT INSERT ON lobby_integration.platform_outbox TO mahjong_lobby_rw;
+GRANT SELECT, UPDATE, DELETE ON identity_integration.platform_outbox,
+    lobby_integration.platform_outbox,
+    game_data_integration.platform_outbox TO mahjong_workers_rw;
+GRANT SELECT, INSERT ON identity_integration.platform_outbox_archive,
+    lobby_integration.platform_outbox_archive,
+    game_data_integration.platform_outbox_archive TO mahjong_workers_rw;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA worker_integration, worker_projection TO mahjong_workers_rw;
+GRANT SELECT ON ALL TABLES IN SCHEMA identity_integration, lobby_integration, worker_integration, worker_projection TO mahjong_monitor_ro;
 REVOKE ALL ON ALL SEQUENCES IN SCHEMA admin_monitor FROM PUBLIC;
 REVOKE ALL ON ALL FUNCTIONS IN SCHEMA admin_monitor FROM PUBLIC;
 
@@ -67,7 +89,8 @@ BEGIN
             'auth', 'session', 'player', 'integration',
             'lobby', 'room', 'matchmaking',
             'player_data', 'admin_monitor',
-            'settlement', 'game_record', 'replay', 'leaderboard', 'game_data_integration')
+            'settlement', 'game_record', 'replay', 'leaderboard', 'game_data_integration',
+            'identity_integration', 'lobby_integration', 'worker_integration', 'worker_projection')
     LOOP
         EXECUTE format('ALTER TABLE %s OWNER TO mahjong_migration', object_record.object_name);
     END LOOP;
@@ -150,6 +173,23 @@ ALTER DEFAULT PRIVILEGES FOR ROLE mahjong_migration IN SCHEMA leaderboard
     GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO mahjong_game_data_rw;
 ALTER DEFAULT PRIVILEGES FOR ROLE mahjong_migration IN SCHEMA game_data_integration
     GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO mahjong_game_data_rw;
+-- 后续迁移创建的新消息表默认拒绝 PUBLIC；生产者仅追加，Worker 才可维护消息状态。
+ALTER DEFAULT PRIVILEGES FOR ROLE mahjong_migration IN SCHEMA identity_integration
+    REVOKE ALL ON TABLES FROM PUBLIC;
+ALTER DEFAULT PRIVILEGES FOR ROLE mahjong_migration IN SCHEMA identity_integration
+    GRANT INSERT ON TABLES TO mahjong_auth_rw;
+ALTER DEFAULT PRIVILEGES FOR ROLE mahjong_migration IN SCHEMA identity_integration
+    GRANT SELECT, UPDATE, DELETE ON TABLES TO mahjong_workers_rw;
+ALTER DEFAULT PRIVILEGES FOR ROLE mahjong_migration IN SCHEMA lobby_integration
+    REVOKE ALL ON TABLES FROM PUBLIC;
+ALTER DEFAULT PRIVILEGES FOR ROLE mahjong_migration IN SCHEMA lobby_integration
+    GRANT INSERT ON TABLES TO mahjong_lobby_rw;
+ALTER DEFAULT PRIVILEGES FOR ROLE mahjong_migration IN SCHEMA lobby_integration
+    GRANT SELECT, UPDATE, DELETE ON TABLES TO mahjong_workers_rw;
+ALTER DEFAULT PRIVILEGES FOR ROLE mahjong_migration IN SCHEMA worker_integration
+    GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO mahjong_workers_rw;
+ALTER DEFAULT PRIVILEGES FOR ROLE mahjong_migration IN SCHEMA worker_projection
+    GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO mahjong_workers_rw;
 
 -- 审计入库触发器以对象所有者执行，只允许由审计追加动作间接写入归档 Outbox。
 ALTER FUNCTION admin_monitor.enqueue_audit_archive() SECURITY DEFINER;

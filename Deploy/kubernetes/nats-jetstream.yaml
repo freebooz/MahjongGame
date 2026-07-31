@@ -1,0 +1,190 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mahjong-nats-config
+  namespace: guiyang-mahjong
+data:
+  nats.conf: |
+    server_name: $NATS_SERVER_NAME
+    port: 4222
+    http: 8222
+    jetstream {
+      domain: MAHJONG
+      store_dir: "/data/jetstream"
+      max_memory_store: 1GB
+      max_file_store: 100GB
+    }
+    cluster {
+      name: mahjong-nats
+      port: 6222
+      routes: [
+        nats://mahjong-nats-0.mahjong-nats-headless.guiyang-mahjong.svc:6222,
+        nats://mahjong-nats-1.mahjong-nats-headless.guiyang-mahjong.svc:6222,
+        nats://mahjong-nats-2.mahjong-nats-headless.guiyang-mahjong.svc:6222
+      ]
+    }
+    authorization {
+      users: [{
+        user: $NATS_USERNAME
+        password: $NATS_PASSWORD
+        permissions: {
+          publish: [
+            "identity.session.*.v1", "room.*.v1", "allocation.requested.v1",
+            "gameserver.*.v1", "player.*.v1", "match.*.v1",
+            "settlement.committed.v1", "platform.failed.v1",
+            "$JS.API.>", "$JS.ACK.>"
+          ]
+          subscribe: ["_INBOX.>"]
+        }
+      }]
+    }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mahjong-nats-headless
+  namespace: guiyang-mahjong
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector: {app: mahjong-nats}
+  ports:
+    - {name: client, port: 4222, targetPort: client}
+    - {name: cluster, port: 6222, targetPort: cluster}
+    - {name: monitor, port: 8222, targetPort: monitor}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mahjong-nats
+  namespace: guiyang-mahjong
+spec:
+  selector: {app: mahjong-nats}
+  ports:
+    - {name: client, port: 4222, targetPort: client}
+    - {name: monitor, port: 8222, targetPort: monitor}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mahjong-nats
+  namespace: guiyang-mahjong
+spec:
+  serviceName: mahjong-nats-headless
+  replicas: 3
+  podManagementPolicy: Parallel
+  selector: {matchLabels: {app: mahjong-nats}}
+  template:
+    metadata: {labels: {app: mahjong-nats}}
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: nats
+          image: nats:2.12.12-alpine
+          args: ["--config", "/etc/nats/nats.conf"]
+          env:
+            - name: NATS_SERVER_NAME
+              valueFrom: {fieldRef: {fieldPath: metadata.name}}
+            - name: NATS_USERNAME
+              valueFrom: {secretKeyRef: {name: mahjong-secrets, key: NATS_USERNAME}}
+            - name: NATS_PASSWORD
+              valueFrom: {secretKeyRef: {name: mahjong-secrets, key: NATS_PASSWORD}}
+          ports:
+            - {name: client, containerPort: 4222}
+            - {name: cluster, containerPort: 6222}
+            - {name: monitor, containerPort: 8222}
+          volumeMounts:
+            - {name: config, mountPath: /etc/nats, readOnly: true}
+            - {name: data, mountPath: /data/jetstream}
+          startupProbe:
+            httpGet: {path: "/healthz?js-enabled-only=true", port: monitor}
+            periodSeconds: 2
+            failureThreshold: 60
+          readinessProbe:
+            httpGet: {path: "/healthz?js-server-only=true", port: monitor}
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: {path: /healthz, port: monitor}
+            periodSeconds: 15
+          resources:
+            requests: {cpu: 250m, memory: 512Mi}
+            limits: {cpu: "2", memory: 2Gi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+      volumes:
+        - name: config
+          configMap: {name: mahjong-nats-config}
+  volumeClaimTemplates:
+    - metadata: {name: data}
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources: {requests: {storage: 100Gi}}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: mahjong-nats
+  namespace: guiyang-mahjong
+spec:
+  maxUnavailable: 1
+  selector: {matchLabels: {app: mahjong-nats}}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mahjong-nats-exporter
+  namespace: guiyang-mahjong
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: mahjong-nats-exporter}}
+  template:
+    metadata: {labels: {app: mahjong-nats-exporter}}
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: exporter
+          image: natsio/prometheus-nats-exporter:0.17.3
+          args: ["-varz", "-jsz=all", "http://mahjong-nats:8222"]
+          ports: [{name: metrics, containerPort: 7777}]
+          resources:
+            requests: {cpu: 25m, memory: 32Mi}
+            limits: {cpu: 200m, memory: 128Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            capabilities: {drop: [ALL]}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mahjong-nats-exporter
+  namespace: guiyang-mahjong
+spec:
+  selector: {app: mahjong-nats-exporter}
+  ports: [{name: metrics, port: 7777, targetPort: metrics}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: mahjong-nats-ingress
+  namespace: guiyang-mahjong
+spec:
+  podSelector: {matchLabels: {app: mahjong-nats}}
+  policyTypes: [Ingress]
+  ingress:
+    # 客户端端口仅允许消息 Worker；集群路由只允许 NATS 自身；监控端口只允许 exporter。
+    - from: [{podSelector: {matchLabels: {app: mahjong-workers}}}]
+      ports: [{protocol: TCP, port: 4222}]
+    - from: [{podSelector: {matchLabels: {app: mahjong-nats}}}]
+      ports: [{protocol: TCP, port: 6222}]
+    - from: [{podSelector: {matchLabels: {app: mahjong-nats-exporter}}}]
+      ports: [{protocol: TCP, port: 8222}]

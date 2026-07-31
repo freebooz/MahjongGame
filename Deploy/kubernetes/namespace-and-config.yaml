@@ -135,6 +135,24 @@ data:
   GameData__EvidenceStorage__Mode: FileSystem
   GameData__EvidenceStorage__RootDirectory: /var/lib/guiyang-mahjong/recovery
   Allocator__GameDataInternalUrl: http://mahjong-game-data:8080
+  # BackgroundWorkers 生产拓扑固定三副本 Stream；运行时不执行 DDL，业务清理由数据所有者 API 执行。
+  Workers__ApplyDatabaseMigrations: "false"
+  Workers__NatsUrl: nats://mahjong-nats.guiyang-mahjong.svc:4222
+  Workers__StreamReplicas: "3"
+  Workers__AllowSingleNodeStream: "false"
+  Workers__StreamRetentionDays: "14"
+  Workers__OutboxBatchSize: "100"
+  Workers__OutboxLeaseSeconds: "30"
+  Workers__MaximumPublishAttempts: "12"
+  Workers__ConsumerLagWarningThreshold: "1000"
+  Workers__OutboxSources__0__Name: identity
+  Workers__OutboxSources__0__Schema: identity_integration
+  Workers__OutboxSources__1__Name: lobby
+  Workers__OutboxSources__1__Schema: lobby_integration
+  Workers__OutboxSources__2__Name: game-data
+  Workers__OutboxSources__2__Schema: game_data_integration
+  Workers__SessionCleanup__Enabled: "false"
+  Workers__RoomCleanup__Enabled: "false"
 # Kubernetes 命名空间与非敏感 ConfigMap 基线：统一服务发现、区域、集群和可观测性配置。
 # Secret、密码和令牌不得放入 ConfigMap；环境特有值由部署流水线覆盖并记录版本。
 # Namespace 删除会影响全部资源，生产操作必须二次确认、审批并具备可恢复备份。

@@ -493,6 +493,238 @@ CREATE TRIGGER trg_project_player_connection_history
 AFTER INSERT ON room_event_history
 FOR EACH ROW EXECUTE FUNCTION project_player_connection_history();
 
+-- 阶段 9 使用 Lobby 独占集成 Schema，避免与 Identity 的历史 integration Schema 共享写表。
+CREATE SCHEMA IF NOT EXISTS lobby_integration;
+CREATE TABLE IF NOT EXISTS lobby_integration.platform_outbox (
+    event_id TEXT PRIMARY KEY,
+    event_type TEXT NOT NULL,
+    schema_version INTEGER NOT NULL CHECK (schema_version > 0),
+    aggregate_type TEXT NOT NULL,
+    aggregate_id TEXT NOT NULL,
+    aggregate_version BIGINT NOT NULL CHECK (aggregate_version >= 0),
+    payload_json JSONB NOT NULL,
+    occurred_at TIMESTAMPTZ NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL,
+    status TEXT NOT NULL CHECK (status IN ('Pending','Processing','Published','Failed')),
+    attempt_count INTEGER NOT NULL DEFAULT 0 CHECK (attempt_count >= 0),
+    next_attempt_at TIMESTAMPTZ NOT NULL,
+    lock_owner TEXT NULL,
+    lease_expires_at TIMESTAMPTZ NULL,
+    published_at TIMESTAMPTZ NULL,
+    error_summary TEXT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_lobby_platform_outbox_dispatch
+    ON lobby_integration.platform_outbox(status, next_attempt_at, lease_expires_at);
+CREATE TABLE IF NOT EXISTS lobby_integration.platform_outbox_archive
+    (LIKE lobby_integration.platform_outbox INCLUDING ALL);
+
+CREATE OR REPLACE FUNCTION lobby_integration.append_platform_event(
+    p_event_id TEXT,
+    p_event_type TEXT,
+    p_aggregate_type TEXT,
+    p_aggregate_id TEXT,
+    p_aggregate_version BIGINT,
+    p_occurred_at TIMESTAMPTZ,
+    p_trace_id TEXT,
+    p_payload JSONB)
+RETURNS VOID LANGUAGE plpgsql AS $$
+DECLARE
+    safe_trace_id TEXT := CASE
+        WHEN p_trace_id ~ '^[a-fA-F0-9]{32}$' THEN lower(p_trace_id)
+        ELSE md5(p_event_id || ':trace')
+    END;
+    correlation_id TEXT := md5(p_event_id || ':correlation');
+BEGIN
+    INSERT INTO lobby_integration.platform_outbox(
+        event_id,event_type,schema_version,aggregate_type,aggregate_id,
+        aggregate_version,payload_json,occurred_at,created_at,status,
+        attempt_count,next_attempt_at)
+    VALUES (
+        p_event_id,p_event_type,1,p_aggregate_type,p_aggregate_id,
+        p_aggregate_version,
+        jsonb_build_object(
+            'event_id',p_event_id,
+            'event_type',p_event_type,
+            'schema_version',1,
+            'aggregate_type',p_aggregate_type,
+            'aggregate_id',p_aggregate_id,
+            'aggregate_version',p_aggregate_version,
+            'occurred_at',p_occurred_at,
+            'producer','lobby-control',
+            'trace_id',safe_trace_id,
+            'correlation_id',correlation_id,
+            'causation_id',NULL,
+            'idempotency_key',NULL,
+            'payload',p_payload),
+        p_occurred_at,CURRENT_TIMESTAMP,'Pending',0,CURRENT_TIMESTAMP)
+    ON CONFLICT (event_id) DO NOTHING;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION lobby_integration.enqueue_room_platform_events()
+RETURNS TRIGGER LANGUAGE plpgsql AS $$
+DECLARE
+    event_key TEXT;
+    allocation_id TEXT := md5(NEW.room_id || ':' || NEW.room_epoch::text || ':allocation');
+    server_instance TEXT := COALESCE(
+        NULLIF(NEW.payload->'route'->>'serverInstanceId',''),
+        NULLIF(NEW.payload->>'pendingServerInstanceId',''));
+BEGIN
+    IF TG_OP = 'INSERT' THEN
+        event_key := md5(NEW.room_id || ':' || NEW.state_version::text || ':RoomCreated');
+        PERFORM lobby_integration.append_platform_event(
+            event_key,'room.created','room',NEW.room_id,NEW.state_version,
+            NEW.created_at_utc,NEW.payload->>'traceId',
+            jsonb_build_object(
+                'room_id',NEW.room_id,
+                'room_epoch',NEW.room_epoch,
+                'owner_player_id',NEW.payload->>'ownerPlayerId',
+                'rule_set_version',COALESCE(NEW.payload->>'ruleSetVersion','legacy-v1'),
+                'created_at',NEW.created_at_utc));
+        RETURN NEW;
+    END IF;
+
+    IF OLD.state_version IS DISTINCT FROM NEW.state_version
+       OR OLD.lifecycle IS DISTINCT FROM NEW.lifecycle THEN
+        event_key := md5(NEW.room_id || ':' || NEW.state_version::text || ':RoomStateChanged');
+        PERFORM lobby_integration.append_platform_event(
+            event_key,'room.state_changed','room',NEW.room_id,NEW.state_version,
+            NEW.updated_at_utc,NEW.payload->>'traceId',
+            jsonb_build_object(
+                'room_id',NEW.room_id,
+                'room_epoch',NEW.room_epoch,
+                'previous_state',OLD.lifecycle,
+                'current_state',NEW.lifecycle,
+                'state_version',NEW.state_version));
+    END IF;
+
+    IF NEW.lifecycle = 'Allocating' AND OLD.lifecycle IS DISTINCT FROM NEW.lifecycle THEN
+        event_key := md5(NEW.room_id || ':' || NEW.room_epoch::text || ':AllocationRequested');
+        PERFORM lobby_integration.append_platform_event(
+            event_key,'allocation.requested','room',NEW.room_id,NEW.state_version,
+            NEW.updated_at_utc,NEW.payload->>'traceId',
+            jsonb_build_object(
+                'allocation_id',allocation_id,
+                'room_id',NEW.room_id,
+                'room_epoch',NEW.room_epoch,
+                'requested_at',NEW.updated_at_utc));
+    END IF;
+
+    IF server_instance IS NOT NULL
+       AND COALESCE(OLD.payload->>'pendingServerInstanceId','')
+           IS DISTINCT FROM COALESCE(NEW.payload->>'pendingServerInstanceId','') THEN
+        event_key := md5(NEW.room_id || ':' || NEW.room_epoch::text || ':GameServerAllocated');
+        PERFORM lobby_integration.append_platform_event(
+            event_key,'game_server.allocated','room',NEW.room_id,NEW.state_version,
+            NEW.updated_at_utc,NEW.payload->>'traceId',
+            jsonb_build_object(
+                'allocation_id',allocation_id,
+                'room_id',NEW.room_id,
+                'server_instance_id',server_instance,
+                'allocated_at',NEW.updated_at_utc));
+    END IF;
+
+    IF NEW.payload->'route'->>'serverInstanceId' IS NOT NULL
+       AND COALESCE(OLD.payload->'route'->>'serverInstanceId','')
+           IS DISTINCT FROM COALESCE(NEW.payload->'route'->>'serverInstanceId','') THEN
+        event_key := md5(NEW.room_id || ':' || NEW.room_epoch::text || ':GameServerReady');
+        PERFORM lobby_integration.append_platform_event(
+            event_key,'game_server.ready','room',NEW.room_id,NEW.state_version,
+            NEW.updated_at_utc,NEW.payload->>'traceId',
+            jsonb_build_object(
+                'server_instance_id',NEW.payload->'route'->>'serverInstanceId',
+                'room_id',NEW.room_id,
+                'build_version',COALESCE(NEW.payload->>'buildVersion','unknown'),
+                'ready_at',NEW.updated_at_utc));
+    END IF;
+
+    IF NEW.lifecycle = 'Playing' AND OLD.lifecycle IS DISTINCT FROM NEW.lifecycle THEN
+        event_key := md5(NEW.room_id || ':' || NEW.state_version::text || ':MatchStarted');
+        PERFORM lobby_integration.append_platform_event(
+            event_key,'match.started','match',COALESCE(NEW.payload->>'matchId',NEW.room_id),
+            NEW.state_version,NEW.updated_at_utc,NEW.payload->>'traceId',
+            jsonb_build_object(
+                'match_id',COALESCE(NEW.payload->>'matchId',NEW.room_id),
+                'room_id',NEW.room_id,
+                'rule_set_version',COALESCE(NEW.payload->>'ruleSetVersion','legacy-v1'),
+                'started_at',NEW.updated_at_utc));
+    END IF;
+
+    IF NEW.lifecycle = 'Finished' AND OLD.lifecycle IS DISTINCT FROM NEW.lifecycle THEN
+        event_key := md5(NEW.room_id || ':' || NEW.state_version::text || ':MatchFinished');
+        PERFORM lobby_integration.append_platform_event(
+            event_key,'match.finished','match',COALESCE(NEW.payload->>'matchId',NEW.room_id),
+            NEW.state_version,NEW.updated_at_utc,NEW.payload->>'traceId',
+            jsonb_build_object(
+                'match_id',COALESCE(NEW.payload->>'matchId',NEW.room_id),
+                'room_id',NEW.room_id,
+                'result_digest',md5(NEW.payload::text),
+                'finished_at',NEW.updated_at_utc));
+    END IF;
+
+    IF NEW.lifecycle IN ('Aborted','Archived')
+       AND OLD.lifecycle IS DISTINCT FROM NEW.lifecycle THEN
+        event_key := md5(NEW.room_id || ':' || NEW.state_version::text || ':RoomTerminated');
+        PERFORM lobby_integration.append_platform_event(
+            event_key,'room.terminated','room',NEW.room_id,NEW.state_version,
+            NEW.updated_at_utc,NEW.payload->>'traceId',
+            jsonb_build_object(
+                'room_id',NEW.room_id,
+                'room_epoch',NEW.room_epoch,
+                'reason_code',NEW.lifecycle,
+                'terminated_at',NEW.updated_at_utc));
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_enqueue_room_platform_events ON lobby_rooms;
+CREATE TRIGGER trg_enqueue_room_platform_events
+AFTER INSERT OR UPDATE OF payload,lifecycle,state_version,room_epoch ON lobby_rooms
+FOR EACH ROW EXECUTE FUNCTION lobby_integration.enqueue_room_platform_events();
+
+CREATE OR REPLACE FUNCTION lobby_integration.enqueue_connection_platform_event()
+RETURNS TRIGGER LANGUAGE plpgsql AS $$
+DECLARE
+    target_state TEXT := NEW.payload->'data'->>'to';
+    player_id TEXT := NEW.payload->'data'->>'playerId';
+    platform_type TEXT;
+    platform_payload JSONB;
+BEGIN
+    IF NEW.event_type <> 'PlayerConnectionChanged'
+       OR target_state NOT IN ('Connected','Disconnected')
+       OR COALESCE(player_id,'') = '' THEN
+        RETURN NEW;
+    END IF;
+    platform_type := CASE target_state
+        WHEN 'Connected' THEN 'player.connected'
+        ELSE 'player.disconnected'
+    END;
+    platform_payload := CASE target_state
+        WHEN 'Connected' THEN jsonb_build_object(
+            'room_id',NEW.room_id,
+            'player_id',player_id,
+            'server_instance_id',COALESCE(
+                NEW.payload->'data'->>'serverInstanceId','unknown-server'),
+            'connected_at',NEW.occurred_at_utc)
+        ELSE jsonb_build_object(
+            'room_id',NEW.room_id,
+            'player_id',player_id,
+            'reason_code',COALESCE(NEW.payload->'data'->>'reason','NetworkLost'),
+            'disconnected_at',NEW.occurred_at_utc)
+    END;
+    PERFORM lobby_integration.append_platform_event(
+        replace(NEW.event_id::text,'-',''),platform_type,'room',NEW.room_id,
+        NEW.state_sequence,NEW.occurred_at_utc,NEW.trace_id,platform_payload);
+    RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_enqueue_connection_platform_event ON room_event_history;
+CREATE TRIGGER trg_enqueue_connection_platform_event
+AFTER INSERT ON room_event_history
+FOR EACH ROW EXECUTE FUNCTION lobby_integration.enqueue_connection_platform_event();
+
 -- 为升级前仍在房间中的玩家补齐可查询起点；精确离开时间只从本迁移启用后保证。
 INSERT INTO player_room_history(
     player_id, room_id, match_id, joined_at_utc)
