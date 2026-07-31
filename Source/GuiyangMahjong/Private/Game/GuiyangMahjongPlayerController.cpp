@@ -265,6 +265,20 @@ void AGuiyangMahjongPlayerController::Server_RequestLeaveRoom_Implementation()
     RecordServerRpcTelemetry(TEXT("Server.RequestLeaveRoom"), StartedAtSeconds, false, Handler == nullptr);
 }
 
+void AGuiyangMahjongPlayerController::Server_RequestSetTrustee_Implementation(
+    const bool bEnabled)
+{
+    const double StartedAtSeconds = FPlatformTime::Seconds();
+    ++ServerRpcReceivedCount;
+    IGuiyangServerRequestHandler* Handler = GetServerRequestHandler();
+    if (Handler)
+    {
+        Handler->HandleSetTrustee(this, bEnabled);
+    }
+    RecordServerRpcTelemetry(
+        TEXT("Server.RequestSetTrustee"), StartedAtSeconds, false, Handler == nullptr);
+}
+
 void AGuiyangMahjongPlayerController::Server_RequestNextRound_Implementation()
 {
     const double StartedAtSeconds = FPlatformTime::Seconds();
@@ -390,4 +404,15 @@ void AGuiyangMahjongPlayerController::Client_ShowFinalSettlement_Implementation(
 {
     if (IGuiyangClientControllerBridge* Bridge = GetClientBridge()) Bridge->NotifyFinalSettlement(Result);
     OnFinalSettlementShown.Broadcast(Result);
+}
+
+void AGuiyangMahjongPlayerController::Client_ConfirmLeaveRoom_Implementation()
+{
+    CompleteRemoteReturnToLobby();
+}
+
+void AGuiyangMahjongPlayerController::Client_UpdateTrusteeState_Implementation(
+    const bool bEnabled)
+{
+    OnTrusteeStateChanged.Broadcast(bEnabled);
 }

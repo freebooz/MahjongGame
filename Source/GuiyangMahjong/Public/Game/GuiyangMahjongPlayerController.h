@@ -14,6 +14,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FMahjongSettlementShown, const FMahj
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FMahjongErrorShown, const FString&, Message);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FMahjongReconnectRestored, const FMahjongReconnectSnapshot&, Snapshot);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FMahjongFinalSettlementShown, const FMahjongFinalSettlementResult&, Result);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FMahjongTrusteeStateChanged, bool, bEnabled);
 
 class IGuiyangClientControllerBridge;
 class IGuiyangServerRequestHandler;
@@ -60,6 +61,7 @@ public:
     UPROPERTY(BlueprintAssignable, Category="Mahjong|UI") FMahjongErrorShown OnErrorShown;
     UPROPERTY(BlueprintAssignable, Category="Mahjong|UI") FMahjongReconnectRestored OnReconnectRestored;
     UPROPERTY(BlueprintAssignable, Category="Mahjong|UI") FMahjongFinalSettlementShown OnFinalSettlementShown;
+    UPROPERTY(BlueprintAssignable, Category="Mahjong|UI") FMahjongTrusteeStateChanged OnTrusteeStateChanged;
 
     /** 直接连接指定地址；主要用于本地开发和回退路径。 */
     UFUNCTION(BlueprintCallable, Category="Mahjong|Network")
@@ -94,6 +96,8 @@ public:
     UFUNCTION(Server, Reliable) void Server_RequestReady();
     /** 请求离开当前房间，由服务端完成座位释放和房主迁移。 */
     UFUNCTION(Server, Reliable) void Server_RequestLeaveRoom();
+    /** 显式切换本玩家托管状态；服务端校验座位与牌局状态后回传最终状态。 */
+    UFUNCTION(Server, Reliable) void Server_RequestSetTrustee(bool bEnabled);
     /** 结算阶段确认进入下一局；重复确认必须保持幂等。 */
     UFUNCTION(Server, Reliable) void Server_RequestNextRound();
     /** 旧客户端出牌兼容入口，服务端会转换为统一动作并执行版本校验。 */
@@ -119,6 +123,10 @@ public:
         const FMahjongReconnectSnapshot& Snapshot, const TArray<FMahjongAction>& AvailableActions);
     /** 展示比赛结束后的最终排名；该结果只读且来源于权威服务器。 */
     UFUNCTION(Client, Reliable) void Client_ShowFinalSettlement(const FMahjongFinalSettlementResult& Result);
+    /** 权威离房完成后才允许客户端断开牌桌并返回大厅。 */
+    UFUNCTION(Client, Reliable) void Client_ConfirmLeaveRoom();
+    /** 同步权威托管状态，驱动右上角托管按钮文字与状态。 */
+    UFUNCTION(Client, Reliable) void Client_UpdateTrusteeState(bool bEnabled);
 
     /** 返回下一次连接时附带的玩家显示名。 */
     UFUNCTION(BlueprintPure, Category="Mahjong|Network")

@@ -32,6 +32,8 @@ public:
     /** 高亮指定唯一牌 ID，不改变权威手牌。 */
     void SetSelectedTile(int32 UniqueId);
     void SetHoveredTile(int32 UniqueId);
+    /** Only true when the selected local tile component has completed its 2.5 cm lift. */
+    bool IsLocalHandTileRaised(int32 UniqueId) const;
     /** Resolve the exact visible local-hand mesh below the mouse cursor. */
     int32 GetLocalHandTileUnderCursor(APlayerController* PlayerController) const;
     /** 将服务端绝对牌墙方位转换为当前客户端以自己为南方的相对方位。 */

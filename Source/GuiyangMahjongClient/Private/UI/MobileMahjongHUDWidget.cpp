@@ -3,6 +3,8 @@
 #include "UI/MobileDiscardTileWidget.h"
 #include "UI/MobileErrorToastWidget.h"
 #include "UI/MobileHandTileWidget.h"
+#include "UI/MobileRuleSummaryWidget.h"
+#include "UI/MobileSettingsWidget.h"
 #include "UI/MobileSettlementWidget.h"
 #include "Game/Mahjong3DTableActor.h"
 #include "Game/GuiyangMahjongGameState.h"
@@ -94,6 +96,8 @@ void UMobileMahjongHUDWidget::NativeConstruct()
     // Keep controls above the enlarged south hand, matching the mobile reference layout.
     if (ActionButtonPanel)
     {
+        ActionButtonPanel->OnPlayTileRequested.AddUniqueDynamic(
+            this, &ThisClass::HandlePlayTileButtonRequested);
         if (UCanvasPanelSlot* ActionSlot =
             Cast<UCanvasPanelSlot>(ActionButtonPanel->Slot))
         {
@@ -138,8 +142,9 @@ void UMobileMahjongHUDWidget::NativeConstruct()
         PlaceTopRight(MenuLabels[MenuIndex], FVector2D(CenterX, 76.0f),
             FVector2D(92.0f, 38.0f), FVector2D(0.5f, 0.0f));
     }
-    PlaceTopRight(TEXT("Btn_ReturnLobby"), FVector2D(-8.0f, 8.0f),
-        FVector2D(96.0f, 112.0f), FVector2D(1.0f, 0.0f));
+    PlaceTopRight(TEXT("Btn_ReturnLobby"), FVector2D(-35.0f, 8.0f),
+        FVector2D(96.0f, 112.0f), FVector2D(0.5f, 0.0f));
+    EnsureTopRightInteractionButtons();
     ApplyPlaceholderAvatars();
     EnsureSeatIndicators();
     if (Txt_RoomId)
@@ -213,6 +218,8 @@ void UMobileMahjongHUDWidget::NativeConstruct()
         PC->OnSettlementShown.AddUniqueDynamic(this, &ThisClass::HandleSettlement);
         PC->OnFinalSettlementShown.AddUniqueDynamic(this, &ThisClass::HandleFinalSettlement);
         PC->OnErrorShown.AddUniqueDynamic(this, &ThisClass::HandleError);
+        PC->OnTrusteeStateChanged.AddUniqueDynamic(
+            this, &ThisClass::HandleTrusteeStateChanged);
         HandleAvailableActions(PC->GetLastAvailableActions());
     }
     if (Btn_Ready)
@@ -223,6 +230,19 @@ void UMobileMahjongHUDWidget::NativeConstruct()
     {
         Btn_ReturnLobby->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleReturnLobby);
     }
+    if (Btn_MenuRules)
+    {
+        Btn_MenuRules->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleRules);
+    }
+    if (Btn_MenuSettings)
+    {
+        Btn_MenuSettings->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleSettings);
+    }
+    if (Btn_MenuTrustee)
+    {
+        Btn_MenuTrustee->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleTrustee);
+    }
+    UpdateTrusteeMenuLabel();
 
     // The old 2D tiles remain only as transparent local-hand hit targets. The
     // panel itself must not intercept input, but its tile-button children must
@@ -383,6 +403,8 @@ void UMobileMahjongHUDWidget::NativeDestruct()
         PC->OnSettlementShown.RemoveDynamic(this, &ThisClass::HandleSettlement);
         PC->OnFinalSettlementShown.RemoveDynamic(this, &ThisClass::HandleFinalSettlement);
         PC->OnErrorShown.RemoveDynamic(this, &ThisClass::HandleError);
+        PC->OnTrusteeStateChanged.RemoveDynamic(
+            this, &ThisClass::HandleTrusteeStateChanged);
     }
     if (Btn_Ready)
     {
@@ -391,6 +413,33 @@ void UMobileMahjongHUDWidget::NativeDestruct()
     if (Btn_ReturnLobby)
     {
         Btn_ReturnLobby->OnClicked.RemoveDynamic(this, &ThisClass::HandleReturnLobby);
+    }
+    if (Btn_MenuRules)
+    {
+        Btn_MenuRules->OnClicked.RemoveDynamic(this, &ThisClass::HandleRules);
+    }
+    if (Btn_MenuSettings)
+    {
+        Btn_MenuSettings->OnClicked.RemoveDynamic(this, &ThisClass::HandleSettings);
+    }
+    if (Btn_MenuTrustee)
+    {
+        Btn_MenuTrustee->OnClicked.RemoveDynamic(this, &ThisClass::HandleTrustee);
+    }
+    if (RuleSummaryInstance)
+    {
+        RuleSummaryInstance->RemoveFromParent();
+        RuleSummaryInstance = nullptr;
+    }
+    if (SettingsInstance)
+    {
+        SettingsInstance->RemoveFromParent();
+        SettingsInstance = nullptr;
+    }
+    if (ActionButtonPanel)
+    {
+        ActionButtonPanel->OnPlayTileRequested.RemoveDynamic(
+            this, &ThisClass::HandlePlayTileButtonRequested);
     }
     if (AGuiyangMahjongGameState* GS = GetWorld()->GetGameState<AGuiyangMahjongGameState>())
     {
@@ -417,14 +466,204 @@ void UMobileMahjongHUDWidget::HandleReady()
 
 void UMobileMahjongHUDWidget::HandleReturnLobby()
 {
+    if (bExitRequestInFlight)
+    {
+        return;
+    }
+    bExitRequestInFlight = true;
+    SetTopRightButtonsEnabled(false);
     if (AGuiyangMahjongPlayerController* PC = Cast<AGuiyangMahjongPlayerController>(GetOwningPlayer()))
     {
         PC->ReturnToLobby();
+        return;
+    }
+    bExitRequestInFlight = false;
+    SetTopRightButtonsEnabled(true);
+}
+
+void UMobileMahjongHUDWidget::HandleRules()
+{
+    if (RuleSummaryInstance && RuleSummaryInstance->IsInViewport())
+    {
+        RuleSummaryInstance->RemoveFromParent();
+        return;
+    }
+
+    if (!RuleSummaryInstance)
+    {
+        UClass* RuleSummaryClass = LoadClass<UMobileRuleSummaryWidget>(nullptr,
+            TEXT("/Game/UI/Components/WBP_RuleSummary.WBP_RuleSummary_C"));
+        if (!RuleSummaryClass)
+        {
+            HandleError(TEXT("无法加载房间规则界面"));
+            return;
+        }
+        RuleSummaryInstance = CreateWidget<UMobileRuleSummaryWidget>(
+            GetOwningPlayer(), RuleSummaryClass);
+    }
+    if (!RuleSummaryInstance)
+    {
+        HandleError(TEXT("无法创建房间规则界面"));
+        return;
+    }
+
+    RuleSummaryInstance->SetRuleSnapshot(
+        CachedRoomState.RuleSnapshot,
+        CachedRoomState.RoomInfo.RoundCount,
+        CachedRoomState.RoomInfo.bPasswordProtected);
+    RuleSummaryInstance->SetDesiredSizeInViewport(FVector2D(560.0f, 440.0f));
+    RuleSummaryInstance->SetPositionInViewport(FVector2D(680.0f, 260.0f), false);
+    RuleSummaryInstance->AddToViewport(230);
+}
+
+void UMobileMahjongHUDWidget::HandleSettings()
+{
+    if (SettingsInstance && SettingsInstance->IsInViewport())
+    {
+        return;
+    }
+    if (!SettingsInstance)
+    {
+        UClass* SettingsClass = LoadClass<UMobileSettingsWidget>(nullptr,
+            TEXT("/Game/UI/Dialogs/WBP_Settings.WBP_Settings_C"));
+        if (!SettingsClass)
+        {
+            HandleError(TEXT("无法加载本地设置界面"));
+            return;
+        }
+        SettingsInstance = CreateWidget<UMobileSettingsWidget>(
+            GetOwningPlayer(), SettingsClass);
+    }
+    if (!SettingsInstance)
+    {
+        HandleError(TEXT("无法创建本地设置界面"));
+        return;
+    }
+    SettingsInstance->AddToViewport(240);
+}
+
+void UMobileMahjongHUDWidget::HandleTrustee()
+{
+    if (bTrusteeRequestInFlight)
+    {
+        return;
+    }
+    AGuiyangMahjongPlayerController* PC =
+        Cast<AGuiyangMahjongPlayerController>(GetOwningPlayer());
+    if (!PC)
+    {
+        return;
+    }
+    bTrusteeRequestInFlight = true;
+    if (Btn_MenuTrustee)
+    {
+        Btn_MenuTrustee->SetIsEnabled(false);
+    }
+    PC->Server_RequestSetTrustee(!bLocalTrusteeEnabled);
+}
+
+void UMobileMahjongHUDWidget::HandleTrusteeStateChanged(const bool bEnabled)
+{
+    bLocalTrusteeEnabled = bEnabled;
+    bTrusteeRequestInFlight = false;
+    UpdateTrusteeMenuLabel();
+    if (Btn_MenuTrustee)
+    {
+        const bool bPlaying =
+            CachedRoomState.Lifecycle == EMahjongRoomLifecycle::Playing
+            || CachedRoomState.Lifecycle == EMahjongRoomLifecycle::Starting
+            || CachedRoomState.Lifecycle == EMahjongRoomLifecycle::WaitingNextRound;
+        Btn_MenuTrustee->SetIsEnabled(bPlaying && !bExitRequestInFlight);
+    }
+}
+
+void UMobileMahjongHUDWidget::EnsureTopRightInteractionButtons()
+{
+    if (!WidgetTree)
+    {
+        return;
+    }
+    UCanvasPanel* RootCanvas = Cast<UCanvasPanel>(WidgetTree->RootWidget);
+    if (!RootCanvas)
+    {
+        UE_LOG(LogMahjongUI, Error,
+            TEXT("游戏房间根控件不是画布，无法创建右上角交互按钮"));
+        return;
+    }
+
+    const auto MakeTransparent = [](UButton* Button)
+    {
+        if (!Button)
+        {
+            return;
+        }
+        FButtonStyle Style = Button->GetStyle();
+        Style.Normal.DrawAs = ESlateBrushDrawType::NoDrawType;
+        Style.Hovered.DrawAs = ESlateBrushDrawType::NoDrawType;
+        Style.Pressed.DrawAs = ESlateBrushDrawType::NoDrawType;
+        Style.Disabled.DrawAs = ESlateBrushDrawType::NoDrawType;
+        Button->SetStyle(Style);
+        Button->SetBackgroundColor(FLinearColor::Transparent);
+    };
+    const auto AddHitTarget =
+        [this, RootCanvas, &MakeTransparent](
+            const FName Name, const float CenterX) -> UButton*
+    {
+        UButton* Button = WidgetTree->ConstructWidget<UButton>(
+            UButton::StaticClass(), Name);
+        MakeTransparent(Button);
+        UCanvasPanelSlot* Slot = RootCanvas->AddChildToCanvas(Button);
+        Slot->SetAnchors(FAnchors(1.0f, 0.0f));
+        Slot->SetAlignment(FVector2D(0.5f, 0.0f));
+        Slot->SetPosition(FVector2D(CenterX, 8.0f));
+        Slot->SetSize(FVector2D(96.0f, 112.0f));
+        Slot->SetZOrder(120);
+        return Button;
+    };
+
+    Btn_MenuRules = AddHitTarget(TEXT("Btn_MenuRules_Runtime"), -350.0f);
+    Btn_MenuSettings = AddHitTarget(TEXT("Btn_MenuSettings_Runtime"), -245.0f);
+    Btn_MenuTrustee = AddHitTarget(TEXT("Btn_MenuTrustee_Runtime"), -140.0f);
+    MakeTransparent(Btn_ReturnLobby);
+    if (Btn_ReturnLobby && Btn_ReturnLobby->GetContent())
+    {
+        // The authored icon and label remain visible behind this hit target.
+        // Collapse the legacy text child so it cannot duplicate the menu label.
+        Btn_ReturnLobby->GetContent()->SetVisibility(ESlateVisibility::Collapsed);
+    }
+}
+
+void UMobileMahjongHUDWidget::UpdateTrusteeMenuLabel()
+{
+    if (UTextBlock* TrusteeLabel = WidgetTree
+        ? Cast<UTextBlock>(WidgetTree->FindWidget(TEXT("Txt_Menu_Trustee")))
+        : nullptr)
+    {
+        TrusteeLabel->SetText(FText::FromString(
+            bLocalTrusteeEnabled ? TEXT("取消托管") : TEXT("托管")));
+        TrusteeLabel->SetColorAndOpacity(FSlateColor(
+            bLocalTrusteeEnabled
+                ? FLinearColor(0.25f, 0.85f, 1.0f, 1.0f)
+                : FLinearColor(1.0f, 0.78f, 0.32f, 1.0f)));
+    }
+}
+
+void UMobileMahjongHUDWidget::SetTopRightButtonsEnabled(const bool bEnabled)
+{
+    for (UButton* Button :
+        {Btn_MenuRules.Get(), Btn_MenuSettings.Get(),
+         Btn_MenuTrustee.Get(), Btn_ReturnLobby.Get()})
+    {
+        if (Button)
+        {
+            Button->SetIsEnabled(bEnabled);
+        }
     }
 }
 
 void UMobileMahjongHUDWidget::RefreshRoomState(const FMahjongRoomState& State, const int32 LocalSeat)
 {
+    CachedRoomState = State;
     CachedDealerSeat = State.RoomInfo.DealerSeat;
     Txt_RoomId->SetText(FText::FromString(BuildRoomHeaderText(State)));
     RefreshSeatIndicators(CachedPublicState.CurrentTurnSeat, LocalSeat);
@@ -438,6 +677,16 @@ void UMobileMahjongHUDWidget::RefreshRoomState(const FMahjongRoomState& State, c
     const bool bReadyStage = State.Lifecycle == EMahjongRoomLifecycle::Creating
         || State.Lifecycle == EMahjongRoomLifecycle::WaitingForPlayers
         || State.Lifecycle == EMahjongRoomLifecycle::ReadyCheck;
+    if (Btn_MenuTrustee)
+    {
+        const bool bTrusteeAllowed =
+            State.Lifecycle == EMahjongRoomLifecycle::Starting
+            || State.Lifecycle == EMahjongRoomLifecycle::Playing
+            || State.Lifecycle == EMahjongRoomLifecycle::WaitingNextRound;
+        Btn_MenuTrustee->SetIsEnabled(
+            bTrusteeAllowed && !bTrusteeRequestInFlight
+            && !bExitRequestInFlight);
+    }
     if (ActionButtonPanel)
     {
         ActionButtonPanel->SetVisibility(bReadyStage || State.Lifecycle == EMahjongRoomLifecycle::Starting
@@ -530,6 +779,7 @@ void UMobileMahjongHUDWidget::NativeTick(const FGeometry& MyGeometry, const floa
             }
         }
     }
+    RefreshPlayTileButtonState();
     if (bVisualReviewMode)
     {
         Txt_Countdown->SetVisibility(ESlateVisibility::HitTestInvisible);
@@ -750,16 +1000,16 @@ void UMobileMahjongHUDWidget::RebuildPrivateHand()
         UE_LOG(LogMahjongUI, Warning, TEXT("尚未找到 WBP_HandTile，私有手牌暂不生成可视组件"));
         return;
     }
-    const bool bCanPlay = CachedPublicState.Phase == EMahjongTablePhase::PlayerTurn
+    const bool bCanPlay =
+        CachedPublicState.Phase == EMahjongTablePhase::PlayerTurn
         && CachedPublicState.CurrentTurnSeat == CachedPrivateState.SeatIndex;
     for (int32 TileIndex = 0; TileIndex < CachedPrivateState.Hand.Tiles.Num(); ++TileIndex)
     {
         const FMahjongTile& Tile = CachedPrivateState.Hand.Tiles[TileIndex];
         if (UMobileHandTileWidget* TileWidget = CreateWidget<UMobileHandTileWidget>(GetOwningPlayer(), TileWidgetClass))
         {
-            TileWidget->SetTile(Tile, bCanPlay);
+            TileWidget->SetTile(Tile);
             TileWidget->OnTileSelected.AddUniqueDynamic(this, &ThisClass::HandleTileSelected);
-            TileWidget->OnPlayRequested.AddUniqueDynamic(this, &ThisClass::HandleTilePlayRequested);
             TileWidget->OnTileHovered.AddUniqueDynamic(this, &ThisClass::HandleTileHovered);
             TileWidget->OnTileUnhovered.AddUniqueDynamic(this, &ThisClass::HandleTileUnhovered);
             if (Tile.UniqueId == SelectedHandTileId)
@@ -781,6 +1031,7 @@ void UMobileMahjongHUDWidget::RebuildPrivateHand()
     {
         Table3DActor->SetSelectedTile(SelectedHandTileId);
     }
+    RefreshPlayTileButtonState();
     UE_LOG(LogMahjongUI, Log, TEXT("私有手牌 UI 刷新：%d 张，可出牌=%s"),
         CachedPrivateState.Hand.Tiles.Num(), bCanPlay ? TEXT("是") : TEXT("否"));
 }
@@ -920,6 +1171,30 @@ void UMobileMahjongHUDWidget::RefreshJiDisplay()
     Txt_JiEvents->SetText(FText::FromString(FString::Join(Lines, TEXT("\n"))));
 }
 
+void UMobileMahjongHUDWidget::RefreshPlayTileButtonState()
+{
+    if (!ActionButtonPanel)
+    {
+        return;
+    }
+
+    const bool bIsCurrentPlayer = bHasPrivateState
+        && CachedPublicState.Phase == EMahjongTablePhase::PlayerTurn
+        && CachedPublicState.CurrentTurnSeat == CachedPrivateState.SeatIndex;
+    const bool bHasRaisedSelectedTile = bIsCurrentPlayer
+        && SelectedHandTile
+        && SelectedHandTileId != INDEX_NONE
+        && Table3DActor
+        && Table3DActor->IsLocalHandTileRaised(SelectedHandTileId);
+    if (bIsCurrentPlayer)
+    {
+        ActionButtonPanel->SetVisibility(
+            ESlateVisibility::SelfHitTestInvisible);
+    }
+    ActionButtonPanel->SetPlayTileState(
+        bIsCurrentPlayer, bHasRaisedSelectedTile, SelectedHandTileId);
+}
+
 void UMobileMahjongHUDWidget::HandleTileSelected(UMobileHandTileWidget* TileWidget)
 {
     const int32 NewSelectedTileId = TileWidget
@@ -959,22 +1234,24 @@ void UMobileMahjongHUDWidget::HandleTileSelected(UMobileHandTileWidget* TileWidg
     {
         Table3DActor->SetSelectedTile(NewSelectedTileId);
     }
+    RefreshPlayTileButtonState();
 }
 
-void UMobileMahjongHUDWidget::HandleTilePlayRequested(UMobileHandTileWidget* TileWidget)
+void UMobileMahjongHUDWidget::HandlePlayTileButtonRequested(
+    const int32 TileUniqueId)
 {
-    if (!TileWidget)
-    {
-        return;
-    }
     const bool bIsCurrentPlayer = bHasPrivateState
         && CachedPublicState.Phase == EMahjongTablePhase::PlayerTurn
         && CachedPublicState.CurrentTurnSeat == CachedPrivateState.SeatIndex;
-    if (!bIsCurrentPlayer)
+    const bool bIsSelectedAndRaised = SelectedHandTile
+        && SelectedHandTileId == TileUniqueId
+        && Table3DActor
+        && Table3DActor->IsLocalHandTileRaised(TileUniqueId);
+    if (!bIsCurrentPlayer || !bIsSelectedAndRaised)
     {
         return;
     }
-    const int32 PlayedTileId = TileWidget->GetTileData().UniqueId;
+    const int32 PlayedTileId = TileUniqueId;
     SelectedHandTile = nullptr;
     SelectedHandTileId = INDEX_NONE;
     for (int32 ChildIndex = 0;
@@ -1000,6 +1277,7 @@ void UMobileMahjongHUDWidget::HandleTilePlayRequested(UMobileHandTileWidget* Til
     {
         PC->RequestTableAction(EMahjongActionType::Play, PlayedTileId);
     }
+    RefreshPlayTileButtonState();
 }
 
 void UMobileMahjongHUDWidget::HandleTileHovered(UMobileHandTileWidget* TileWidget)
@@ -1081,6 +1359,20 @@ void UMobileMahjongHUDWidget::HandleFinalSettlement(const FMahjongFinalSettlemen
 
 void UMobileMahjongHUDWidget::HandleError(const FString& Message)
 {
+    if (bExitRequestInFlight)
+    {
+        bExitRequestInFlight = false;
+        SetTopRightButtonsEnabled(true);
+        const bool bTrusteeAllowed =
+            CachedRoomState.Lifecycle == EMahjongRoomLifecycle::Starting
+            || CachedRoomState.Lifecycle == EMahjongRoomLifecycle::Playing
+            || CachedRoomState.Lifecycle == EMahjongRoomLifecycle::WaitingNextRound;
+        if (Btn_MenuTrustee)
+        {
+            Btn_MenuTrustee->SetIsEnabled(
+                bTrusteeAllowed && !bTrusteeRequestInFlight);
+        }
+    }
     if (!ErrorToastInstance)
     {
         UClass* ErrorClass = LoadClass<UMobileErrorToastWidget>(nullptr, TEXT("/Game/UI/Components/WBP_ErrorToast.WBP_ErrorToast_C"));

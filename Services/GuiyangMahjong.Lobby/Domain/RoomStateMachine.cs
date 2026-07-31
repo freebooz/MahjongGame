@@ -9,6 +9,15 @@ public static class RoomStateMachine
     private static readonly IReadOnlyDictionary<RoomLifecycle, RoomLifecycle[]> Allowed =
         new Dictionary<RoomLifecycle, RoomLifecycle[]>
         {
+<<<<<<< HEAD
+            [RoomLifecycle.Creating] = [RoomLifecycle.Allocating, RoomLifecycle.Failed],
+            [RoomLifecycle.Allocating] = [RoomLifecycle.Waiting, RoomLifecycle.Failed, RoomLifecycle.Closed],
+            [RoomLifecycle.Waiting] = [RoomLifecycle.Playing, RoomLifecycle.Closed, RoomLifecycle.Failed],
+            [RoomLifecycle.Playing] = [RoomLifecycle.Waiting, RoomLifecycle.Settling, RoomLifecycle.Failed],
+            [RoomLifecycle.Settling] = [RoomLifecycle.Waiting, RoomLifecycle.Closed, RoomLifecycle.Failed],
+            [RoomLifecycle.Closed] = [],
+            [RoomLifecycle.Failed] = [RoomLifecycle.Closed]
+=======
             [RoomLifecycle.Created] =
                 [RoomLifecycle.Waiting, RoomLifecycle.Allocating, RoomLifecycle.Terminating, RoomLifecycle.Aborted],
             [RoomLifecycle.Waiting] =
@@ -38,6 +47,7 @@ public static class RoomStateMachine
                 [RoomLifecycle.Finished, RoomLifecycle.Aborted, RoomLifecycle.Archived],
             [RoomLifecycle.Aborted] = [RoomLifecycle.Finished, RoomLifecycle.Archived],
             [RoomLifecycle.Archived] = []
+>>>>>>> 6b75654f75977c37f15bfae69cd2ad6be6dcb8dc
         };
 
     /// <summary>判断转换是否幂等或位于白名单；不修改房间。</summary>

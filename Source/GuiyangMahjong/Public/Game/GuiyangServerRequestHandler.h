@@ -33,6 +33,7 @@ public:
     /** 切换准备、离开房间或推进下一局。 */
     virtual void HandleToggleReady(AGuiyangMahjongPlayerController* Controller) = 0;
     virtual void HandleLeaveRoom(AGuiyangMahjongPlayerController* Controller) = 0;
+    virtual void HandleSetTrustee(AGuiyangMahjongPlayerController* Controller, bool bEnabled) = 0;
     virtual void HandleNextRound(AGuiyangMahjongPlayerController* Controller) = 0;
     /** 兼容旧客户端的出牌入口。 */
     virtual void HandleLegacyPlayTile(AGuiyangMahjongPlayerController* Controller,

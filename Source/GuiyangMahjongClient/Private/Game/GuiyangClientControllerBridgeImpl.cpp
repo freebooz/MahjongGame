@@ -86,6 +86,10 @@ namespace
 
 void UGuiyangClientControllerBridgeImpl::BeginDestroy()
 {
+    if (Controller)
+    {
+        Controller->GetWorldTimerManager().ClearTimer(ReturnToLobbyFallbackTimer);
+    }
     if (PresentationLoadHandle.IsValid())
     {
         PresentationLoadHandle->CancelHandle();
@@ -543,25 +547,28 @@ void UGuiyangClientControllerBridgeImpl::ReturnToConnectScreen()
 
 void UGuiyangClientControllerBridgeImpl::ReturnToLobby()
 {
-    // 房主先请求关闭远程房间；非房主只离开游戏服并保留房间供二次进入。
-    if (!Controller) return;
-    UGuiyangLobbySubsystem* Lobby = Controller->GetGameInstance()
-        ? Controller->GetGameInstance()->GetSubsystem<UGuiyangLobbySubsystem>() : nullptr;
-    if (!Lobby || Lobby->GetBackendMode() == EGuiyangLobbyBackendMode::LocalLegacy)
+    if (!Controller || bReturnToLobbyInProgress)
     {
-        Controller->Server_RequestLeaveRoom();
         return;
     }
-    const AGuiyangMahjongGameState* State = GetWorld() ? GetWorld()->GetGameState<AGuiyangMahjongGameState>() : nullptr;
-    const AGuiyangMahjongPlayerState* Player = Controller->GetPlayerState<AGuiyangMahjongPlayerState>();
-    const bool bOwner = State && Player && State->RoomState.RoomInfo.OwnerPlayerId == Player->MahjongPlayerId;
-    if (!bOwner)
+
+    // Every player, including the owner, leaves only their own authoritative
+    // seat. Closing the control-plane room here would eject the other three
+    // players. The server acknowledges after RoomManager has released the
+    // seat, then Client_ConfirmLeaveRoom performs the actual travel.
+    bReturnToLobbyInProgress = true;
+    bLobbyLeaveRequestSubmitted = false;
+    if (UGuiyangReconnectSubsystem* Reconnect = Controller->GetGameInstance()
+        ? Controller->GetGameInstance()->GetSubsystem<UGuiyangReconnectSubsystem>() : nullptr)
     {
-        CompleteRemoteReturnToLobby();
-        return;
+        Reconnect->CancelReconnect();
     }
-    const FGuiyangLobbyOperationResult Result = Lobby->RequestCloseOwnedRoom(Controller);
-    if (!Result.bAccepted) Controller->Client_ShowErrorMessage(Result.ChineseMessage);
+    Controller->Server_RequestLeaveRoom();
+    Controller->GetWorldTimerManager().SetTimer(
+        ReturnToLobbyFallbackTimer, this,
+        &ThisClass::HandleReturnToLobbyTimeout, 8.0f, false);
+    UE_LOG(LogMahjongNet, Log,
+        TEXT("已请求权威离房，等待服务端释放座位后返回大厅"));
 }
 
 void UGuiyangClientControllerBridgeImpl::ShowCreatingRoomLoading()
@@ -597,15 +604,53 @@ void UGuiyangClientControllerBridgeImpl::RequestCreateRoomWithLoading(const FMah
 void UGuiyangClientControllerBridgeImpl::CompleteRemoteReturnToLobby()
 {
     if (!Controller) return;
+    Controller->GetWorldTimerManager().ClearTimer(ReturnToLobbyFallbackTimer);
+    UGuiyangLobbySubsystem* Lobby = Controller->GetGameInstance()
+        ? Controller->GetGameInstance()->GetSubsystem<UGuiyangLobbySubsystem>()
+        : nullptr;
+    if (Lobby
+        && Lobby->GetBackendMode() == EGuiyangLobbyBackendMode::RemoteLobby
+        && !bLobbyLeaveRequestSubmitted)
+    {
+        bLobbyLeaveRequestSubmitted = true;
+        const FGuiyangLobbyOperationResult Result =
+            Lobby->RequestLeaveCurrentRoom(Controller);
+        if (Result.bAccepted)
+        {
+            Controller->GetWorldTimerManager().SetTimer(
+                ReturnToLobbyFallbackTimer, this,
+                &ThisClass::HandleReturnToLobbyTimeout, 8.0f, false);
+            return;
+        }
+        bLobbyLeaveRequestSubmitted = false;
+        bReturnToLobbyInProgress = false;
+        return;
+    }
+
+    bReturnToLobbyInProgress = false;
+    bLobbyLeaveRequestSubmitted = false;
     CreatingRoomLoadingShownAtSeconds = 0.0;
     PendingAllocatedRoute = {};
     Controller->GetWorldTimerManager().ClearTimer(CreatingRoomTravelDelayTimer);
+    Controller->GetWorldTimerManager().ClearTimer(ReturnToLobbyFallbackTimer);
     if (UGuiyangReconnectSubsystem* Reconnect = Controller->GetGameInstance()
         ? Controller->GetGameInstance()->GetSubsystem<UGuiyangReconnectSubsystem>() : nullptr)
     {
         Reconnect->CancelReconnect();
     }
     Controller->ClientTravel(TEXT("/Engine/Maps/Entry"), TRAVEL_Absolute);
+}
+
+void UGuiyangClientControllerBridgeImpl::HandleReturnToLobbyTimeout()
+{
+    if (!Controller || !bReturnToLobbyInProgress)
+    {
+        return;
+    }
+    bReturnToLobbyInProgress = false;
+    bLobbyLeaveRequestSubmitted = false;
+    Controller->Client_ShowErrorMessage(
+        TEXT("退出房间超时，请检查网络后重试"));
 }
 
 void UGuiyangClientControllerBridgeImpl::NotifyReconnectRestored(const FMahjongReconnectSnapshot& Snapshot)

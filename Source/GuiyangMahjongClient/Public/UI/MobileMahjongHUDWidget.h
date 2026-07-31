@@ -11,6 +11,8 @@ class UMobileActionButtonPanel;
 class UMobileHandTileWidget;
 class UMobileErrorToastWidget;
 class UMobileSettlementWidget;
+class UMobileRuleSummaryWidget;
+class UMobileSettingsWidget;
 class UTexture2D;
 
 /** 游戏主 HUD。公共数据来自 GameState，私有手牌和操作列表来自所属 PlayerController Client RPC。 */
@@ -61,11 +63,17 @@ protected:
     UPROPERTY(meta=(BindWidgetOptional)) TObjectPtr<UTextBlock> Btn_Ready_Label;
     UPROPERTY(meta=(BindWidgetOptional)) TObjectPtr<UTextBlock> Txt_ReadyStatus;
     UPROPERTY(meta=(BindWidgetOptional)) TObjectPtr<UButton> Btn_ReturnLobby;
+    /** 覆盖右上角图标的透明命中按钮；视觉仍由原始图片资源负责。 */
+    UPROPERTY(Transient) TObjectPtr<UButton> Btn_MenuRules;
+    UPROPERTY(Transient) TObjectPtr<UButton> Btn_MenuSettings;
+    UPROPERTY(Transient) TObjectPtr<UButton> Btn_MenuTrustee;
     /** 动作按钮、弹层及按需创建的错误/结算控件。 */
     UPROPERTY(meta=(BindWidget)) TObjectPtr<UMobileActionButtonPanel> ActionButtonPanel;
     UPROPERTY(meta=(BindWidget)) TObjectPtr<UOverlay> PopupLayer;
     UPROPERTY(Transient) TObjectPtr<UMobileErrorToastWidget> ErrorToastInstance;
     UPROPERTY(Transient) TObjectPtr<UMobileSettlementWidget> SettlementInstance;
+    UPROPERTY(Transient) TObjectPtr<UMobileRuleSummaryWidget> RuleSummaryInstance;
+    UPROPERTY(Transient) TObjectPtr<UMobileSettingsWidget> SettingsInstance;
     /** 当前选中手牌和本地三维牌桌表现 Actor。 */
     UPROPERTY(Transient) TObjectPtr<UMobileHandTileWidget> SelectedHandTile;
     int32 SelectedHandTileId = INDEX_NONE;
@@ -81,9 +89,13 @@ protected:
     /** 最近一次公共/私有快照；UI 重建只读取缓存，不修改权威状态。 */
     UPROPERTY() FMahjongPublicTableState CachedPublicState;
     UPROPERTY() FMahjongPrivatePlayerState CachedPrivateState;
+    UPROPERTY() FMahjongRoomState CachedRoomState;
     int32 CachedDealerSeat = 0;
     bool bHasPrivateState = false;
     bool bVisualReviewMode = false;
+    bool bLocalTrusteeEnabled = false;
+    bool bTrusteeRequestInFlight = false;
+    bool bExitRequestInFlight = false;
     /** 网络事件入口：刷新公共/私有状态、动作、结算与错误。 */
     UFUNCTION() void HandlePublicTableState(const FMahjongPublicTableState& State);
     UFUNCTION() void HandlePrivateHand(const FMahjongPrivatePlayerState& State);
@@ -93,11 +105,15 @@ protected:
     UFUNCTION() void HandleError(const FString& Message);
     /** 本地交互入口：选择手牌、准备和返回大厅。 */
     UFUNCTION() void HandleTileSelected(UMobileHandTileWidget* TileWidget);
-    UFUNCTION() void HandleTilePlayRequested(UMobileHandTileWidget* TileWidget);
+    UFUNCTION() void HandlePlayTileButtonRequested(int32 TileUniqueId);
     UFUNCTION() void HandleTileHovered(UMobileHandTileWidget* TileWidget);
     UFUNCTION() void HandleTileUnhovered(UMobileHandTileWidget* TileWidget);
     UFUNCTION() void HandleReady();
     UFUNCTION() void HandleReturnLobby();
+    UFUNCTION() void HandleRules();
+    UFUNCTION() void HandleSettings();
+    UFUNCTION() void HandleTrustee();
+    UFUNCTION() void HandleTrusteeStateChanged(bool bEnabled);
 public:
     /** 由根 HUD 或蓝图显式刷新房间、公共牌桌和私有手牌。 */
     UFUNCTION(BlueprintCallable, Category="麻将|UI")
@@ -119,6 +135,10 @@ private:
     void RefreshDiscards(int32 LocalSeat);
     void RefreshMelds(int32 LocalSeat);
     void RefreshJiDisplay();
+    void RefreshPlayTileButtonState();
+    void EnsureTopRightInteractionButtons();
+    void UpdateTrusteeMenuLabel();
+    void SetTopRightButtonsEnabled(bool bEnabled);
     void ApplyPlaceholderAvatars();
     void EnsureSeatIndicators();
     void RefreshSeatIndicators(int32 CurrentTurnSeat, int32 LocalSeat);

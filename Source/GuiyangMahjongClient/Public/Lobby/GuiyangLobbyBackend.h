@@ -29,6 +29,8 @@ public:
         const FString& RequestId) = 0;
     virtual FGuiyangLobbyOperationResult Reconnect(
         AGuiyangMahjongPlayerController& PlayerController, const FString& RequestId) = 0;
+    virtual FGuiyangLobbyOperationResult LeaveCurrentRoom(
+        AGuiyangMahjongPlayerController& PlayerController, const FString& RequestId) = 0;
     virtual FGuiyangLobbyOperationResult CloseOwnedRoom(
         AGuiyangMahjongPlayerController& PlayerController, const FString& RequestId) = 0;
 };

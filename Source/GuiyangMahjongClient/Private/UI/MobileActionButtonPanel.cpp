@@ -1,19 +1,80 @@
 #include "UI/MobileActionButtonPanel.h"
 #include "Game/GuiyangMahjongPlayerController.h"
 #include "UI/MahjongUISoundLibrary.h"
+#include "Blueprint/WidgetTree.h"
 #include "Components/Button.h"
 #include "Components/CanvasPanelSlot.h"
 #include "Components/HorizontalBox.h"
 #include "Components/HorizontalBoxSlot.h"
+#include "Components/TextBlock.h"
+#include "Engine/Texture2D.h"
 #include "GuiyangMahjong.h"
+
+namespace
+{
+    FSlateBrush MakePlayButtonBrush(const TCHAR* AssetPath)
+    {
+        FSlateBrush Brush;
+        if (UTexture2D* Texture = LoadObject<UTexture2D>(nullptr, AssetPath))
+        {
+            Brush.SetResourceObject(Texture);
+        }
+        Brush.ImageSize = FVector2D(192.0f, 192.0f);
+        Brush.DrawAs = ESlateBrushDrawType::Box;
+        Brush.Margin = FMargin(0.1458f);
+        return Brush;
+    }
+
+    void ConfigureRuntimePlayButton(UButton* Button, UTextBlock* Label)
+    {
+        if (!Button || !Label)
+        {
+            return;
+        }
+
+        FButtonStyle Style;
+        Style.SetNormal(MakePlayButtonBrush(
+            TEXT("/Game/UI/Textures/Buttons/T_Btn_PlayTile_Normal.T_Btn_PlayTile_Normal")));
+        Style.SetHovered(MakePlayButtonBrush(
+            TEXT("/Game/UI/Textures/Buttons/T_Btn_PlayTile_Hovered.T_Btn_PlayTile_Hovered")));
+        Style.SetPressed(MakePlayButtonBrush(
+            TEXT("/Game/UI/Textures/Buttons/T_Btn_PlayTile_Pressed.T_Btn_PlayTile_Pressed")));
+        Style.SetDisabled(MakePlayButtonBrush(
+            TEXT("/Game/UI/Textures/Buttons/T_Btn_PlayTile_Disabled.T_Btn_PlayTile_Disabled")));
+        Button->SetStyle(Style);
+
+        Label->SetText(FText::FromString(TEXT("出牌")));
+        Label->SetJustification(ETextJustify::Center);
+        Label->SetColorAndOpacity(FSlateColor(
+            FLinearColor(1.0f, 0.97f, 0.78f, 1.0f)));
+        FSlateFontInfo Font = Label->GetFont();
+        Font.Size = 28;
+        Label->SetFont(Font);
+        Label->SetVisibility(ESlateVisibility::HitTestInvisible);
+        Button->AddChild(Label);
+    }
+}
 
 void UMobileActionButtonPanel::NativeConstruct()
 {
     Super::NativeConstruct();
+    if (!Btn_PlayTile && WidgetTree)
+    {
+        Btn_PlayTile = WidgetTree->ConstructWidget<UButton>(
+            UButton::StaticClass(), TEXT("Btn_PlayTile_Runtime"));
+        UTextBlock* Label = WidgetTree->ConstructWidget<UTextBlock>(
+            UTextBlock::StaticClass(), TEXT("Btn_PlayTile_Runtime_Label"));
+        ConfigureRuntimePlayButton(Btn_PlayTile, Label);
+    }
     Btn_Hu->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleHu);
     Btn_Gang->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleGang);
     Btn_Peng->OnClicked.AddUniqueDynamic(this, &ThisClass::HandlePeng);
     Btn_Pass->OnClicked.AddUniqueDynamic(this, &ThisClass::HandlePass);
+    if (Btn_PlayTile)
+    {
+        Btn_PlayTile->OnClicked.AddUniqueDynamic(
+            this, &ThisClass::HandlePlayTile);
+    }
 
     // Keep the supplied button brushes at their authored size. Rebuild only
     // their order so the response flow reads 过、碰、杠、胡 from left to right.
@@ -24,6 +85,10 @@ void UMobileActionButtonPanel::NativeConstruct()
         Panel_Actions->AddChildToHorizontalBox(Btn_Peng);
         Panel_Actions->AddChildToHorizontalBox(Btn_Gang);
         Panel_Actions->AddChildToHorizontalBox(Btn_Hu);
+        if (Btn_PlayTile)
+        {
+            Panel_Actions->AddChildToHorizontalBox(Btn_PlayTile);
+        }
         if (UCanvasPanelSlot* PanelSlot =
             Cast<UCanvasPanelSlot>(Panel_Actions->Slot))
         {
@@ -34,6 +99,7 @@ void UMobileActionButtonPanel::NativeConstruct()
         }
     }
     ShowActions({});
+    SetPlayTileState(false, false, INDEX_NONE);
 }
 
 void UMobileActionButtonPanel::CentreVisibleButtons()
@@ -45,7 +111,7 @@ void UMobileActionButtonPanel::CentreVisibleButtons()
 
     TArray<UButton*> VisibleButtons;
     for (UButton* Button : {Btn_Pass.Get(), Btn_Peng.Get(),
-        Btn_Gang.Get(), Btn_Hu.Get()})
+        Btn_Gang.Get(), Btn_Hu.Get(), Btn_PlayTile.Get()})
     {
         if (Button && Button->GetVisibility() != ESlateVisibility::Collapsed)
         {
@@ -84,6 +150,33 @@ void UMobileActionButtonPanel::ShowActions(const TArray<FMahjongAction>& Actions
     UE_LOG(LogMahjongUI, Log, TEXT("操作按钮面板刷新：服务端下发 %d 项"), Actions.Num());
 }
 
+void UMobileActionButtonPanel::SetPlayTileState(
+    const bool bVisible, const bool bEnabled, const int32 TileUniqueId)
+{
+    if (!Btn_PlayTile)
+    {
+        return;
+    }
+
+    const int32 NewSelectedPlayTileId =
+        bVisible && bEnabled ? TileUniqueId : INDEX_NONE;
+    const ESlateVisibility NewVisibility =
+        bVisible ? ESlateVisibility::Visible : ESlateVisibility::Collapsed;
+    const bool bNewEnabled = bVisible && bEnabled
+        && NewSelectedPlayTileId != INDEX_NONE;
+    if (Btn_PlayTile->GetVisibility() == NewVisibility
+        && Btn_PlayTile->GetIsEnabled() == bNewEnabled
+        && SelectedPlayTileId == NewSelectedPlayTileId)
+    {
+        return;
+    }
+
+    SelectedPlayTileId = NewSelectedPlayTileId;
+    Btn_PlayTile->SetVisibility(NewVisibility);
+    Btn_PlayTile->SetIsEnabled(bNewEnabled);
+    CentreVisibleButtons();
+}
+
 void UMobileActionButtonPanel::SendAction(const EMahjongActionType Type)
 {
     const FMahjongAction* Offered = CurrentActions.FindByPredicate([Type](const FMahjongAction& A)
@@ -111,3 +204,10 @@ void UMobileActionButtonPanel::HandleHu(){ SendAction(EMahjongActionType::Hu); }
 void UMobileActionButtonPanel::HandleGang(){ SendAction(EMahjongActionType::MingGang); }
 void UMobileActionButtonPanel::HandlePeng(){ SendAction(EMahjongActionType::Peng); }
 void UMobileActionButtonPanel::HandlePass(){ SendAction(EMahjongActionType::Pass); }
+void UMobileActionButtonPanel::HandlePlayTile()
+{
+    if (SelectedPlayTileId != INDEX_NONE)
+    {
+        OnPlayTileRequested.Broadcast(SelectedPlayTileId);
+    }
+}

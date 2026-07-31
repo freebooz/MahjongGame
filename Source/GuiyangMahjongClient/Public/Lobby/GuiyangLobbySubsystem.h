@@ -50,6 +50,8 @@ public:
     UFUNCTION(BlueprintCallable, Category="麻将|大厅")
     FGuiyangLobbyOperationResult RequestReconnect(APlayerController* PlayerController);
     UFUNCTION(BlueprintCallable, Category="麻将|大厅")
+    FGuiyangLobbyOperationResult RequestLeaveCurrentRoom(APlayerController* PlayerController);
+    UFUNCTION(BlueprintCallable, Category="麻将|大厅")
     FGuiyangLobbyOperationResult RequestCloseOwnedRoom(APlayerController* PlayerController);
 
     UFUNCTION(BlueprintPure, Category="麻将|大厅")
