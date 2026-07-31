@@ -220,6 +220,46 @@ namespace GuiyangRemoteLobbyPrivate
                 TEXT("正在向大厅申请新的重连票据"));
         }
 
+        virtual FGuiyangLobbyOperationResult LeaveCurrentRoom(
+            AGuiyangMahjongPlayerController& PlayerController,
+            const FString& RequestId) override
+        {
+            FString Token;
+            FString PlayerId;
+            FGuiyangLobbyOperationResult Rejection;
+            if (!ResolveAuthorization(
+                    PlayerController, RequestId, Token, PlayerId, Rejection))
+            {
+                return Rejection;
+            }
+            const TWeakObjectPtr<AGuiyangMahjongPlayerController> WeakController(
+                &PlayerController);
+            StartRequest(TEXT("POST"), TEXT("/v1/rooms/current/leave"),
+                Token, RequestId, TEXT("{}"), true,
+                [WeakThis = TWeakPtr<FRemoteLobbyBackend>(AsShared()),
+                 WeakController, RequestId]
+                (FHttpResponsePtr Response, const bool bSucceeded)
+                {
+                    const TSharedPtr<FRemoteLobbyBackend> Self = WeakThis.Pin();
+                    if (!Self || !WeakController.IsValid())
+                    {
+                        return;
+                    }
+                    if (!Self->IsSuccess(Response, bSucceeded))
+                    {
+                        Self->NotifyFailure(RequestId, Response, bSucceeded,
+                            TEXT("退出远程房间失败"));
+                        return;
+                    }
+                    UE_LOG(LogMahjongNet, Log,
+                        TEXT("大厅已释放玩家房间成员关系：RequestId=%s"),
+                        *RequestId);
+                    WeakController->CompleteRemoteReturnToLobby();
+                });
+            return MakeResult(RequestId, true,
+                EGuiyangLobbyErrorCode::None, TEXT("正在退出房间"));
+        }
+
         virtual FGuiyangLobbyOperationResult CloseOwnedRoom(
             AGuiyangMahjongPlayerController& PlayerController, const FString& RequestId) override
         {

@@ -661,14 +661,85 @@ void AGuiyangMahjongGameMode::HandleToggleReady(AGuiyangMahjongPlayerController*
 void AGuiyangMahjongGameMode::HandleLeaveRoom(AGuiyangMahjongPlayerController* Controller)
 {
     AGuiyangMahjongPlayerState* Player = Controller ? Controller->GetPlayerState<AGuiyangMahjongPlayerState>() : nullptr;
-    if (!Player || !RoomManager || Player->MahjongPlayerId.IsEmpty()) return;
+    if (!Player || !RoomManager || Player->MahjongPlayerId.IsEmpty())
+    {
+        if (Controller)
+        {
+            Controller->Client_ShowErrorMessage(TEXT("当前房间状态无效，无法退出"));
+        }
+        return;
+    }
+    FMahjongRoomState PreviousState;
+    const bool bHadRoomState =
+        RoomManager->GetRoomState(Player->RoomCode, PreviousState);
+    const bool bWasActiveRound = bHadRoomState
+        && (PreviousState.Lifecycle == EMahjongRoomLifecycle::Starting
+            || PreviousState.Lifecycle == EMahjongRoomLifecycle::Playing
+            || PreviousState.Lifecycle == EMahjongRoomLifecycle::Settlement
+            || PreviousState.Lifecycle == EMahjongRoomLifecycle::WaitingNextRound);
     FMahjongRoomState State;
     EMahjongRoomError Error;
     if (RoomManager->LeaveRoom(Player->MahjongPlayerId, State, Error))
     {
+        TrusteeStateByPlayer.Remove(Player->MahjongPlayerId);
         Player->LeaveRoomServer();
+        if (bWasActiveRound)
+        {
+            GetWorldTimerManager().ClearTimer(ActionTimeoutHandle);
+            GetWorldTimerManager().ClearTimer(NextRoundAutoStartHandle);
+            ArmedTimeoutRoundId = INDEX_NONE;
+            ArmedTimeoutTurnId = INDEX_NONE;
+            ArmedTimeoutPhase = EMahjongTablePhase::WaitingForPlayers;
+            TableEngine = nullptr;
+            if (AGuiyangMahjongGameState* MahjongState =
+                GetGameState<AGuiyangMahjongGameState>())
+            {
+                MahjongState->SetPublicTableStateAuthority(
+                    FMahjongPublicTableState());
+            }
+            for (TActorIterator<AGuiyangMahjongPlayerController> It(GetWorld());
+                 It; ++It)
+            {
+                if (*It != Controller)
+                {
+                    It->Client_UpdatePrivateHand(FMahjongPrivatePlayerState());
+                    It->Client_ShowAvailableActions(TArray<FMahjongAction>());
+                }
+            }
+            UE_LOG(LogMahjongServer, Display,
+                TEXT("Explicit player departure aborted the active round and reset surviving seats: Room=%s Player=%s"),
+                *PreviousState.RoomInfo.RoomId, *Player->MahjongPlayerId);
+        }
         PublishRoomState(State);
+        Controller->Client_ConfirmLeaveRoom();
+        return;
     }
+    Controller->Client_ShowErrorMessage(ErrorToMessage(Error));
+}
+
+void AGuiyangMahjongGameMode::HandleSetTrustee(
+    AGuiyangMahjongPlayerController* Controller, const bool bEnabled)
+{
+    AGuiyangMahjongPlayerState* Player = nullptr;
+    if (!ResolvePlayer(Controller, Player) || Player->SeatIndex == INDEX_NONE)
+    {
+        return;
+    }
+
+    const AGuiyangMahjongGameState* State =
+        GetGameState<AGuiyangMahjongGameState>();
+    const bool bPlaying = State
+        && (State->RoomState.Lifecycle == EMahjongRoomLifecycle::Playing
+            || State->RoomState.Lifecycle == EMahjongRoomLifecycle::Starting
+            || State->RoomState.Lifecycle == EMahjongRoomLifecycle::WaitingNextRound);
+    if (!bPlaying)
+    {
+        Controller->Client_ShowErrorMessage(TEXT("牌局尚未开始，无法托管"));
+        Controller->Client_UpdateTrusteeState(false);
+        return;
+    }
+
+    SetSeatTrusteeState(Player->SeatIndex, bEnabled);
 }
 
 bool AGuiyangMahjongGameMode::ResolvePlayer(AGuiyangMahjongPlayerController* Controller, AGuiyangMahjongPlayerState*& OutPlayerState) const
@@ -910,6 +981,17 @@ void AGuiyangMahjongGameMode::SetSeatTrusteeState(const int32 SeatIndex, const b
     if (State.ChangedAtUtc.GetTicks() > 0 && State.bTrustee == bTrustee) return;
     State.bTrustee = bTrustee;
     State.ChangedAtUtc = FDateTime::UtcNow();
+
+    for (TActorIterator<AGuiyangMahjongPlayerController> It(GetWorld()); It; ++It)
+    {
+        const AGuiyangMahjongPlayerState* ControllerPlayer =
+            It->GetPlayerState<AGuiyangMahjongPlayerState>();
+        if (ControllerPlayer && ControllerPlayer->MahjongPlayerId == Seat->PlayerId)
+        {
+            It->Client_UpdateTrusteeState(bTrustee);
+            break;
+        }
+    }
 }
 
 void AGuiyangMahjongGameMode::FinalizeRoundIfNeeded()

@@ -162,6 +162,21 @@ void AMahjong3DTableActor::SetHoveredTile(const int32 UniqueId)
     ApplyLocalHandTileVisualState(HoveredTileId);
 }
 
+bool AMahjong3DTableActor::IsLocalHandTileRaised(const int32 UniqueId) const
+{
+    const UStaticMeshComponent* const* ComponentPtr =
+        LocalHandTileComponents.Find(UniqueId);
+    const FVector* BaseLocation = LocalHandTileBaseLocations.Find(UniqueId);
+    if (SelectedTileId != UniqueId || UniqueId == INDEX_NONE
+        || !ComponentPtr || !IsValid(*ComponentPtr) || !BaseLocation)
+    {
+        return false;
+    }
+
+    return (*ComponentPtr)->GetRelativeLocation().Z
+        >= BaseLocation->Z + SelectedTileLift - KINDA_SMALL_NUMBER;
+}
+
 int32 AMahjong3DTableActor::GetLocalHandTileUnderCursor(
     APlayerController* PlayerController) const
 {
@@ -181,6 +196,8 @@ int32 AMahjong3DTableActor::GetLocalHandTileUnderCursor(
     {
         int32 UniqueId = INDEX_NONE;
         FVector2D Center = FVector2D::ZeroVector;
+        double MinX = TNumericLimits<double>::Max();
+        double MaxX = TNumericLimits<double>::Lowest();
         double MinY = TNumericLimits<double>::Max();
         double MaxY = TNumericLimits<double>::Lowest();
     };
@@ -220,13 +237,18 @@ int32 AMahjong3DTableActor::GetLocalHandTileUnderCursor(
             if (PlayerController->ProjectWorldLocationToScreen(
                 Corner, ProjectedCorner, true))
             {
+                ProjectedTile.MinX =
+                    FMath::Min(ProjectedTile.MinX, ProjectedCorner.X);
+                ProjectedTile.MaxX =
+                    FMath::Max(ProjectedTile.MaxX, ProjectedCorner.X);
                 ProjectedTile.MinY =
                     FMath::Min(ProjectedTile.MinY, ProjectedCorner.Y);
                 ProjectedTile.MaxY =
                     FMath::Max(ProjectedTile.MaxY, ProjectedCorner.Y);
             }
         }
-        if (ProjectedTile.MinY <= ProjectedTile.MaxY)
+        if (ProjectedTile.MinX <= ProjectedTile.MaxX
+            && ProjectedTile.MinY <= ProjectedTile.MaxY)
         {
             HandMinY = FMath::Min(HandMinY, ProjectedTile.MinY);
             HandMaxY = FMath::Max(HandMaxY, ProjectedTile.MaxY);
@@ -257,6 +279,35 @@ int32 AMahjong3DTableActor::GetLocalHandTileUnderCursor(
         return INDEX_NONE;
     }
 
+    // Test the complete projected rectangle before midpoint partitioning.
+    // The old outside boundary ended half a pitch beyond the outer centre,
+    // leaving the exposed outer half of the screen-left tile unclickable.
+    // Perspective can overlap neighbours, so choose the closest centre.
+    int32 ClosestContainedTileId = INDEX_NONE;
+    double ClosestContainedDistanceSquared =
+        TNumericLimits<double>::Max();
+    for (const FProjectedHandTile& ProjectedTile : ProjectedTiles)
+    {
+        if (Cursor.X >= ProjectedTile.MinX - ScreenHitMargin
+            && Cursor.X <= ProjectedTile.MaxX + ScreenHitMargin
+            && Cursor.Y >= ProjectedTile.MinY - ScreenHitMargin
+            && Cursor.Y <= ProjectedTile.MaxY + ScreenHitMargin)
+        {
+            const double DistanceSquared =
+                FVector2D::DistSquared(Cursor, ProjectedTile.Center);
+            if (DistanceSquared < ClosestContainedDistanceSquared)
+            {
+                ClosestContainedDistanceSquared = DistanceSquared;
+                ClosestContainedTileId = ProjectedTile.UniqueId;
+            }
+        }
+    }
+    if (ClosestContainedTileId != INDEX_NONE)
+    {
+        return ClosestContainedTileId;
+    }
+
+    // Keep midpoint partitioning as a small-gap fallback for touch input.
     for (int32 Index = 0; Index < ProjectedTiles.Num(); ++Index)
     {
         const double LeftBoundary = Index == 0

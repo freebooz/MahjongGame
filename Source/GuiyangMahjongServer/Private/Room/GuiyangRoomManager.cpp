@@ -370,11 +370,11 @@ bool UGuiyangRoomManager::LeaveRoom(const FString& PlayerId, FMahjongRoomState& 
         OutError = EMahjongRoomError::RoomNotFound;
         return false;
     }
-    if (Record->PublicState.Lifecycle == EMahjongRoomLifecycle::Playing)
-    {
-        OutError = EMahjongRoomError::GameAlreadyStarted;
-        return false;
-    }
+    const bool bWasActiveRound =
+        Record->PublicState.Lifecycle == EMahjongRoomLifecycle::Starting
+        || Record->PublicState.Lifecycle == EMahjongRoomLifecycle::Playing
+        || Record->PublicState.Lifecycle == EMahjongRoomLifecycle::Settlement
+        || Record->PublicState.Lifecycle == EMahjongRoomLifecycle::WaitingNextRound;
     FMahjongSeatInfo* Seat = FindSeat(Record->PublicState, PlayerId);
     if (!Seat)
     {
@@ -387,6 +387,22 @@ bool UGuiyangRoomManager::LeaveRoom(const FString& PlayerId, FMahjongRoomState& 
     Seat->SeatIndex = SeatIndex;
     PlayerRoomCodes.Remove(PlayerId);
     Record->ConnectionTelemetryByPlayer.Remove(PlayerId);
+
+    // An explicit departure is different from a temporary disconnect. A
+    // four-player round cannot remain authoritative after one of its seats is
+    // removed, so return the surviving seats to an unready waiting state. The
+    // game mode clears the active table snapshot in the same transaction.
+    if (bWasActiveRound)
+    {
+        for (FMahjongSeatInfo& RemainingSeat : Record->PublicState.Seats)
+        {
+            if (RemainingSeat.bOccupied)
+            {
+                RemainingSeat.bReady = false;
+            }
+        }
+        Record->PublicState.bGameStarting = false;
+    }
 
     int32 OccupiedCount = 0;
     for (const FMahjongSeatInfo& Item : Record->PublicState.Seats)

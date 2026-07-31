@@ -14,11 +14,9 @@ void UMobileHandTileWidget::NativeConstruct()
     Btn_Tile->OnUnhovered.AddUniqueDynamic(this, &ThisClass::HandleTileUnhovered);
 }
 
-void UMobileHandTileWidget::SetTile(const FMahjongTile& Tile, const bool bInCanPlay)
+void UMobileHandTileWidget::SetTile(const FMahjongTile& Tile)
 {
     TileData = Tile;
-    bCanPlay = bInCanPlay;
-    LastClickTimeSeconds = -1.0;
     SetSelected(false);
     FSlateBrush NormalBrush;
     if (UMahjongTileVisualLibrary::ConfigureFaceBrush(Tile, NormalBrush))
@@ -57,23 +55,6 @@ void UMobileHandTileWidget::SetSelected(const bool bInSelected)
 
 void UMobileHandTileWidget::HandleTileClicked()
 {
-    const double NowSeconds = FPlatformTime::Seconds();
-    const bool bDoubleClick = LastClickTimeSeconds >= 0.0
-        && NowSeconds - LastClickTimeSeconds
-            <= static_cast<double>(DoubleClickIntervalSeconds);
-    LastClickTimeSeconds = bDoubleClick ? -1.0 : NowSeconds;
-
-    // A double-click is a play gesture only when this exact tile is already
-    // selected (and therefore visibly raised) and it is the local player's
-    // turn. An unselected tile can never be played by the double-click itself.
-    // For every other player both clicks remain ordinary selection toggles.
-    if (bDoubleClick && bCanPlay && bSelected)
-    {
-        UMahjongUISoundLibrary::PlayUISound(this, EMahjongUISound::TilePlay);
-        OnPlayRequested.Broadcast(this);
-        return;
-    }
-
     if (!bSelected)
     {
         UMahjongUISoundLibrary::PlayUISound(this, EMahjongUISound::TileSelect);

@@ -288,6 +288,110 @@ public sealed partial class LobbyService
     }
 
     /// <summary>
+    /// Atomically removes the authenticated player from their current room.
+    /// The final member closes the room; otherwise ownership is transferred
+    /// and an interrupted match returns to Waiting so a replacement may join.
+    /// </summary>
+    public async Task<RoomOperation> LeaveCurrentRoomAsync(
+        string requestId,
+        PlayerIdentity player,
+        CancellationToken cancellationToken)
+    {
+        for (var attempt = 0; attempt < 3; attempt++)
+        {
+            var room = await store.GetActiveRoomByPlayerAsync(
+                    player.PlayerId, cancellationToken)
+                ?? throw new LobbyOperationException(
+                    LobbyErrorCode.RoomNotFound,
+                    "当前玩家不在活动房间中",
+                    StatusCodes.Status404NotFound);
+            var remainingPlayers = room.PlayerIds
+                .Where(playerId => !string.Equals(
+                    playerId, player.PlayerId, StringComparison.Ordinal))
+                .ToArray();
+
+            LobbyRoom updated;
+            if (remainingPlayers.Length == 0)
+            {
+                var terminalLifecycle =
+                    room.Lifecycle is RoomLifecycle.Creating
+                        or RoomLifecycle.Playing
+                        ? RoomLifecycle.Failed
+                        : RoomLifecycle.Closed;
+                updated = RoomStateMachine.Transition(
+                    room, terminalLifecycle, timeProvider) with
+                {
+                    PlayerIds = [],
+                    Route = null,
+                    PendingServerInstanceId = null,
+                    LastServerInstanceId =
+                        room.Route?.ServerInstanceId
+                        ?? room.PendingServerInstanceId
+                        ?? room.LastServerInstanceId
+                };
+            }
+            else
+            {
+                var nextLifecycle =
+                    room.Lifecycle is RoomLifecycle.Playing
+                        or RoomLifecycle.Settling
+                        ? RoomLifecycle.Waiting
+                        : room.Lifecycle;
+                updated = nextLifecycle == room.Lifecycle
+                    ? room with
+                    {
+                        StateSequence = room.StateSequence + 1,
+                        UpdatedAtUtc = timeProvider.GetUtcNow()
+                    }
+                    : RoomStateMachine.Transition(
+                        room, nextLifecycle, timeProvider);
+                updated = updated with
+                {
+                    PlayerIds = remainingPlayers,
+                    OwnerPlayerId = string.Equals(
+                        room.OwnerPlayerId,
+                        player.PlayerId,
+                        StringComparison.Ordinal)
+                            ? remainingPlayers[0]
+                            : room.OwnerPlayerId,
+                    EmptySinceUtc = null
+                };
+            }
+
+            if (!await store.UpdateRoomAsync(updated, cancellationToken))
+            {
+                continue;
+            }
+
+            await events.PublishAsync(
+                updated.Lifecycle is RoomLifecycle.Closed
+                    or RoomLifecycle.Failed
+                    ? LobbyEventTypes.RoomClosed
+                    : LobbyEventTypes.RoomUpdated,
+                ToDirectoryItem(updated),
+                cancellationToken);
+            logger.LogInformation(
+                "Player left room RequestId={RequestId} RoomId={RoomId} PlayerId={PlayerId} RemainingPlayers={RemainingPlayers}",
+                requestId,
+                updated.RoomId,
+                player.PlayerId,
+                remainingPlayers.Length);
+            return new RoomOperation(
+                requestId,
+                updated.RoomId,
+                updated.RoomCode,
+                updated.Lifecycle,
+                0);
+        }
+
+        throw new LobbyOperationException(
+            LobbyErrorCode.RequestInProgress,
+            "房间状态正在变化，请稍后重试",
+            StatusCodes.Status409Conflict,
+            250);
+    }
+
+    /// <summary>
     /// 释放已关闭房间占用的 Dedicated Server；分配器暂时失败只记录待回收状态。
     /// </summary>
     public async Task ReleaseClosedRoomServerAsync(
@@ -488,4 +592,3 @@ public sealed partial class LobbyService
     private static LobbyOperationException Invalid(string message) => new(
         LobbyErrorCode.InvalidRequest, message, StatusCodes.Status400BadRequest);
 }
-

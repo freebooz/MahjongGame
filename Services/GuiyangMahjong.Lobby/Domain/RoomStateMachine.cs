@@ -9,8 +9,8 @@ public static class RoomStateMachine
             [RoomLifecycle.Creating] = [RoomLifecycle.Allocating, RoomLifecycle.Failed],
             [RoomLifecycle.Allocating] = [RoomLifecycle.Waiting, RoomLifecycle.Failed, RoomLifecycle.Closed],
             [RoomLifecycle.Waiting] = [RoomLifecycle.Playing, RoomLifecycle.Closed, RoomLifecycle.Failed],
-            [RoomLifecycle.Playing] = [RoomLifecycle.Settling, RoomLifecycle.Failed],
-            [RoomLifecycle.Settling] = [RoomLifecycle.Closed, RoomLifecycle.Failed],
+            [RoomLifecycle.Playing] = [RoomLifecycle.Waiting, RoomLifecycle.Settling, RoomLifecycle.Failed],
+            [RoomLifecycle.Settling] = [RoomLifecycle.Waiting, RoomLifecycle.Closed, RoomLifecycle.Failed],
             [RoomLifecycle.Closed] = [],
             [RoomLifecycle.Failed] = [RoomLifecycle.Closed]
         };

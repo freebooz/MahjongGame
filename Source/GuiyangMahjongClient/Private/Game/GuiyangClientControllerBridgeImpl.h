@@ -54,10 +54,14 @@ private:
     UPROPERTY(Transient) FGuiyangGameServerRoute PendingAllocatedRoute;
     /** 延迟旅行定时器和异步表现蓝图加载句柄。 */
     FTimerHandle CreatingRoomTravelDelayTimer;
+    /** 主动离房必须等待服务端释放座位；超时后仍返回大厅，避免界面永久卡死。 */
+    FTimerHandle ReturnToLobbyFallbackTimer;
     TSharedPtr<FStreamableHandle> PresentationLoadHandle;
     /** 加载层出现时间和表现资源失败状态。 */
     double CreatingRoomLoadingShownAtSeconds = 0.0;
     bool bPresentationLoadFailed = false;
+    bool bReturnToLobbyInProgress = false;
+    bool bLobbyLeaveRequestSubmitted = false;
 
     /** 异步加载配置中的表现蓝图，并在完成后生成 Actor。 */
     void RequestRoomPresentationClassLoad();
@@ -69,4 +73,5 @@ private:
     /** 满足最短加载展示时间后执行 ClientTravel。 */
     void CompleteDelayedAllocatedServerConnection();
     void TravelToAllocatedServer(FGuiyangGameServerRoute Route);
+    void HandleReturnToLobbyTimeout();
 };

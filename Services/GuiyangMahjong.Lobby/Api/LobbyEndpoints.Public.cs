@@ -111,6 +111,41 @@ public static partial class LobbyEndpoints
             return Results.Json(result.Body, statusCode: result.StatusCode);
         });
 
+        v1.MapPost("/rooms/current/leave", async (
+            HttpContext context,
+            LobbyService lobbyService,
+            IIdempotencyStore idempotency,
+            CancellationToken cancellationToken) =>
+        {
+            var key = RequireIdempotencyKey(context);
+            var player = PlayerAuthenticationMiddleware.GetPlayer(context);
+            var result = await idempotency.ExecuteAsync(
+                $"leave-current:{player.PlayerId}:{key}",
+                async () =>
+                {
+                    var requestId = RequestIdMiddleware.GetRequestId(context);
+                    var operation = await lobbyService.LeaveCurrentRoomAsync(
+                        requestId, player, cancellationToken);
+                    if (operation.Lifecycle is RoomLifecycle.Closed
+                        or RoomLifecycle.Failed)
+                    {
+                        context.Response.OnCompleted(() =>
+                            lobbyService.ReleaseClosedRoomServerAsync(
+                                requestId,
+                                operation.RoomId,
+                                CancellationToken.None));
+                    }
+                    return new IdempotentHttpResponse(
+                        StatusCodes.Status200OK,
+                        JsonSerializer.SerializeToElement(
+                            operation,
+                            new JsonSerializerOptions(
+                                JsonSerializerDefaults.Web)));
+                },
+                cancellationToken);
+            return Results.Json(result.Body, statusCode: result.StatusCode);
+        });
+
         v1.MapPost("/rooms/{roomCode}/join", async (
             string roomCode,
             HttpContext context,

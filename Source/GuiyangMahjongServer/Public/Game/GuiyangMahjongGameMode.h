@@ -60,6 +60,9 @@ public:
     virtual void HandleNextRound(class AGuiyangMahjongPlayerController* Controller) override;
     /** 释放当前座位并发布新房间状态；断线重连与主动离开采用不同清理语义。 */
     virtual void HandleLeaveRoom(class AGuiyangMahjongPlayerController* Controller) override;
+    /** 校验当前座位后切换玩家托管，并把最终状态定向回传给客户端。 */
+    virtual void HandleSetTrustee(
+        class AGuiyangMahjongPlayerController* Controller, bool bEnabled) override;
     /** 验证状态版本、座位权限和客户端序号后交给权威牌桌执行统一动作。 */
     virtual void HandleTableAction(class AGuiyangMahjongPlayerController* Controller, const FMahjongActionRequest& Request) override;
     /** 将旧版出牌 RPC 转换为统一动作请求，保留兼容性但不绕过任何权威校验。 */
