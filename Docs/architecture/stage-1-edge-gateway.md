@@ -236,6 +236,6 @@ UE 自动化测试增加统一网关 URL、`game/reconnect` 映射和旧直连�
 | UE Client 当前源码构建 | 受阶段开始前的长期 Server UBT 构建占用，未进入有效编译 |
 | UE Server 当前源码构建 | 失败；阶段前已有 `GuiyangFairShuffle.cpp` 引入 OpenSSL 后与 Unreal `namespace UI` 发生类型名冲突，本阶段未修改该文件 |
 | UE 自动化测试 | 因当前源码未生成可用 Editor 二进制，未以旧二进制执行 |
-| 项目结构治理门禁 | 仍被阶段前未登记文档 `Docs/SOLUTION_PROJECT_ARCHITECTURE_AND_DIRECTORY_STRUCTURE_20260731.md` 阻止，本阶段不删除该文件 |
+| 项目结构治理门禁 | 阶段实施时曾被未登记的旧架构快照阻止；该旧文档已在现行文档治理中删除 |
 
 因此，EdgeGateway、.NET、Docker 和配置验收通过；整个仓库的“编译和测试全部通过”仍受阶段外 Unreal 公平性代码错误阻止。修复该既有错误后必须重新执行 Client、Server 构建和 `GuiyangMahjong.*` 自动化测试，才能给出阶段 1 的最终无条件通过结论。

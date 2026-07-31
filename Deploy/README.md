@@ -136,7 +136,9 @@ sudo ./Deploy/linux/deploy.sh restore --backup-file /path/to/backup.tar.gz --con
 
 ## 架构与验收资料
 
-- [完整应用架构](../Docs/FULL_APPLICATION_ARCHITECTURE.md)
+- [现行平台架构文档索引](../Docs/README.md)
+- [Allocation Service 与 Agones 边界](../Docs/architecture/stage-5-allocation-service.md)
+- [配置、灰度与多版本治理](../Docs/architecture/stage-11-configuration-release-governance.md)
 - [告警运行手册](../Docs/RUNBOOKS/OBSERVABILITY_ALERTS.md)
 - [多集群与 SLO 治理运行手册](../Docs/RUNBOOKS/SLO_MULTI_CLUSTER_GOVERNANCE.md)
 

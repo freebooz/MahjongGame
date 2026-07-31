@@ -1,14 +1,35 @@
-# 项目核心文档
+# 贵阳麻将平台现行文档
 
-本目录只保留可用于当前开发、运维、安全审查和人工验收的核心文档。阶段流水账、完成计划、
-MCP 操作日志和截图报告不在工作树长期保存；需要追溯时使用 Git 历史和 CI/审查证据。
+本索引只指向扩展升级后仍有效的架构、数据迁移、验收和运维文档。阶段 0 冻结的旧架构盘点，
+以及仍以 Auth/Lobby/Allocator/PlayerData 旧边界为主的总览和监控设计已从工作树删除；如需审计历史，
+使用 Git 记录，不得将旧文档当作现行实施依据。
 
-## 架构与功能
+## 平台演进与现行架构
 
-- [完整应用架构](FULL_APPLICATION_ARCHITECTURE.md)
-- [解决方案项目架构及目录结构](SOLUTION_PROJECT_ARCHITECTURE_AND_DIRECTORY_STRUCTURE_20260731.md)
-- [服务器、房间与玩家实时监控](REALTIME_SERVER_PLAYER_MONITORING_REVIEW_20260728.md)
-- [玩家监控管理与安全设计](PLAYER_MONITORING_ADMIN_DESIGN.md)
+- [ADR-0001：平台增量演进策略](adr/ADR-0001-platform-evolution-strategy.md)
+- [阶段 1：Player EdgeGateway 统一接入](architecture/stage-1-edge-gateway.md)
+- [阶段 2：Contracts 与 BuildingBlocks](architecture/stage-2-contracts-building-blocks.md)
+- [阶段 3：IdentityApp](architecture/stage-3-identity-app.md)
+- [阶段 4：LobbyControlApp](architecture/stage-4-lobby-control-app.md)
+- [阶段 5：Allocation Service](architecture/stage-5-allocation-service.md)
+- [阶段 6：Dedicated Server 生命周期与恢复](architecture/stage-6-dedicated-server-lifecycle-recovery.md)
+- [阶段 7：GameData 与可信结算](architecture/stage-7-game-data-settlement.md)
+- [阶段 8：PlayerData 职责拆解](architecture/stage-8-player-data-decomposition.md)
+- [阶段 9：NATS JetStream 与 Workers](architecture/stage-9-nats-jetstream-workers.md)
+- [阶段 10：Admin、TrustSafety 与监控](architecture/stage-10-admin-trust-safety-monitoring.md)
+- [阶段 11：配置、灰度与多版本治理](architecture/stage-11-configuration-release-governance.md)
+
+## 数据迁移与退役
+
+- [阶段 8.3：Economy 迁移](architecture/stage-8.3-economy-migration.md)
+- [阶段 8.4：Community/Chat 迁移](architecture/stage-8.4-community-chat-migration.md)
+- [阶段 8.5：Backoffice 读模型迁移](architecture/stage-8.5-backoffice-read-model-migration.md)
+- [阶段 8.6：PlayerData 退役](architecture/stage-8.6-player-data-decommission.md)
+- 迁移、回滚与校验 SQL 保存在 [`architecture/sql`](architecture/sql)。
+
+## Unreal Engine 与产品规范
+
+- [Unreal Engine 5.8 工具链恢复与验收](architecture/ue58-toolchain-recovery-validation-20260731.md)
 - [UI 资产与视觉核心规范](UI_ASSET_AND_VISUAL_STANDARD.md)
 
 ## 安全、可观测性与运维
@@ -19,8 +40,5 @@ MCP 操作日志和截图报告不在工作树长期保存；需要追溯时使�
 - [多集群与 SLO 治理运行手册](RUNBOOKS/SLO_MULTI_CLUSTER_GOVERNANCE.md)
 - [Linux、Docker 与 Kubernetes 部署](../Deploy/README.md)
 
-服务专属说明保存在对应 `Services/GuiyangMahjong.*/README.md`，机器契约及版本规则保存在
-`Contracts`。文档若不再描述当前行为，应直接更新核心文档；不得新增按阶段编号的状态报告。
-# 阶段 11 配置与多版本治理
-
-- [配置中心、灰度发布与多版本治理](architecture/stage-11-configuration-release-governance.md)
+服务专属说明保存在对应 `Services/**/README.md`，机器契约及版本规则以 `Services/Contracts`
+和实际项目文件为准。变更现行边界时，必须同步更新对应阶段文档、迁移说明和本索引。
