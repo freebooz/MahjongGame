@@ -153,6 +153,19 @@ bool FMahjongFairShuffleProofTest::RunTest(const FString& Parameters)
         Proof.SeedCommitment,
         FGuiyangFairShuffle::CalculateCommitment(
             TEXT("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"), Proof));
+
+    // 本地模式只有六位公开房间码；该身份仍需进入同一承诺协议，不能因不是 UUID 而阻断开局。
+    int32 LocalSeed = 0;
+    FGuiyangShuffleAuditProof LocalProof;
+    FString LocalError;
+    TestTrue(TEXT("六位公开房间码必须能够生成公平洗牌材料"),
+        FGuiyangFairShuffle::Generate(
+            TEXT("400472"), 1, Rules, LocalSeed, LocalProof, LocalError));
+    TestEqual(TEXT("公开房间码生成的承诺必须为 SHA-256"),
+        LocalProof.SeedCommitment.Len(), 64);
+    TestFalse(TEXT("带协议分隔符的房间身份必须被拒绝"),
+        FGuiyangFairShuffle::Generate(
+            TEXT("400472|roomId=forged"), 1, Rules, LocalSeed, LocalProof, LocalError));
     return true;
 }
 

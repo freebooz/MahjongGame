@@ -53,8 +53,9 @@ bool FGuiyangFairShuffle::Generate(
 {
     OutShuffleSeed = 0;
     OutProof = FGuiyangShuffleAuditProof();
-    FGuid ParsedRoomId;
-    if (RoundId < 1 || !FGuid::Parse(RoomId, ParsedRoomId)
+    // 本地房间使用六位公开房间码，托管房间使用后端 UUID；两者都属于合法的审计身份。
+    // 公平性协议只要求身份非空且不能注入规范文本分隔符，强制解析 GUID 会让本地牌桌永远无法发牌。
+    if (RoundId < 1 || !GuiyangFairShufflePrivate::IsCanonicalIdentity(RoomId)
         || !UGuiyangRuleSnapshotLibrary::VerifySnapshot(RuleSnapshot)
         || !GuiyangFairShufflePrivate::IsCanonicalIdentity(RuleSnapshot.Config.RuleId.ToString()))
     {

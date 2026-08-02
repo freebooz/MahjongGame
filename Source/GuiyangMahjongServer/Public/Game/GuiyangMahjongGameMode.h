@@ -150,6 +150,11 @@ private:
     bool ResolvePlayer(class AGuiyangMahjongPlayerController* Controller, class AGuiyangMahjongPlayerState*& OutPlayerState) const;
     /** 发布房间与牌桌公共/私有快照并推进结算。 */
     void PublishRoomState(const FMahjongRoomState& State);
+    /**
+     * 返回公平洗牌承诺使用的稳定房间身份。
+     * 托管服必须绑定后端 UUID 以匹配 Lobby 结算复核；本地服没有控制面 UUID 时绑定公开房间码。
+     */
+    FString ResolveFairnessRoomId(const FString& PublicRoomCode) const;
     void TryStartTable(const FMahjongRoomState& StartingRoomState);
     void PublishTableSnapshots();
     void FinalizeRoundIfNeeded();

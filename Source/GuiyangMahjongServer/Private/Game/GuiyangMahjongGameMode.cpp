@@ -360,6 +360,11 @@ void AGuiyangMahjongGameMode::PostLogin(APlayerController* NewPlayer)
             MahjongController->Client_ShowErrorMessage(TEXT("托管房间尚未就绪"));
             return;
         }
+        // 只有真实掉线或恢复实例才需要发送控制权快照。新玩家的后续资料 RPC 不能被误判为重连。
+        FGuiyangPlayerConnectionTelemetry PreviousConnection;
+        const bool bWasReconnect = bRecoveredGameServer
+            || (RoomManager->GetPlayerConnectionTelemetry(PlayerId, PreviousConnection)
+                && PreviousConnection.bDisconnected);
         EMahjongRoomError Error = EMahjongRoomError::None;
         const FGuiyangJoinTicketClaims* Claims = AuthorizedClaimsByController.Find(NewPlayer);
         if (!Claims || !RoomManager->AdmitManagedPlayer(
@@ -378,7 +383,7 @@ void AGuiyangMahjongGameMode::PostLogin(APlayerController* NewPlayer)
             Seat ? Seat->SeatIndex : INDEX_NONE,
             Seat ? Seat->bReady : false);
         PublishRoomState(State);
-        if (TableEngine && ActiveRoomCode == State.RoomInfo.RoomId)
+        if (bWasReconnect && TableEngine && ActiveRoomCode == State.RoomInfo.RoomId)
             PublishReconnectSnapshot(MahjongController, State,
                 State.RuleSnapshot.Config.ReconnectTimeoutSeconds);
         if (State.Lifecycle == EMahjongRoomLifecycle::Starting)
@@ -583,6 +588,16 @@ void AGuiyangMahjongGameMode::HandleAuthenticateSession(AGuiyangMahjongPlayerCon
     }
 
     AGuiyangMahjongPlayerState* Player = Controller->GetPlayerState<AGuiyangMahjongPlayerState>();
+    // PostLogin 已使用一次性 JoinTicket 完成同一连接的认证和入座；客户端随后补发的资料 RPC 是幂等确认。
+    // 直接返回可以避免把刚入座的在线玩家再次写成“重连”，也避免发出没有活动牌桌的空重连快照。
+    FString ExistingRoomCode;
+    if (bManagedGameServer && Player && Player->HasValidServerSession()
+        && Player->MahjongPlayerId == CleanPlayerId && RoomManager
+        && RoomManager->GetPlayerRoomCode(CleanPlayerId, ExistingRoomCode)
+        && ExistingRoomCode == Player->RoomCode)
+    {
+        return;
+    }
     if (!Player || !Player->AuthenticateServer(CleanPlayerId, CleanDisplayName, Provider))
     {
         Controller->Client_ShowErrorMessage(TEXT("服务器认证失败"));
@@ -843,6 +858,16 @@ void AGuiyangMahjongGameMode::PublishRoomState(const FMahjongRoomState& State)
     if (AGuiyangMahjongGameState* MahjongState = GetGameState<AGuiyangMahjongGameState>()) MahjongState->SetRoomStateAuthority(State);
 }
 
+FString AGuiyangMahjongGameMode::ResolveFairnessRoomId(const FString& PublicRoomCode) const
+{
+    // 托管结算报告的 RoomId 来自控制面 UUID，承诺和事件链必须使用同一身份才能通过 Lobby 跨语言复核。
+    if (bManagedGameServer && GameServerBridge && !GameServerBridge->GetConfig().RoomId.IsEmpty())
+    {
+        return GameServerBridge->GetConfig().RoomId;
+    }
+    return PublicRoomCode;
+}
+
 void AGuiyangMahjongGameMode::TryStartTable(const FMahjongRoomState& StartingRoomState)
 {
     // 房间生命周期进入 Starting 后，使用冻结规则和 CSPRNG 种子创建权威牌桌。
@@ -851,10 +876,11 @@ void AGuiyangMahjongGameMode::TryStartTable(const FMahjongRoomState& StartingRoo
     UMahjongTableEngine* RoundEngine = TableEngine ? TableEngine.Get() : NewObject<UMahjongTableEngine>(this);
     FString Error;
     const int32 RoundId = CompletedShuffleProofs.Num() + 1;
+    const FString FairnessRoomId = ResolveFairnessRoomId(StartingRoomState.RoomInfo.RoomId);
     int32 Seed = 0;
     FGuiyangShuffleAuditProof Proof;
     if (!FGuiyangFairShuffle::Generate(
-        StartingRoomState.RoomInfo.RoomId, RoundId,
+        FairnessRoomId, RoundId,
         StartingRoomState.RuleSnapshot, Seed, Proof, Error))
     {
         UE_LOG(LogMahjongServer, Error,
@@ -1263,8 +1289,9 @@ void AGuiyangMahjongGameMode::FinalizeRoundIfNeeded()
         const TArray<FMahjongTile>* Deck = TableEngine->GetDeckOrderForServerAudit();
         FGuiyangShuffleAuditProof Proof = PendingShuffleProof.GetValue();
         Proof.RevealedAtUtc = FDateTime::UtcNow();
+        const FString FairnessRoomId = ResolveFairnessRoomId(ActiveRoomCode);
         if (!Deck || !FGuiyangFairShuffle::Verify(
-            ActiveRoomCode, TableEngine->GetLockedRuleSnapshot(), *Deck, Proof))
+            FairnessRoomId, TableEngine->GetLockedRuleSnapshot(), *Deck, Proof))
         {
             UE_LOG(LogMahjongServer, Error,
                 TEXT("Shuffle fairness proof verification failed Room=%s Round=%d"),
@@ -1272,7 +1299,7 @@ void AGuiyangMahjongGameMode::FinalizeRoundIfNeeded()
             return;
         }
         const FString NextEventChainDigest = FGuiyangFairShuffle::CalculateEventChainDigest(
-            FairnessEventChainDigest, ActiveRoomCode, Proof);
+            FairnessEventChainDigest, FairnessRoomId, Proof);
         // Reveal 只能在牌桌进入 Settlement 后写入；失败时保留 Pending，等待下一次安全重试。
         if (bManagedGameServer
             && (!GameServerBridge || !GameServerBridge->AppendShuffleAuditRecord(
