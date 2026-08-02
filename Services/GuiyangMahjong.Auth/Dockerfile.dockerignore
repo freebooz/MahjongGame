@@ -15,3 +15,12 @@ Services/GuiyangMahjong.Auth/obj/
 !Services/GuiyangMahjong.Observability/**
 Services/GuiyangMahjong.Observability/bin/
 Services/GuiyangMahjong.Observability/obj/
+# Auth 通过事件契约写入审计/Outbox；Docker 构建上下文必须保留该项目源码。
+!Services/Contracts/GuiyangMahjong.Contracts.Common/
+!Services/Contracts/GuiyangMahjong.Contracts.Common/**
+Services/Contracts/GuiyangMahjong.Contracts.Common/bin/
+Services/Contracts/GuiyangMahjong.Contracts.Common/obj/
+!Services/Contracts/GuiyangMahjong.Contracts.Events/
+!Services/Contracts/GuiyangMahjong.Contracts.Events/**
+Services/Contracts/GuiyangMahjong.Contracts.Events/bin/
+Services/Contracts/GuiyangMahjong.Contracts.Events/obj/

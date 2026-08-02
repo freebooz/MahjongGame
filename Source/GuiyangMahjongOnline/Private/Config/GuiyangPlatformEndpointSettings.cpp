@@ -125,8 +125,10 @@ bool FGuiyangPlatformEndpointSettings::Load(
 {
     using namespace GuiyangPlatformEndpointsPrivate;
     OutSettings = {};
+    // 线协议使用稳定的操作系统族名；PlatformName() 在 Client/Server 包中会追加目标类型，
+    // 例如 WindowsClient，导致同一 Windows 发行包与网关的 Windows 白名单不一致。
     OutSettings.Platform =
-        FPlatformProperties::PlatformName();
+        ANSI_TO_TCHAR(FPlatformProperties::IniPlatformName());
     if (GConfig)
     {
         GConfig->GetString(
@@ -285,8 +287,9 @@ bool FGuiyangPlatformEndpointSettings::Load(
         OutSettings.Platform.TrimStartAndEnd();
     if (OutSettings.Platform.IsEmpty())
     {
+        // 配置为空时仍回退到稳定平台族名，不能把构建目标后缀泄漏到公开客户端契约。
         OutSettings.Platform =
-            FPlatformProperties::PlatformName();
+            ANSI_TO_TCHAR(FPlatformProperties::IniPlatformName());
     }
     OutSettings.Channel =
         OutSettings.Channel.TrimStartAndEnd();

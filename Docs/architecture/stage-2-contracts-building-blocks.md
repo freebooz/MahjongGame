@@ -1,4 +1,4 @@
-# 阶段 2：统一 Contracts 与 BuildingBlocks
+﻿# 阶段 2：统一 Contracts 与 BuildingBlocks
 
 > 实施日期：2026-07-31  
 > 范围：共享契约和基础构件，不接入现有业务流程  

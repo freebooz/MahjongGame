@@ -587,14 +587,16 @@ public sealed partial class LobbyService
         ?? throw new InvalidOperationException("Rule snapshot could not be cloned.");
 
     /// <summary>
-    /// 从规则快照提取稳定版本；旧请求未携带 ruleVersion 时使用 legacy-v1，
-    /// 确保 Join Ticket 和 DS 启动配置仍能绑定一个明确的规则版本。
+    /// 从规则快照提取服务器规则包版本；ruleVersion 是 UE 玩法快照使用的整数，不能复用。
+    /// 已发布旧客户端未携带 ruleSetVersion 时使用当前部署版本；显式不匹配必须在分配前拒绝，
+    /// 否则 Lobby 签发的票据与 Allocator 启动的 Dedicated Server 会绑定不同规则集。
     /// </summary>
-    private static string ResolveRuleSetVersion(Dictionary<string, object?> snapshot)
+    private string ResolveRuleSetVersion(Dictionary<string, object?> snapshot)
     {
-        if (!snapshot.TryGetValue("ruleVersion", out var value))
+        var deployedVersion = options.Allocator.RuleSetVersion.Trim();
+        if (!snapshot.TryGetValue("ruleSetVersion", out var value))
         {
-            return "legacy-v1";
+            return deployedVersion;
         }
 
         var version = value switch
@@ -603,14 +605,14 @@ public sealed partial class LobbyService
             System.Text.Json.JsonElement
                 { ValueKind: System.Text.Json.JsonValueKind.String } element =>
                 element.GetString()?.Trim() ?? string.Empty,
-            System.Text.Json.JsonElement
-                { ValueKind: System.Text.Json.JsonValueKind.Number } element =>
-                element.GetRawText(),
-            int number => number.ToString(System.Globalization.CultureInfo.InvariantCulture),
-            long number => number.ToString(System.Globalization.CultureInfo.InvariantCulture),
             _ => string.Empty
         };
-        return version is { Length: > 0 and <= 64 } ? version : "legacy-v1";
+        if (version.Length is < 1 or > 64
+            || !version.Equals(deployedVersion, StringComparison.Ordinal))
+        {
+            throw Invalid("规则集版本与当前牌桌服务器不兼容");
+        }
+        return deployedVersion;
     }
 
     /// <summary>

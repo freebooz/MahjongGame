@@ -75,6 +75,9 @@ if (!$PostProcessOnly) {
         '-noclient',
         '-serverplatform=Linux',
         "-serverconfig=$Configuration",
+        # Windows 主机上的 UBA 子进程注入会让 Linux v26 的 ld.lld 触发 Side-by-Side 启动失败；
+        # 仅禁用执行加速器，不改变编译器、链接参数或产物内容，确保交叉链接可重复执行。
+        '-ubtargs=-NoUBA',
         '-map=/Game/Maps/MahjongRoomMap',
         '-build',
         '-SkipCookingEditorContent',

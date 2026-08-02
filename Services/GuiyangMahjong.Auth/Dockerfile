@@ -6,9 +6,13 @@ COPY Services/Directory.Build.props Services/Directory.Build.targets Services/Di
 COPY Services/Schema/ Services/Schema/
 COPY Services/GuiyangMahjong.Auth/GuiyangMahjong.Auth.csproj Services/GuiyangMahjong.Auth/
 COPY Services/GuiyangMahjong.Observability/GuiyangMahjong.Observability.csproj Services/GuiyangMahjong.Observability/
+COPY Services/Contracts/GuiyangMahjong.Contracts.Common/GuiyangMahjong.Contracts.Common.csproj Services/Contracts/GuiyangMahjong.Contracts.Common/
+COPY Services/Contracts/GuiyangMahjong.Contracts.Events/GuiyangMahjong.Contracts.Events.csproj Services/Contracts/GuiyangMahjong.Contracts.Events/
 RUN dotnet restore Services/GuiyangMahjong.Auth/GuiyangMahjong.Auth.csproj
 COPY Contracts/ Contracts/
 COPY Services/GuiyangMahjong.Observability/ Services/GuiyangMahjong.Observability/
+COPY Services/Contracts/GuiyangMahjong.Contracts.Common/ Services/Contracts/GuiyangMahjong.Contracts.Common/
+COPY Services/Contracts/GuiyangMahjong.Contracts.Events/ Services/Contracts/GuiyangMahjong.Contracts.Events/
 COPY Services/GuiyangMahjong.Auth/ Services/GuiyangMahjong.Auth/
 RUN dotnet publish Services/GuiyangMahjong.Auth/GuiyangMahjong.Auth.csproj -c Release -o /app --no-restore
 

@@ -1,4 +1,4 @@
-# 贵阳麻将可观测性开发栈
+﻿# 贵阳麻将可观测性开发栈
 
 本目录提供工作流 D 的本地/预生产基线：OpenTelemetry Collector、Loki、Tempo、Prometheus、Alertmanager 和 Grafana。Loki/Tempo 不直接绑定宿主机公网接口；Admin 只能通过带独立只读令牌的 Nginx 查询网关访问 Loki。
 

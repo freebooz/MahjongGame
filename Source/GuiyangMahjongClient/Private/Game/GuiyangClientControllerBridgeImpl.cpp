@@ -86,15 +86,25 @@ namespace
 
 void UGuiyangClientControllerBridgeImpl::BeginDestroy()
 {
-    if (Controller)
+    // 地图旅行的 GC 阶段 Controller 可能仍未销毁，但其 World 已经解绑；
+    // 直接调用 Controller->GetWorldTimerManager() 会解引用空 World 并导致访问违规。
+    if (UWorld* World = GetWorld())
     {
-        Controller->GetWorldTimerManager().ClearTimer(ReturnToLobbyFallbackTimer);
+        World->GetTimerManager().ClearTimer(CreatingRoomTravelDelayTimer);
+        World->GetTimerManager().ClearTimer(ReturnToLobbyFallbackTimer);
     }
     if (PresentationLoadHandle.IsValid())
     {
         PresentationLoadHandle->CancelHandle();
         PresentationLoadHandle.Reset();
     }
+    // BeginDestroy 之后不能再让弱回调或调试代码观察旧地图对象，显式断开全部拥有关系。
+    PendingAllocatedRoute = {};
+    RootHUDInstance = nullptr;
+    RoomPresentationActor = nullptr;
+    RoomTableActor = nullptr;
+    RoomCameraActor = nullptr;
+    Controller = nullptr;
     Super::BeginDestroy();
 }
 

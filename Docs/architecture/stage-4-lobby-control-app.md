@@ -1,4 +1,4 @@
-# 阶段 4：LobbyControlApp 增量升级实施与验收报告
+﻿# 阶段 4：LobbyControlApp 增量升级实施与验收报告
 
 ## 1. 阶段结论
 

@@ -1,4 +1,4 @@
-# 贵阳捉鸡麻将独立大厅服务
+﻿# 贵阳捉鸡麻将独立大厅服务
 
 > 阶段 4 已将单部署单元内部划分为 Lobby、Rooms、Matchmaking、Reconnection、
 > GameRouting、Administration 和 Infrastructure。详细设计、迁移与验收结果见

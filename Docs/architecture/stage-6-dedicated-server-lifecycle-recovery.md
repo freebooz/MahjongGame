@@ -1,4 +1,4 @@
-# 阶段 6：Dedicated Server 生命周期、连接认证与恢复
+﻿# 阶段 6：Dedicated Server 生命周期、连接认证与恢复
 
 ## 1. 阶段范围与仓库基线
 

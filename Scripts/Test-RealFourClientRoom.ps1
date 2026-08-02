@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
     [Parameter(Mandatory)]
     [string]$ClientExecutable,
@@ -59,8 +59,29 @@ function Invoke-JsonPost(
     [object]$Body,
     [hashtable]$Headers = @{}
 ) {
-    Invoke-RestMethod -Method Post -Uri $Uri -Headers $Headers `
-        -ContentType 'application/json' -Body ($Body | ConvertTo-Json -Depth 8 -Compress)
+    try {
+        # Windows PowerShell 5 直接发送字符串时会使用系统代码页；显式编码为 UTF-8，避免中文昵称变成问号。
+        $jsonBytes = [Text.Encoding]::UTF8.GetBytes(($Body | ConvertTo-Json -Depth 8 -Compress))
+        Invoke-RestMethod -Method Post -Uri $Uri -Headers $Headers `
+            -ContentType 'application/json; charset=utf-8' -Body $jsonBytes
+    }
+    catch {
+        # 保留服务端业务错误正文，避免自动验收只能看到笼统的 HTTP 状态码。
+        $responseBody = $_.ErrorDetails.Message
+        if ([string]::IsNullOrWhiteSpace($responseBody) -and $_.Exception.Response) {
+            # Windows PowerShell 5 不会自动填充 ErrorDetails，需从响应流读取业务错误正文。
+            $responseStream = $_.Exception.Response.GetResponseStream()
+            if ($responseStream) {
+                $reader = [System.IO.StreamReader]::new($responseStream)
+                try { $responseBody = $reader.ReadToEnd() }
+                finally { $reader.Dispose() }
+            }
+        }
+        if ([string]::IsNullOrWhiteSpace($responseBody)) {
+            $responseBody = $_.Exception.Message
+        }
+        throw "POST $Uri failed: $responseBody"
+    }
 }
 
 $players = @()
@@ -90,7 +111,12 @@ try {
             autoStart = $true
             passwordProtected = $false
             password = $null
-            ruleSnapshot = @{ ruleId = 'GuiyangMainstreamV1' }
+            # 玩法版本供 UE 规则快照解析，规则包版本则绑定 Join Ticket 与 Dedicated Server。
+            ruleSnapshot = @{
+                ruleId = 'GuiyangMainstreamV1'
+                ruleVersion = 1
+                ruleSetVersion = 'guiyang-zhuoji-v1'
+            }
         }
     $roomCode = $created.roomCode
     if ([string]::IsNullOrWhiteSpace($roomCode)) {
@@ -148,7 +174,8 @@ try {
 
     $failurePattern = 'NetChecksumMismatch|Connection failed|BroadcastNetworkFailure|Network Failure:|ConnectionLost|入场票据与玩家身份不匹配'
     $connectedPattern = 'UPendingNetGame::TravelCompleted Pending net game travel completed'
-    $roomReadyPattern = 'Root HUD backing layer collapsed for screen /Game/UI/Screens/WBP_GameHUD'
+    # 房间场景生成是四端一致的可见性信号；HUD 背景日志受复制到达顺序影响，不能作为唯一条件。
+    $roomReadyPattern = 'Spawned local room presentation: /Game/Client/Room/Presentation/BP_MahjongRoomPresentation'
     $deadline = [DateTimeOffset]::Now.AddSeconds($ConnectTimeoutSeconds)
     do {
         $allConnectedAndReady = $true

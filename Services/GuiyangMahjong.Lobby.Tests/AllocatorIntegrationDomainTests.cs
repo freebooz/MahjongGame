@@ -30,6 +30,7 @@ public sealed class AllocatorIntegrationDomainTests
 
         var room = await fixture.Store.GetRoomByIdAsync(created.RoomId, CancellationToken.None);
         Assert.NotNull(room);
+        Assert.Equal("guiyang-zhuoji-v1", room.RuleSetVersion);
         var registration = new GameServerRegistration(
             fixture.Allocator.ServerInstanceId,
             room.RoomId,
@@ -67,6 +68,36 @@ public sealed class AllocatorIntegrationDomainTests
         Assert.Equal(owner.PlayerId, payload.RootElement.GetProperty("playerId").GetString());
         Assert.Equal(owner.DisplayName, payload.RootElement.GetProperty("displayName").GetString());
         Assert.Equal(room.RoomEpoch, payload.RootElement.GetProperty("roomEpoch").GetInt64());
+        Assert.Equal(
+            "guiyang-zhuoji-v1",
+            payload.RootElement.GetProperty("ruleSetVersion").GetString());
+    }
+
+    /// <summary>显式规则集与当前专服包不一致时必须在创建和分配前拒绝。</summary>
+    [Fact]
+    public async Task CreateRoom_WithIncompatibleRuleSet_IsRejectedBeforeAllocation()
+    {
+        var fixture = CreateFixture();
+        var request = NewCreateRequest() with
+        {
+            RuleSnapshot = new Dictionary<string, object?>
+            {
+                ["ruleId"] = "GuiyangMainstreamV1",
+                ["ruleSetVersion"] = "legacy-v1"
+            }
+        };
+
+        var exception = await Assert.ThrowsAsync<LobbyOperationException>(() =>
+            fixture.Service.CreateRoomAsync(
+                Guid.NewGuid().ToString(),
+                StrongPlayer("owner-incompatible-rules"),
+                request,
+                CancellationToken.None));
+
+        Assert.Equal(LobbyErrorCode.InvalidRequest, exception.ErrorCode);
+        Assert.Null(await fixture.Store.GetActiveRoomByPlayerAsync(
+            "owner-incompatible-rules",
+            CancellationToken.None));
     }
 
     [Fact]

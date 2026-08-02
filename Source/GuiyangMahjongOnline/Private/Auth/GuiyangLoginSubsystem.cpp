@@ -25,6 +25,24 @@ namespace GuiyangAuthPrivate
         FJsonSerializer::Serialize(Object, Writer);
         return Json;
     }
+
+    /**
+     * 从网关错误正文读取非敏感稳定错误码，用于区分发布契约拒绝与网络故障。
+     * 正文缺失或格式异常时返回空串；调用方不得把服务端 Message 原样展示给玩家。
+     */
+    FString ReadGatewayErrorCode(const FHttpResponsePtr& Response)
+    {
+        if (!Response.IsValid()) return {};
+        TSharedPtr<FJsonObject> Json;
+        const TSharedRef<TJsonReader<>> Reader =
+            TJsonReaderFactory<>::Create(Response->GetContentAsString());
+        FString ErrorCode;
+        return FJsonSerializer::Deserialize(Reader, Json)
+            && Json.IsValid()
+            && Json->TryGetStringField(TEXT("code"), ErrorCode)
+                ? ErrorCode.Left(80)
+                : FString();
+    }
 }
 
 #if 0 // Implemented by GuiyangMahjongCore so server builds do not link the client auth module.
@@ -212,10 +230,32 @@ void UGuiyangLoginSubsystem::CompleteRemoteGuestLogin(
     FHttpRequestPtr Request, FHttpResponsePtr Response, const bool bSucceeded)
 {
     if (LoginState != EGuiyangLoginState::LoggingIn) return;
-    if (!bSucceeded || !Response.IsValid() || !EHttpResponseCodes::IsOk(Response->GetResponseCode())
-        || !ApplyRemoteSessionResponse(Response, true))
+    if (!bSucceeded || !Response.IsValid())
     {
-        FailLogin(TEXT("登录服务暂时不可用或返回了无效会话"));
+        FailLogin(TEXT("无法连接登录服务，请检查网络后重试"));
+        return;
+    }
+    if (!EHttpResponseCodes::IsOk(Response->GetResponseCode()))
+    {
+        const FString ErrorCode =
+            GuiyangAuthPrivate::ReadGatewayErrorCode(Response);
+        // 只记录状态码和稳定错误码，禁止输出可能含令牌的响应正文。
+        UE_LOG(
+            LogMahjongOnline,
+            Warning,
+            TEXT("RemoteAuth 请求被拒绝：HttpStatus=%d，ErrorCode=%s"),
+            Response->GetResponseCode(),
+            ErrorCode.IsEmpty() ? TEXT("Unknown") : *ErrorCode);
+        FailLogin(ErrorCode.Equals(
+            TEXT("CLIENT_DISTRIBUTION_INVALID"),
+            ESearchCase::CaseSensitive)
+                ? TEXT("当前客户端平台或发行渠道不受支持，请更新客户端")
+                : TEXT("登录服务暂时不可用，请稍后重试"));
+        return;
+    }
+    if (!ApplyRemoteSessionResponse(Response, true))
+    {
+        FailLogin(TEXT("登录服务返回了无效会话，请稍后重试"));
     }
 }
 

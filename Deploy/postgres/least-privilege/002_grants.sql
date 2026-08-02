@@ -2,6 +2,9 @@
 -- 先撤销 PUBLIC，再逐表授权，避免 public schema 中 Auth 与 Lobby 互相越权。
 
 REVOKE CREATE ON SCHEMA public FROM PUBLIC;
+-- PlayerData 已退役，但最小权限清单仍需在全新数据库中冻结其历史命名空间；
+-- 必须先幂等创建再参与批量 REVOKE，避免首次部署因 Schema 尚不存在而中断。
+CREATE SCHEMA IF NOT EXISTS player_data AUTHORIZATION mahjong_migration;
 REVOKE ALL ON SCHEMA
     auth, session, player, integration,
     lobby, room, matchmaking,
@@ -18,11 +21,11 @@ GRANT USAGE ON SCHEMA lobby, room, matchmaking TO
 GRANT USAGE ON SCHEMA auth, session, player, integration TO
     mahjong_auth_rw, mahjong_monitor_ro;
 -- PlayerData 已退役；空环境仅保留只读历史命名空间，升级环境中的旧表由阶段8.6核对后冻结。
-CREATE SCHEMA IF NOT EXISTS player_data AUTHORIZATION mahjong_migration;
 GRANT USAGE ON SCHEMA player_data TO mahjong_monitor_ro;
 REVOKE ALL ON SCHEMA player_data FROM mahjong_player_data_rw, mahjong_player_data;
+-- GameData 生产事务与 Workers 发布事务使用同一 Outbox Schema；Worker 需有 Schema USAGE 才能领取表记录。
 GRANT USAGE ON SCHEMA settlement, game_record, replay, leaderboard, game_data_integration TO
-    mahjong_game_data_rw, mahjong_monitor_ro;
+    mahjong_game_data_rw, mahjong_workers_rw, mahjong_monitor_ro;
 -- Configuration 是独立数据所有者；Worker 只领取其 Outbox，Admin 没有该 Schema 的直接写权限。
 GRANT USAGE ON SCHEMA configuration, configuration_integration TO
     mahjong_configuration_rw, mahjong_workers_rw, mahjong_monitor_ro;
@@ -66,9 +69,10 @@ REVOKE ALL ON ALL TABLES IN SCHEMA settlement, game_record, replay, leaderboard,
 REVOKE ALL ON ALL TABLES IN SCHEMA configuration, configuration_integration FROM PUBLIC;
 REVOKE ALL ON ALL TABLES IN SCHEMA identity_integration, lobby_integration, worker_integration, worker_projection FROM PUBLIC;
 
--- 事务生产者只有 INSERT 权限；SELECT/UPDATE/DELETE 仅交给发布 Worker，阻止业务服务伪造已发布状态。
-GRANT INSERT ON identity_integration.platform_outbox TO mahjong_auth_rw;
-GRANT INSERT ON lobby_integration.platform_outbox TO mahjong_lobby_rw;
+-- 事务生产者只允许追加和读取幂等冲突键；PostgreSQL 的 INSERT ... ON CONFLICT
+-- 必须具备目标表 SELECT 权限。UPDATE/DELETE 仍仅交给发布 Worker，阻止业务服务伪造发布状态。
+GRANT SELECT, INSERT ON identity_integration.platform_outbox TO mahjong_auth_rw;
+GRANT SELECT, INSERT ON lobby_integration.platform_outbox TO mahjong_lobby_rw;
 GRANT SELECT, UPDATE, DELETE ON identity_integration.platform_outbox,
     lobby_integration.platform_outbox,
     game_data_integration.platform_outbox TO mahjong_workers_rw;
@@ -210,13 +214,13 @@ ALTER DEFAULT PRIVILEGES FOR ROLE mahjong_migration IN SCHEMA game_data_integrat
 ALTER DEFAULT PRIVILEGES FOR ROLE mahjong_migration IN SCHEMA identity_integration
     REVOKE ALL ON TABLES FROM PUBLIC;
 ALTER DEFAULT PRIVILEGES FOR ROLE mahjong_migration IN SCHEMA identity_integration
-    GRANT INSERT ON TABLES TO mahjong_auth_rw;
+    GRANT SELECT, INSERT ON TABLES TO mahjong_auth_rw;
 ALTER DEFAULT PRIVILEGES FOR ROLE mahjong_migration IN SCHEMA identity_integration
     GRANT SELECT, UPDATE, DELETE ON TABLES TO mahjong_workers_rw;
 ALTER DEFAULT PRIVILEGES FOR ROLE mahjong_migration IN SCHEMA lobby_integration
     REVOKE ALL ON TABLES FROM PUBLIC;
 ALTER DEFAULT PRIVILEGES FOR ROLE mahjong_migration IN SCHEMA lobby_integration
-    GRANT INSERT ON TABLES TO mahjong_lobby_rw;
+    GRANT SELECT, INSERT ON TABLES TO mahjong_lobby_rw;
 ALTER DEFAULT PRIVILEGES FOR ROLE mahjong_migration IN SCHEMA lobby_integration
     GRANT SELECT, UPDATE, DELETE ON TABLES TO mahjong_workers_rw;
 ALTER DEFAULT PRIVILEGES FOR ROLE mahjong_migration IN SCHEMA worker_integration

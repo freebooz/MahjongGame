@@ -1,4 +1,4 @@
-# 阶段9：NATS JetStream、Outbox、Inbox 与 BackgroundWorkers
+﻿# 阶段9：NATS JetStream、Outbox、Inbox 与 BackgroundWorkers
 
 ## 1. 阶段范围与结论
 

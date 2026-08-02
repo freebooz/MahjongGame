@@ -1,4 +1,4 @@
-# GuiyangMahjong.PlayerData
+﻿# GuiyangMahjong.PlayerData
 
 PlayerData 是阶段 8 拆解期间的短期兼容适配层，不得新增业务能力。
 

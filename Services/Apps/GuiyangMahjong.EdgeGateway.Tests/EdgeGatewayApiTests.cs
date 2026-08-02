@@ -257,6 +257,24 @@ public sealed class EdgeGatewayApiTests : IAsyncLifetime
         Assert.Equal("CLIENT_DISTRIBUTION_INVALID", error.Code);
     }
 
+    /// <summary>已发布 UE WindowsClient 包必须兼容接入，并向下游转发规范 Windows 平台族。</summary>
+    [Fact]
+    public async Task WindowsClientPlatform_IsNormalizedAndForwarded()
+    {
+        using var client = CreateClient();
+        client.DefaultRequestHeaders.Remove("X-Platform");
+        client.DefaultRequestHeaders.Add(
+            "X-Platform",
+            "WindowsClient");
+        using var response = await client.PostAsync(
+            "/api/v1/auth/guest",
+            JsonContent("{}"));
+        var echo = await ReadEchoAsync(response);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("Windows", GetHeader(echo, "X-Platform"));
+    }
+
     /// <summary>Host 不在显式白名单时由 HostFiltering 在进入代理前拒绝。</summary>
     [Fact]
     public async Task HostOutsideAllowList_IsRejected()

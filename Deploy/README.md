@@ -1,4 +1,4 @@
-# 贵阳捉鸡麻将服务端部署
+﻿# 贵阳捉鸡麻将服务端部署
 
 服务端统一部署到 Linux。Windows 仅用于 UE 交叉编译和通过 WSL2 管理本地 Linux 环境；Auth、Lobby、Allocator、PostgreSQL、Redis 与 UE Dedicated Server 均不作为 Windows 服务运行。
 

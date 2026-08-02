@@ -225,6 +225,7 @@ LOBBY_PORT=18080
 ALLOCATOR_PORT=18081
 GAME_PORT_START=19000
 GAME_PORT_END=19099
+GAMEDATA_PORT=18088
 POSTGRES_PASSWORD=$(random_secret 24)
 PLAYER_TOKEN_SIGNING_KEY=$(random_secret 32)
 GUEST_IDENTITY_PEPPER=$(random_secret 32)
@@ -234,22 +235,55 @@ ALLOCATOR_SERVICE_TOKEN=$(random_secret 32)
 EOF
   fi
 
+  # 历史版本曾让 GameData 与玩家入口 EdgeGateway 共用 18085；升级时自动迁移仅本机诊断端口。
+  if [[ "$(env_value GAMEDATA_PORT)" == "18085" ]]; then
+    sed -i 's/^GAMEDATA_PORT=18085$/GAMEDATA_PORT=18088/' "$ENV_FILE"
+  fi
+  if [[ -z "$(env_value GAMEDATA_PORT)" ]]; then
+    printf '%s\n' 'GAMEDATA_PORT=18088' >>"$ENV_FILE"
+  fi
+
   # Keep existing installations forward-compatible when a newer Compose file
   # introduces another authenticated management or monitoring endpoint.  An
   # upgrade must backfill a strong, unique token instead of failing halfway
   # through the deployment or encouraging operators to disable authentication.
   local secret_key
+  # 与 compose.yaml 的 :? 必填机密保持同源：首次部署和升级补齐缺失项，
+  # 避免新架构增加服务后只在 docker compose 插值阶段才暴露缺失配置。
   local managed_secrets=(
     POSTGRES_PASSWORD
+    MIGRATION_DB_PASSWORD
+    AUTH_DB_PASSWORD
+    LOBBY_DB_PASSWORD
+    GAME_DATA_DB_PASSWORD
+    ECONOMY_DB_PASSWORD
+    CONFIGURATION_DB_PASSWORD
+    WORKERS_DB_PASSWORD
+    ADMIN_DB_PASSWORD
+    MONITOR_DB_PASSWORD
+    AUDIT_DB_PASSWORD
+    ARCHIVE_DB_PASSWORD
+    NATS_USERNAME
+    NATS_PASSWORD
     PLAYER_TOKEN_SIGNING_KEY
     GUEST_IDENTITY_PEPPER
     JOIN_TICKET_SIGNING_KEY
+    SETTLEMENT_SIGNING_KEY
     LOBBY_INTERNAL_TOKEN
     ALLOCATOR_SERVICE_TOKEN
     ALLOCATOR_MANAGEMENT_COMMAND_TOKEN
     AUTH_MANAGEMENT_COMMAND_TOKEN
     LOBBY_MANAGEMENT_COMMAND_TOKEN
     MONITORING_READ_ONLY_TOKEN
+    CONFIGURATION_SIGNING_KEY
+    CONFIGURATION_ADMIN_TOKEN
+    CONFIGURATION_READ_TOKEN
+    ADMIN_TOPOLOGY_REGISTRATION_TOKEN
+    ADMIN_TOPOLOGY_LOBBY_TOKEN
+    ADMIN_TOPOLOGY_ALLOCATOR_TOKEN
+    GAMEDATA_LOBBY_AUTHORITY_TOKEN
+    GAMEDATA_MONITORING_TOKEN
+    GAMEDATA_RECOVERY_TOKEN
     PLAYER_DATA_ADMIN_COMMAND_TOKEN
     PLAYER_DATA_CHAT_GATEWAY_TOKEN
     PLAYER_DATA_MONITORING_TOKEN
@@ -305,15 +339,22 @@ EOF
 }
 
 validate_environment() {
-  local required=(MAHJONG_VERSION MAHJONG_DATA_ROOT ADVERTISED_IP POSTGRES_PASSWORD \
-    PLAYER_TOKEN_SIGNING_KEY GUEST_IDENTITY_PEPPER JOIN_TICKET_SIGNING_KEY \
-    LOBBY_INTERNAL_TOKEN ALLOCATOR_SERVICE_TOKEN ALLOCATOR_MANAGEMENT_COMMAND_TOKEN \
-    AUTH_MANAGEMENT_COMMAND_TOKEN LOBBY_MANAGEMENT_COMMAND_TOKEN MONITORING_READ_ONLY_TOKEN \
-    PLAYER_DATA_ADMIN_COMMAND_TOKEN PLAYER_DATA_CHAT_GATEWAY_TOKEN \
-    PLAYER_DATA_MONITORING_TOKEN PLAYER_DATA_SOURCE_INGESTION_TOKEN \
-    ADMIN_CHAT_COMPLIANCE_TOKEN ADMIN_COMPENSATION_OPERATOR_TOKEN \
-    ADMIN_EVIDENCE_INGESTION_TOKEN ADMIN_INFRASTRUCTURE_OPERATOR_TOKEN \
-    ADMIN_PLAYER_APPROVER_TOKEN ADMIN_PLAYER_OPERATOR_TOKEN ADMIN_READ_ONLY_TOKEN \
+  # 此列表必须覆盖 compose.yaml 中所有 :? 变量，以便在构建镜像前给出可读错误，
+  # 同时保证新服务的数据库账号、NATS 账号和用途隔离令牌不会漏配。
+  local required=(MAHJONG_VERSION MAHJONG_DATA_ROOT ADVERTISED_IP GAME_SERVER_MAP \
+    POSTGRES_PASSWORD MIGRATION_DB_PASSWORD AUTH_DB_PASSWORD LOBBY_DB_PASSWORD \
+    GAME_DATA_DB_PASSWORD ECONOMY_DB_PASSWORD CONFIGURATION_DB_PASSWORD WORKERS_DB_PASSWORD \
+    ADMIN_DB_PASSWORD MONITOR_DB_PASSWORD AUDIT_DB_PASSWORD ARCHIVE_DB_PASSWORD \
+    NATS_USERNAME NATS_PASSWORD PLAYER_TOKEN_SIGNING_KEY GUEST_IDENTITY_PEPPER \
+    JOIN_TICKET_SIGNING_KEY SETTLEMENT_SIGNING_KEY LOBBY_INTERNAL_TOKEN \
+    ALLOCATOR_SERVICE_TOKEN ALLOCATOR_MANAGEMENT_COMMAND_TOKEN AUTH_MANAGEMENT_COMMAND_TOKEN \
+    LOBBY_MANAGEMENT_COMMAND_TOKEN MONITORING_READ_ONLY_TOKEN CONFIGURATION_SIGNING_KEY \
+    CONFIGURATION_ADMIN_TOKEN CONFIGURATION_READ_TOKEN ADMIN_TOPOLOGY_REGISTRATION_TOKEN \
+    ADMIN_TOPOLOGY_LOBBY_TOKEN ADMIN_TOPOLOGY_ALLOCATOR_TOKEN GAMEDATA_LOBBY_AUTHORITY_TOKEN \
+    GAMEDATA_MONITORING_TOKEN GAMEDATA_RECOVERY_TOKEN ECONOMY_SOURCE_TOKEN ECONOMY_ADMIN_TOKEN \
+    ECONOMY_MONITORING_TOKEN COMMUNITY_CHAT_GATEWAY_TOKEN ADMIN_READ_ONLY_TOKEN \
+    ADMIN_EVIDENCE_INGESTION_TOKEN ADMIN_CHAT_COMPLIANCE_TOKEN ADMIN_COMPENSATION_OPERATOR_TOKEN \
+    ADMIN_INFRASTRUCTURE_OPERATOR_TOKEN ADMIN_PLAYER_APPROVER_TOKEN ADMIN_PLAYER_OPERATOR_TOKEN \
     ADMIN_RISK_ANALYST_TOKEN ADMIN_ROOM_APPROVER_TOKEN ADMIN_ROOM_OPERATOR_TOKEN \
     ADMIN_SANCTION_OPERATOR_TOKEN ADMIN_SUPPORT_OPERATOR_TOKEN)
   local key value
@@ -321,6 +362,7 @@ validate_environment() {
     value="$(env_value "$key")"
     [[ -n "$value" ]] || { echo "Missing $key in $ENV_FILE" >&2; exit 1; }
     if [[ "$key" != MAHJONG_VERSION && "$key" != MAHJONG_DATA_ROOT && "$key" != ADVERTISED_IP \
+          && "$key" != GAME_SERVER_MAP \
           && ${#value} -lt 32 ]]; then
       echo "$key must contain at least 32 characters." >&2
       exit 1
@@ -429,7 +471,7 @@ wait_endpoint() {
 }
 
 reconcile_postgres_credentials() {
-  local deadline=$((SECONDS + 60)) password
+  local restart_dependents="${1:-true}" deadline=$((SECONDS + 60)) password
   until compose exec -T postgres pg_isready -U mahjong -d mahjong >/dev/null 2>&1; do
     ((SECONDS < deadline)) \
       || { echo "PostgreSQL did not become ready for credential reconciliation." >&2; return 1; }
@@ -441,7 +483,10 @@ reconcile_postgres_credentials() {
   printf "\\set role_password '%s'\nALTER ROLE mahjong WITH PASSWORD :'role_password';\n" "$password" \
     | compose exec -T -u postgres postgres \
         psql --no-psqlrc --set=ON_ERROR_STOP=1 --username=mahjong --dbname=mahjong >/dev/null
-  compose restart auth lobby >/dev/null
+  # 迁移前仅需统一数据库登录凭据；Auth/Lobby 尚未创建时不能执行 restart。
+  if [[ "$restart_dependents" == true ]]; then
+    compose restart auth lobby >/dev/null
+  fi
   echo "POSTGRES_CREDENTIALS_OK"
 }
 
@@ -478,7 +523,13 @@ deploy() {
     [[ "$REFRESH_BASE_IMAGES" == false ]] || build_arguments+=(--pull)
     BUILDKIT_PROGRESS=plain compose "${build_arguments[@]}"
   fi
-  compose up --detach --remove-orphans
+  # PostgreSQL 数据卷可能来自上一版本；先以数据库超级用户轮换 mahjong 登录密码，
+  # 再启动依赖该登录身份的迁移容器，避免新 .env 与旧持久卷密码不一致而中断升级。
+  compose up --detach --force-recreate postgres
+  reconcile_postgres_credentials false
+  # 升级必须重建全部容器：配置文件挂载类型、Linux DS 产物和环境变量都可能变化；
+  # 仅依赖 Compose 的配置摘要会保留旧容器，从而继续使用已失效的 bind mount。
+  compose up --detach --force-recreate --remove-orphans
   reconcile_postgres_credentials
   wait_endpoint Auth "http://127.0.0.1:$(env_value AUTH_PORT)/health/ready"
   wait_endpoint Allocator "http://127.0.0.1:$(env_value ALLOCATOR_PORT)/health/ready"

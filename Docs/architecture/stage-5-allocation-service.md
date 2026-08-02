@@ -1,4 +1,4 @@
-# 阶段 5：统一 Allocation Service 实施与验收报告
+﻿# 阶段 5：统一 Allocation Service 实施与验收报告
 
 ## 1. 阶段结论
 

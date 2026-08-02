@@ -39,6 +39,17 @@ public static class GatewayErrorWriter
             return;
         }
 
+        // 只记录拒绝类型和请求元数据，便于定位客户端契约问题；不得记录正文、令牌或其他凭据。
+        var logger = context.RequestServices
+            .GetRequiredService<ILoggerFactory>()
+            .CreateLogger("GuiyangMahjong.EdgeGateway.Rejection");
+        logger.LogWarning(
+            "网关拒绝请求：StatusCode={StatusCode} ErrorCode={ErrorCode} Method={Method} Path={Path}",
+            statusCode,
+            code,
+            context.Request.Method,
+            context.Request.Path.Value);
+
         // Retry-After 在限流器调用统一写入器前已经计算；Clear 后必须显式恢复该标准头。
         var retryAfter =
             context.Response.Headers.RetryAfter.ToString();
@@ -319,8 +330,8 @@ public sealed class ClientContractMiddleware(
             context.Request.Headers["X-Client-Version"].ToString().Trim();
         var protocolVersion =
             context.Request.Headers["X-Protocol-Version"].ToString().Trim();
-        var platform =
-            context.Request.Headers["X-Platform"].ToString().Trim();
+        var platform = NormalizePlatform(
+            context.Request.Headers["X-Platform"].ToString());
         var channel =
             context.Request.Headers["X-Channel"].ToString().Trim();
         // 每个请求只读取一次原子快照，保证最低版本和协议列表来自同一配置版本。
@@ -393,6 +404,20 @@ public sealed class ClientContractMiddleware(
         context.Request.Headers["X-Channel"] = channel;
         context.Request.Headers["X-Config-Version"] = activeContract.ConfigVersion.ToString(System.Globalization.CultureInfo.InvariantCulture);
         await next(context);
+    }
+
+    /// <summary>
+    /// 把已发布 UE WindowsClient 包使用的运行目标名收敛为公开 Windows 平台族。
+    /// 该兼容映射只处理已知旧值，不放宽未知平台，也保证转发给下游的头始终使用规范值。
+    /// </summary>
+    private static string NormalizePlatform(string value)
+    {
+        var platform = value.Trim();
+        return platform.Equals(
+            "WindowsClient",
+            StringComparison.OrdinalIgnoreCase)
+            ? "Windows"
+            : platform;
     }
 
     private static bool HasBody(HttpRequest request) =>

@@ -1,4 +1,4 @@
-# Agones 专用游戏服务器部署
+﻿# Agones 专用游戏服务器部署
 
 本目录提供可选的 Agones 生产部署骨架。现有 Lobby/Allocator 本地与 WSL 流程保持不变；只有显式传入
 `-MahjongOrchestrator=Agones` 或环境变量 `MAHJONG_ORCHESTRATOR=agones` 时，UE 专用服务器才连接

@@ -1,4 +1,4 @@
-# 阶段 1：Player EdgeGateway 统一接入
+﻿# 阶段 1：Player EdgeGateway 统一接入
 
 > 实施日期：2026-07-31  
 > 基线：阶段 0 当前架构盘点  

@@ -1,4 +1,4 @@
-<#
+﻿<#
 从登录流程启动四个独立客户端用于人工联机验证，并隔离窗口参数与玩家会话。
 调用前要求客户端已成功编译；脚本不创建正式账号，也不得把测试令牌写入命令日志。
 #>
@@ -79,6 +79,8 @@ for ($index = 0; $index -lt 4; ++$index) {
         "-UserDir=$userDirectory",
         '-MahjongAuthMode=RemoteAuth',
         '-MahjongLobbyBackend=RemoteLobby',
+        # 人工审核显式标记为 development，便于网关日志区分本地测试与正式发行流量。
+        '-MahjongChannel=development',
         "-MahjongApiBaseUrl=$ApiBaseUrl",
         "-MahjongRealtimeBaseUrl=$RealtimeBaseUrl",
         '-log',

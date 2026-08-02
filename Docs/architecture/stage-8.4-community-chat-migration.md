@@ -1,4 +1,4 @@
-# 阶段 8.4 Community/Chat 授权迁移报告
+﻿# 阶段 8.4 Community/Chat 授权迁移报告
 
 ## 实际边界
 
