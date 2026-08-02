@@ -165,7 +165,8 @@ bool FMahjongReactionPriorityTest::RunTest(const FString& Parameters)
     TestTrue(TEXT("优先级测试牌桌开局成功"), Engine->StartRound(Rules, Seats, 0, 99, Error));
 
     FMahjongHand Discarder = MahjongTest::MakeHand({0,1,2,3,4,5,6,7,8,9,10,11,12,13});
-    FMahjongHand PengPlayer = MahjongTest::MakeHand({0,0,3,4,5,6,7,8,9,10,11,12,13});
+    // 座位1持有三张同牌，出牌落地后必须同时收到明杠和碰候选；这覆盖“规则可杠但客户端无按钮”的服务端前半链路。
+    FMahjongHand PengPlayer = MahjongTest::MakeHand({0,0,0,3,4,5,6,7,8,9,10,11,12});
     const FMahjongHand WaitingHu = MahjongTest::MakeHand({1,2, 3,4,5, 9,10,11, 18,18,18, 31,31});
     TestTrue(TEXT("注入出牌者测试手牌"), Engine->SetHandForServerTest(0, Discarder));
     TestTrue(TEXT("注入碰牌候选手牌"), Engine->SetHandForServerTest(1, PengPlayer));
@@ -180,6 +181,9 @@ bool FMahjongReactionPriorityTest::RunTest(const FString& Parameters)
     Play.ClientSequence = 1;
     TestTrue(TEXT("测试牌出牌成功"), Engine->SubmitPlayTile(0, Play).bSuccess);
     TestTrue(TEXT("座位1必须获得碰候选"), Engine->GetAvailableActions(1).ContainsByPredicate([](const FMahjongAction& A) { return A.Type == EMahjongActionType::Peng; }));
+    TestTrue(TEXT("座位1持有三张同牌时必须获得明杠候选"),
+        Engine->GetAvailableActions(1).ContainsByPredicate(
+            [](const FMahjongAction& A) { return A.Type == EMahjongActionType::MingGang; }));
     TestTrue(TEXT("座位2必须获得胡候选"), Engine->GetAvailableActions(2).ContainsByPredicate([](const FMahjongAction& A) { return A.Type == EMahjongActionType::Hu; }));
     TestTrue(TEXT("座位3必须获得胡候选"), Engine->GetAvailableActions(3).ContainsByPredicate([](const FMahjongAction& A) { return A.Type == EMahjongActionType::Hu; }));
 

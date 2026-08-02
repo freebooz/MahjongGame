@@ -1004,7 +1004,8 @@ void UMobileMahjongHUDWidget::ApplyVisualReviewState(const FMahjongPublicTableSt
     bVisualReviewMode = true;
     RefreshPrivateHand(PrivateState);
     RefreshTableState(PublicState);
-    ActionButtonPanel->ShowActions(Actions);
+    // 可视化审查必须走生产网络事件的同一入口，才能覆盖父面板被房间阶段折叠后的恢复逻辑。
+    HandleAvailableActions(Actions);
     Txt_Countdown->SetText(FText::AsNumber(12));
 #endif
 }

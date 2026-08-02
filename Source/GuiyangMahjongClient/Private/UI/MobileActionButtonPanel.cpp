@@ -158,6 +158,13 @@ void UMobileActionButtonPanel::ShowActions(const TArray<FMahjongAction>& Actions
         Button->SetIsEnabled(bVisible);
         Button->SetRenderOpacity(1.0f);
     };
+    if (!Actions.IsEmpty())
+    {
+        // 房间阶段刷新会在准备阶段折叠整个响应面板。权威候选到达后必须由面板自身恢复，
+        // 不能只恢复碰/杠/胡子按钮，否则 Slate 仍会因祖先为 Collapsed 而完全不生成布局与命中区域。
+        SetVisibility(ESlateVisibility::Visible);
+        SetIsEnabled(true);
+    }
     SetRenderOpacity(1.0f);
     if (Panel_Actions)
     {
