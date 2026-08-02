@@ -20,6 +20,8 @@ class GUIYANGMAHJONGCLIENT_API UMobileActionButtonPanel : public UUserWidget
 protected:
     /** 视图构造后绑定四个操作按钮；重复构造必须避免累加同一点击委托。 */
     virtual void NativeConstruct() override;
+    /** 候选刷新后的下一帧记录一次真实 Slate 几何，用于发现零尺寸或越界的操作面板。 */
+    virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
     UPROPERTY(meta=(BindWidget)) TObjectPtr<UButton> Btn_Hu;
     UPROPERTY(meta=(BindWidget)) TObjectPtr<UButton> Btn_Gang;
     UPROPERTY(meta=(BindWidget)) TObjectPtr<UButton> Btn_Peng;
@@ -36,6 +38,8 @@ protected:
     /** 最近一次服务端下发的动作集合；仅在本控件生命周期内有效。 */
     TArray<FMahjongAction> CurrentActions;
     int32 SelectedPlayTileId = INDEX_NONE;
+    /** 非空候选到达后等待下一次布局完成；仅记录一次，避免每帧污染客户端日志。 */
+    bool bPendingLayoutInspection = false;
 public:
     /** 用新权威动作集合刷新按钮可见性；空数组会隐藏整个操作区。 */
     UFUNCTION(BlueprintCallable, Category="麻将|UI") void ShowActions(const TArray<FMahjongAction>& Actions);

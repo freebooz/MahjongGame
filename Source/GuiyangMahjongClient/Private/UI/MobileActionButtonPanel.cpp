@@ -102,6 +102,35 @@ void UMobileActionButtonPanel::NativeConstruct()
     SetPlayTileState(false, false, INDEX_NONE);
 }
 
+void UMobileActionButtonPanel::NativeTick(const FGeometry& MyGeometry, const float InDeltaTime)
+{
+    Super::NativeTick(MyGeometry, InDeltaTime);
+    if (!bPendingLayoutInspection)
+    {
+        return;
+    }
+    bPendingLayoutInspection = false;
+
+    const auto DescribeGeometry = [](const UWidget* Widget)
+    {
+        if (!Widget)
+        {
+            return FString(TEXT("空控件"));
+        }
+        const FGeometry& Geometry = Widget->GetCachedGeometry();
+        const FVector2D Position = Geometry.LocalToAbsolute(FVector2D::ZeroVector);
+        const FVector2D Size = Geometry.GetLocalSize();
+        return FString::Printf(TEXT("位置=(%.1f,%.1f) 尺寸=(%.1f,%.1f) 可见性=%d"),
+            Position.X, Position.Y, Size.X, Size.Y,
+            static_cast<int32>(Widget->GetVisibility()));
+    };
+    UE_LOG(LogMahjongUI, Display,
+        TEXT("操作按钮布局检查：面板[%s] 行[%s] 过[%s] 碰[%s] 杠[%s] 胡[%s]"),
+        *DescribeGeometry(this), *DescribeGeometry(Panel_Actions),
+        *DescribeGeometry(Btn_Pass), *DescribeGeometry(Btn_Peng),
+        *DescribeGeometry(Btn_Gang), *DescribeGeometry(Btn_Hu));
+}
+
 void UMobileActionButtonPanel::CentreVisibleButtons()
 {
     if (!Panel_Actions)
@@ -164,6 +193,7 @@ void UMobileActionButtonPanel::ShowActions(const TArray<FMahjongAction>& Actions
         // 不能只恢复碰/杠/胡子按钮，否则 Slate 仍会因祖先为 Collapsed 而完全不生成布局与命中区域。
         SetVisibility(ESlateVisibility::Visible);
         SetIsEnabled(true);
+        bPendingLayoutInspection = true;
     }
     SetRenderOpacity(1.0f);
     if (Panel_Actions)

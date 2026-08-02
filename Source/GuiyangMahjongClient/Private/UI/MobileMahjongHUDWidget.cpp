@@ -97,6 +97,21 @@ void UMobileMahjongHUDWidget::NativeConstruct()
     // Keep controls above the enlarged south hand, matching the mobile reference layout.
     if (ActionButtonPanel)
     {
+        // 旧 HUD 资产中的操作面板位于一个可能被房间阶段折叠且不再参与 Slate 布局的分支；
+        // 即使子按钮恢复为 Visible，实际几何仍会保持 0×0。以原资产类创建独立顶层实例，
+        // 让碰/明杠/暗杠/补杠/胡及出牌按钮始终拥有稳定的视口布局与命中区域。
+        UMobileActionButtonPanel* AuthoredActionPanel = ActionButtonPanel;
+        AuthoredActionPanel->SetVisibility(ESlateVisibility::Collapsed);
+        if (UMobileActionButtonPanel* ViewportActionPanel =
+            CreateWidget<UMobileActionButtonPanel>(GetOwningPlayer(), AuthoredActionPanel->GetClass()))
+        {
+            ActionButtonPanel = ViewportActionPanel;
+            ActionButtonPanel->SetDesiredSizeInViewport(FVector2D(1200.0f, 220.0f));
+            ActionButtonPanel->SetAnchorsInViewport(FAnchors(0.5f, 0.72f));
+            ActionButtonPanel->SetAlignmentInViewport(FVector2D(0.5f, 0.5f));
+            ActionButtonPanel->SetPositionInViewport(FVector2D::ZeroVector, false);
+            ActionButtonPanel->AddToPlayerScreen(200);
+        }
         ActionButtonPanel->OnPlayTileRequested.AddUniqueDynamic(
             this, &ThisClass::HandlePlayTileButtonRequested);
         if (UCanvasPanelSlot* ActionSlot =
@@ -444,6 +459,11 @@ void UMobileMahjongHUDWidget::NativeDestruct()
     {
         ActionButtonPanel->OnPlayTileRequested.RemoveDynamic(
             this, &ThisClass::HandlePlayTileButtonRequested);
+        // 顶层操作面板不属于 HUD 的 WidgetTree，HUD 销毁时必须显式移除，避免返回大厅后残留命中区域。
+        if (ActionButtonPanel->IsInViewport())
+        {
+            ActionButtonPanel->RemoveFromParent();
+        }
     }
     if (AGuiyangMahjongGameState* GS = GetWorld()->GetGameState<AGuiyangMahjongGameState>())
     {
