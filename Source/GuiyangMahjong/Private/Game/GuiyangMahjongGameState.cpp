@@ -17,7 +17,8 @@ void AGuiyangMahjongGameState::SetPublicTableStateAuthority(const FMahjongPublic
     }
 
     PublicTableState = NewState;
-    ++PublicTableState.StateSequence;
+    // StateSequence 属于牌桌引擎的并发控制版本，客户端会原样回传给动作 RPC。
+    // 发布复制快照不能额外递增该值，否则客户端永远比引擎领先一版并被误判为过期请求。
     ForceNetUpdate();
     OnPublicTableStateUpdated.Broadcast(PublicTableState);
     UE_LOG(LogMahjongServer, Verbose, TEXT("服务端更新公共牌桌状态：序号=%d"), PublicTableState.StateSequence);

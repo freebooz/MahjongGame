@@ -25,6 +25,7 @@
 #include "Components/Widget.h"
 #include "Components/WrapBox.h"
 #include "Engine/Texture2D.h"
+#include "Framework/Application/SlateApplication.h"
 #include "Input/Reply.h"
 #include "InputCoreTypes.h"
 #include "GuiyangMahjong.h"
@@ -107,7 +108,10 @@ void UMobileMahjongHUDWidget::NativeConstruct()
             // A wide transparent host prevents authored-size button images
             // from being clipped while the inner row remains centred.
             ActionSlot->SetSize(FVector2D(1200.0f, 160.0f));
+            // 响应按钮必须高于透明手牌命中层和牌桌辅助控件，否则服务端已下发碰/杠时仍会被后续 Canvas 子项遮挡。
+            ActionSlot->SetZOrder(200);
         }
+        ActionButtonPanel->SetRenderOpacity(1.0f);
     }
     SetCanvasY(Btn_Ready, 760.0f);
     SetCanvasY(Txt_ReadyStatus, 850.0f);
@@ -466,6 +470,12 @@ void UMobileMahjongHUDWidget::HandleReady()
 
 void UMobileMahjongHUDWidget::HandleReturnLobby()
 {
+    if (LastProcessedExitClickFrame == GFrameCounter)
+    {
+        return;
+    }
+    LastProcessedExitClickFrame = GFrameCounter;
+    UE_LOG(LogMahjongUI, Display, TEXT("已接收右上角退出点击，开始请求权威离房"));
     if (bExitRequestInFlight)
     {
         return;
@@ -583,11 +593,28 @@ void UMobileMahjongHUDWidget::EnsureTopRightInteractionButtons()
     {
         return;
     }
-    UCanvasPanel* RootCanvas = Cast<UCanvasPanel>(WidgetTree->RootWidget);
-    if (!RootCanvas)
+    // 现有 WBP_GameHUD 可能由 ScaleBox 包裹，不能假定 WidgetTree 根节点就是画布。
+    // 运行时命中按钮必须挂到菜单图标实际所在的 Canvas，才能与右上角视觉元素使用同一套锚点坐标。
+    UCanvasPanel* MenuCanvas = nullptr;
+    for (const FName AnchorWidgetName : {
+        FName(TEXT("Img_Menu_Rules")), FName(TEXT("Txt_RoomId")),
+        FName(TEXT("Btn_ReturnLobby"))})
+    {
+        UWidget* AnchorWidget = WidgetTree->FindWidget(AnchorWidgetName);
+        MenuCanvas = AnchorWidget ? Cast<UCanvasPanel>(AnchorWidget->GetParent()) : nullptr;
+        if (MenuCanvas)
+        {
+            break;
+        }
+    }
+    if (!MenuCanvas)
+    {
+        MenuCanvas = Cast<UCanvasPanel>(WidgetTree->RootWidget);
+    }
+    if (!MenuCanvas)
     {
         UE_LOG(LogMahjongUI, Error,
-            TEXT("游戏房间根控件不是画布，无法创建右上角交互按钮"));
+            TEXT("游戏房间未找到菜单画布，无法创建右上角交互按钮"));
         return;
     }
 
@@ -606,31 +633,35 @@ void UMobileMahjongHUDWidget::EnsureTopRightInteractionButtons()
         Button->SetBackgroundColor(FLinearColor::Transparent);
     };
     const auto AddHitTarget =
-        [this, RootCanvas, &MakeTransparent](
+        [this, MenuCanvas, &MakeTransparent](
             const FName Name, const float CenterX) -> UButton*
     {
         UButton* Button = WidgetTree->ConstructWidget<UButton>(
             UButton::StaticClass(), Name);
         MakeTransparent(Button);
-        UCanvasPanelSlot* Slot = RootCanvas->AddChildToCanvas(Button);
+        UCanvasPanelSlot* Slot = MenuCanvas->AddChildToCanvas(Button);
         Slot->SetAnchors(FAnchors(1.0f, 0.0f));
         Slot->SetAlignment(FVector2D(0.5f, 0.0f));
         Slot->SetPosition(FVector2D(CenterX, 8.0f));
         Slot->SetSize(FVector2D(96.0f, 112.0f));
-        Slot->SetZOrder(120);
+        Slot->SetZOrder(220);
         return Button;
     };
 
     Btn_MenuRules = AddHitTarget(TEXT("Btn_MenuRules_Runtime"), -350.0f);
     Btn_MenuSettings = AddHitTarget(TEXT("Btn_MenuSettings_Runtime"), -245.0f);
     Btn_MenuTrustee = AddHitTarget(TEXT("Btn_MenuTrustee_Runtime"), -140.0f);
-    MakeTransparent(Btn_ReturnLobby);
-    if (Btn_ReturnLobby && Btn_ReturnLobby->GetContent())
+    UButton* AuthoredReturnButton = Btn_ReturnLobby;
+    MakeTransparent(AuthoredReturnButton);
+    if (AuthoredReturnButton)
     {
-        // The authored icon and label remain visible behind this hit target.
-        // Collapse the legacy text child so it cannot duplicate the menu label.
-        Btn_ReturnLobby->GetContent()->SetVisibility(ESlateVisibility::Collapsed);
+        // 旧按钮的序列化父级/槽位可能与菜单图标不一致；保留独立图标和标签，禁用旧命中区域避免重复回调。
+        AuthoredReturnButton->SetVisibility(ESlateVisibility::Collapsed);
     }
+    Btn_ReturnLobby = AddHitTarget(TEXT("Btn_ReturnLobby_Runtime"), -35.0f);
+    UE_LOG(LogMahjongUI, Display,
+        TEXT("右上角交互命中层已创建：Canvas=%s，含退出按钮"),
+        *MenuCanvas->GetName());
 }
 
 void UMobileMahjongHUDWidget::UpdateTrusteeMenuLabel()
@@ -741,6 +772,19 @@ void UMobileMahjongHUDWidget::RefreshRoomState(const FMahjongRoomState& State, c
 void UMobileMahjongHUDWidget::NativeTick(const FGeometry& MyGeometry, const float InDeltaTime)
 {
     Super::NativeTick(MyGeometry, InDeltaTime);
+    if (APlayerController* PlayerController = GetOwningPlayer())
+    {
+        // 可见三维手牌可能伸出旧版透明按钮的几何范围，尤其是屏幕最左牌。
+        // GameAndUI 输入模式下从控制器补收本帧左键，仍以三维投影命中结果为准，不扩大到其他 HUD 区域。
+        if (PlayerController->WasInputKeyJustPressed(EKeys::LeftMouseButton))
+        {
+            // 先检查独立的退出命中区域，避免其透明样式或父级重排导致 Slate 未派发 OnClicked。
+            if (!TryHandleExitButtonClick())
+            {
+                TryHandleProjectedHandClick();
+            }
+        }
+    }
     TurnIndicatorAngle = FMath::Fmod(
         TurnIndicatorAngle + InDeltaTime * 90.0f, 360.0f);
     for (int32 RelativeSeat = 0;
@@ -812,37 +856,65 @@ FReply UMobileMahjongHUDWidget::NativeOnPreviewMouseButtonDown(
     const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
 {
     if (InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton
-        && Table3DActor)
+        && TryHandleProjectedHandClick())
     {
-        const int32 HitTileId =
-            Table3DActor->GetLocalHandTileUnderCursor(GetOwningPlayer());
-        if (HitTileId != INDEX_NONE)
-        {
-            // Lock hover and click to the same screen-space resolved tile ID.
-            // This prevents a stale physics hit or previous-frame hover from
-            // highlighting one tile while another tile is selected.
-            Table3DActor->SetHoveredTile(HitTileId);
-            for (int32 ChildIndex = 0;
-                 ChildIndex < Panel_SelfHandTiles->GetChildrenCount();
-                 ++ChildIndex)
-            {
-                if (UMobileHandTileWidget* TileWidget =
-                    Cast<UMobileHandTileWidget>(
-                        Panel_SelfHandTiles->GetChildAt(ChildIndex)))
-                {
-                    if (TileWidget->GetTileData().UniqueId == HitTileId)
-                    {
-                        UE_LOG(LogMahjongUI, Verbose,
-                            TEXT("Local hand screen hit resolved UniqueId=%d child=%d"),
-                            HitTileId, ChildIndex);
-                        TileWidget->TriggerTableHitClick();
-                        return FReply::Handled();
-                    }
-                }
-            }
-        }
+        return FReply::Handled();
     }
     return Super::NativeOnPreviewMouseButtonDown(InGeometry, InMouseEvent);
+}
+
+bool UMobileMahjongHUDWidget::TryHandleProjectedHandClick()
+{
+    if (!Table3DActor || LastProcessedHandClickFrame == GFrameCounter)
+    {
+        return false;
+    }
+    const int32 HitTileId =
+        Table3DActor->GetLocalHandTileUnderCursor(GetOwningPlayer());
+    if (HitTileId == INDEX_NONE)
+    {
+        return false;
+    }
+
+    // 投影命中与透明控件最终都使用同一 UniqueId；这样最左牌即使超出旧控件边界，也不会错选相邻牌。
+    for (int32 ChildIndex = 0;
+         ChildIndex < Panel_SelfHandTiles->GetChildrenCount();
+         ++ChildIndex)
+    {
+        UMobileHandTileWidget* TileWidget =
+            Cast<UMobileHandTileWidget>(
+                Panel_SelfHandTiles->GetChildAt(ChildIndex));
+        if (!TileWidget || TileWidget->GetTileData().UniqueId != HitTileId)
+        {
+            continue;
+        }
+        LastProcessedHandClickFrame = GFrameCounter;
+        Table3DActor->SetHoveredTile(HitTileId);
+        TileWidget->TriggerTableHitClick();
+        UE_LOG(LogMahjongUI, Verbose,
+            TEXT("南方手牌投影命中：UniqueId=%d，控件序号=%d，帧=%llu"),
+            HitTileId, ChildIndex, LastProcessedHandClickFrame);
+        return true;
+    }
+    return false;
+}
+
+bool UMobileMahjongHUDWidget::TryHandleExitButtonClick()
+{
+    if (!Btn_ReturnLobby || !Btn_ReturnLobby->IsVisible()
+        || LastProcessedExitClickFrame == GFrameCounter
+        || !FSlateApplication::IsInitialized())
+    {
+        return false;
+    }
+    const FVector2D CursorPosition = FSlateApplication::Get().GetCursorPos();
+    if (!Btn_ReturnLobby->GetCachedGeometry().IsUnderLocation(CursorPosition))
+    {
+        return false;
+    }
+    // 仍调用统一处理器，确保幂等、按钮禁用和 RemoteLobby 离房流程与正常 Slate 点击完全一致。
+    HandleReturnLobby();
+    return true;
 }
 
 void UMobileMahjongHUDWidget::RefreshTableState(const FMahjongPublicTableState& State)
@@ -1315,7 +1387,9 @@ void UMobileMahjongHUDWidget::HandleAvailableActions(const TArray<FMahjongAction
     }
     if (!Actions.IsEmpty())
     {
-        ActionButtonPanel->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+        // Visible 让面板本体参与命中；仅使用 SelfHitTestInvisible 时，运行时重排后的按钮可能没有稳定的 Slate 命中路径。
+        ActionButtonPanel->SetVisibility(ESlateVisibility::Visible);
+        ActionButtonPanel->SetRenderOpacity(1.0f);
     }
     ActionButtonPanel->ShowActions(Actions);
 }

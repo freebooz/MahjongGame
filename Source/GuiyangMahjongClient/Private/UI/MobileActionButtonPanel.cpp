@@ -142,12 +142,38 @@ void UMobileActionButtonPanel::ShowActions(const TArray<FMahjongAction>& Actions
 {
     CurrentActions = Actions;
     auto Has = [&Actions](const EMahjongActionType Type){ return Actions.ContainsByPredicate([Type](const FMahjongAction& A){ return A.Type == Type; }); };
-    Btn_Hu->SetVisibility(Has(EMahjongActionType::Hu) ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
-    Btn_Gang->SetVisibility((Has(EMahjongActionType::MingGang) || Has(EMahjongActionType::AnGang) || Has(EMahjongActionType::BuGang)) ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
-    Btn_Peng->SetVisibility(Has(EMahjongActionType::Peng) ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
-    Btn_Pass->SetVisibility(Actions.IsEmpty() ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
+    const bool bHasHu = Has(EMahjongActionType::Hu);
+    const bool bHasGang = Has(EMahjongActionType::MingGang)
+        || Has(EMahjongActionType::AnGang)
+        || Has(EMahjongActionType::BuGang);
+    const bool bHasPeng = Has(EMahjongActionType::Peng);
+    const auto ApplyResponseButtonState = [](UButton* Button, const bool bVisible)
+    {
+        if (!Button)
+        {
+            return;
+        }
+        // 旧蓝图可能保存过禁用或透明状态；权威候选到达时必须显式恢复可见、可点击状态。
+        Button->SetVisibility(bVisible ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+        Button->SetIsEnabled(bVisible);
+        Button->SetRenderOpacity(1.0f);
+    };
+    SetRenderOpacity(1.0f);
+    if (Panel_Actions)
+    {
+        Panel_Actions->SetVisibility(ESlateVisibility::Visible);
+        Panel_Actions->SetRenderOpacity(1.0f);
+    }
+    ApplyResponseButtonState(Btn_Hu, bHasHu);
+    ApplyResponseButtonState(Btn_Gang, bHasGang);
+    ApplyResponseButtonState(Btn_Peng, bHasPeng);
+    ApplyResponseButtonState(Btn_Pass, !Actions.IsEmpty());
     CentreVisibleButtons();
-    UE_LOG(LogMahjongUI, Log, TEXT("操作按钮面板刷新：服务端下发 %d 项"), Actions.Num());
+    ForceLayoutPrepass();
+    UE_LOG(LogMahjongUI, Log,
+        TEXT("操作按钮面板刷新：服务端下发 %d 项，碰=%s，杠=%s，胡=%s"),
+        Actions.Num(), bHasPeng ? TEXT("是") : TEXT("否"),
+        bHasGang ? TEXT("是") : TEXT("否"), bHasHu ? TEXT("是") : TEXT("否"));
 }
 
 void UMobileActionButtonPanel::SetPlayTileState(

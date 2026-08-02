@@ -96,6 +96,13 @@ protected:
     bool bLocalTrusteeEnabled = false;
     bool bTrusteeRequestInFlight = false;
     bool bExitRequestInFlight = false;
+    /**
+     * 最近一次处理南方三维手牌点击的引擎帧。
+     * Slate 预览事件与 PlayerController 按键兜底可能在同一帧同时到达，必须按帧去重，避免一次点击被解释为选中后又取消。
+     */
+    uint64 LastProcessedHandClickFrame = MAX_uint64;
+    /** 退出按钮的 Slate 回调与控制器按键兜底共用的逐帧幂等标记。 */
+    uint64 LastProcessedExitClickFrame = MAX_uint64;
     /** 网络事件入口：刷新公共/私有状态、动作、结算与错误。 */
     UFUNCTION() void HandlePublicTableState(const FMahjongPublicTableState& State);
     UFUNCTION() void HandlePrivateHand(const FMahjongPrivatePlayerState& State);
@@ -136,6 +143,13 @@ private:
     void RefreshMelds(int32 LocalSeat);
     void RefreshJiDisplay();
     void RefreshPlayTileButtonState();
+    /**
+     * 按当前鼠标位置命中可见的南方三维手牌并触发对应透明控件。
+     * 返回 false 表示光标不在任何本地手牌上；该方法不处理动作按钮或其他 HUD 控件。
+     */
+    bool TryHandleProjectedHandClick();
+    /** 当透明退出按钮没有形成 Slate 点击路径时，按其实际缓存几何补发一次退出意图。 */
+    bool TryHandleExitButtonClick();
     void EnsureTopRightInteractionButtons();
     void UpdateTrusteeMenuLabel();
     void SetTopRightButtonsEnabled(bool bEnabled);

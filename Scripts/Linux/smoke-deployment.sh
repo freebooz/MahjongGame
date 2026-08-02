@@ -23,9 +23,12 @@ session="$(curl --fail --silent --show-error \
   "$AUTH_URL/v1/auth/guest")"
 access_token="$(jq -er '.accessToken' <<<"$session")"
 
+# 大厅会把客户端版本与协议写入路由票据；冒烟请求必须模拟正式客户端，不能退化为 legacy/0。
 room="$(curl --fail --silent --show-error \
   -H "Authorization: Bearer $access_token" \
   -H 'Content-Type: application/json' \
+  -H 'X-Client-Version: 1.0.0' \
+  -H 'X-Protocol-Version: 1' \
   -H "X-Request-Id: $REQUEST_ID" \
   -H "Idempotency-Key: $IDEMPOTENCY_KEY" \
   -d '{"roundCount":4,"publicRoom":true,"autoStart":true,"passwordProtected":false,"ruleSnapshot":{"ruleId":"GuiyangMainstreamV1"}}' \
@@ -37,6 +40,8 @@ deadline=$((SECONDS + 45))
 route=""
 until route="$(curl --fail --silent --show-error \
   -H "Authorization: Bearer $access_token" \
+  -H 'X-Client-Version: 1.0.0' \
+  -H 'X-Protocol-Version: 1' \
   -H "X-Request-Id: $(cat /proc/sys/kernel/random/uuid)" \
   "$LOBBY_URL/v1/rooms/$room_code/route" 2>/dev/null)"; do
   ((SECONDS < deadline)) || { echo "Smoke room did not receive a GameServer route." >&2; exit 1; }

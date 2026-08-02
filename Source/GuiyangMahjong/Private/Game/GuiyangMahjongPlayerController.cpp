@@ -172,14 +172,22 @@ void AGuiyangMahjongPlayerController::RequestTableAction(
         OnErrorShown.Broadcast(TEXT("牌局状态尚未同步，请稍后重试"));
         return;
     }
+    // 私有快照通过所属 Controller 的可靠 RPC 到达，可能先于 GameState 公共复制。
+    // 使用更新的一方封装动作版本，仍然要求服务端精确匹配，不降低并发控制或重放防护。
+    const bool bUsePrivateVersion = bHasPrivateTableState
+        && LastPrivateTableState.RoundId > 0 && LastPrivateTableState.TurnId > 0
+        && LastPrivateTableState.StateSequence >= State->PublicTableState.StateSequence;
     FMahjongActionRequest Request;
     Request.ClientActionId = FGuid::NewGuid().ToString(EGuidFormats::DigitsWithHyphensLower);
     Request.Type = Type;
-    Request.RoundId = State->PublicTableState.RoundId;
-    Request.TurnId = State->PublicTableState.TurnId;
+    Request.RoundId = bUsePrivateVersion
+        ? LastPrivateTableState.RoundId : State->PublicTableState.RoundId;
+    Request.TurnId = bUsePrivateVersion
+        ? LastPrivateTableState.TurnId : State->PublicTableState.TurnId;
     Request.TargetTileId = TargetTileId;
     Request.ClientSequence = ++LastClientActionSequence;
-    Request.ExpectedStateVersion = State->PublicTableState.StateSequence;
+    Request.ExpectedStateVersion = bUsePrivateVersion
+        ? LastPrivateTableState.StateSequence : State->PublicTableState.StateSequence;
     Request.RoomEpoch = State->PublicTableState.RoomEpoch;
     Request.ClientSentAtUnixMilliseconds = FDateTime::UtcNow().ToUnixTimestamp() * 1000;
     Server_RequestAction(Request);
@@ -360,6 +368,8 @@ void AGuiyangMahjongPlayerController::Server_RequestIntegrationDisconnect_Implem
 void AGuiyangMahjongPlayerController::Client_UpdatePrivateHand_Implementation(
     const FMahjongPrivatePlayerState& PrivateState)
 {
+    LastPrivateTableState = PrivateState;
+    bHasPrivateTableState = PrivateState.RoundId > 0 && PrivateState.StateSequence > 0;
     LastClientActionSequence = FMath::Max(LastClientActionSequence, PrivateState.LastAcceptedClientSequence);
     OnPrivateHandUpdated.Broadcast(PrivateState);
     if (IGuiyangClientControllerBridge* Bridge = GetClientBridge())
@@ -387,6 +397,9 @@ void AGuiyangMahjongPlayerController::Client_ShowErrorMessage_Implementation(con
 void AGuiyangMahjongPlayerController::Client_RestoreReconnectSnapshot_Implementation(
     const FMahjongReconnectSnapshot& Snapshot, const TArray<FMahjongAction>& AvailableActions)
 {
+    LastPrivateTableState = Snapshot.PrivateState;
+    bHasPrivateTableState = Snapshot.PrivateState.RoundId > 0
+        && Snapshot.PrivateState.StateSequence > 0;
     LastClientActionSequence = Snapshot.PrivateState.LastAcceptedClientSequence;
     LastAvailableActions = AvailableActions;
     if (IGuiyangClientControllerBridge* Bridge = GetClientBridge()) Bridge->NotifyReconnectRestored(Snapshot);

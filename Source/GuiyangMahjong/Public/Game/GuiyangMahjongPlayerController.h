@@ -149,6 +149,12 @@ private:
     /** 连接迁移期间保留的玩家名。 */
     UPROPERTY() FString PendingPlayerName;
     UPROPERTY(Transient) TArray<FMahjongAction> LastAvailableActions;
+    /**
+     * 最近一次可靠私有快照携带的局号、回合和权威版本。
+     * 公共 GameState 与所属 Controller 分属不同复制通道，动作封包应选择两者中更新的一致版本，避免短暂乱序误拒绝。
+     */
+    UPROPERTY(Transient) FMahjongPrivatePlayerState LastPrivateTableState;
+    bool bHasPrivateTableState = false;
     /** 最近一次动作序号，用于服务端幂等和乱序检查。 */
     int32 LastClientActionSequence = -1;
     static TAtomic<uint64> ServerRpcReceivedCount;

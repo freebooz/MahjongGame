@@ -137,6 +137,7 @@ bool FMahjongActionTimeoutTest::RunTest(const FString& Parameters)
     TestTrue(TEXT("Discard opens reaction timeout window"), ReactionEngine->SubmitPlayTile(0, Play).bSuccess);
     const FMahjongPublicTableState Waiting = ReactionEngine->GetPublicState();
     TestEqual(TEXT("Peng candidate keeps reaction window open"), Waiting.Phase, EMahjongTablePhase::WaitingForAction);
+    TestEqual(TEXT("响应窗口期间公开轮转指示必须立即指向顺位下一家"), Waiting.CurrentTurnSeat, 1);
     TestTrue(TEXT("Reaction timeout auto-passes pending seats"), ReactionEngine->ResolveActionTimeout(
         Waiting.RoundId, Waiting.TurnId, Waiting.Phase).bSuccess);
     TestEqual(TEXT("Auto-pass advances to next player"), ReactionEngine->GetPublicState().CurrentTurnSeat, 1);

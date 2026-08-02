@@ -31,7 +31,7 @@ public:
     UPROPERTY(BlueprintAssignable, Category="麻将|UI")
     FMahjongRoomStateUpdated OnRoomStateUpdated;
 
-    /** 仅供服务端牌桌流程写入权威快照。 */
+    /** 仅供服务端牌桌流程写入权威快照；必须原样保留牌桌引擎的 StateSequence。 */
     void SetPublicTableStateAuthority(const FMahjongPublicTableState& NewState);
     void SetRoomStateAuthority(const FMahjongRoomState& NewState);
 

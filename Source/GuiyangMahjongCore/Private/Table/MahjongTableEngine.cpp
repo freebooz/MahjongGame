@@ -495,6 +495,10 @@ void UMahjongTableEngine::OpenReactionWindow(const FMahjongTile& Discard, const 
 {
     // 权威服务器逐家重新计算胡、明杠和碰资格。
     bQiangGangWindow = false;
+    // 出牌落地后，公开的轮转指示立即指向顺位下一家；WaitingForAction 阶段仍禁止其出牌，
+    // 若其他座位碰、杠或胡，解析响应时会再把 CurrentTurnSeat 改为实际声明者。
+    // 这样客户端头像旋转与弃牌状态在同一份复制快照中同步，不会继续停留在出牌者头像上。
+    PublicState.CurrentTurnSeat = GetNextTurnSeatCounterClockwise(DiscardSeat);
     AvailableActionsBySeat.Reset();
     SubmittedReactions.Reset();
     for (int32 Seat = 0; Seat < Hands.Num(); ++Seat)
