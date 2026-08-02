@@ -3,6 +3,7 @@
 #include "UI/MobileDiscardTileWidget.h"
 #include "UI/MobileErrorToastWidget.h"
 #include "UI/MobileHandTileWidget.h"
+#include "UI/MahjongUISoundLibrary.h"
 #include "UI/MobileRuleSummaryWidget.h"
 #include "UI/MobileSettingsWidget.h"
 #include "UI/MobileSettlementWidget.h"
@@ -78,6 +79,23 @@ namespace
         default: return TEXT("副露");
         }
     }
+
+    /** 为根画布操作按钮加载四态九宫格贴图；加载失败时仍保留文本和点击区域。 */
+    FSlateBrush MakeRuntimeActionBrush(const FString& Kind, const TCHAR* State)
+    {
+        FSlateBrush Brush;
+        const FString AssetPath = FString::Printf(
+            TEXT("/Game/UI/Textures/Buttons/T_Btn_%s_%s.T_Btn_%s_%s"),
+            *Kind, State, *Kind, State);
+        if (UTexture2D* Texture = LoadObject<UTexture2D>(nullptr, *AssetPath))
+        {
+            Brush.SetResourceObject(Texture);
+        }
+        Brush.ImageSize = FVector2D(192.0f, 192.0f);
+        Brush.DrawAs = ESlateBrushDrawType::Box;
+        Brush.Margin = FMargin(0.1458f);
+        return Brush;
+    }
 }
 
 void UMobileMahjongHUDWidget::NativeConstruct()
@@ -97,37 +115,10 @@ void UMobileMahjongHUDWidget::NativeConstruct()
     // Keep controls above the enlarged south hand, matching the mobile reference layout.
     if (ActionButtonPanel)
     {
-        // 旧 HUD 资产中的操作面板位于一个可能被房间阶段折叠且不再参与 Slate 布局的分支；
-        // 即使子按钮恢复为 Visible，实际几何仍会保持 0×0。以原资产类创建独立顶层实例，
-        // 让碰/明杠/暗杠/补杠/胡及出牌按钮始终拥有稳定的视口布局与命中区域。
-        UMobileActionButtonPanel* AuthoredActionPanel = ActionButtonPanel;
-        AuthoredActionPanel->SetVisibility(ESlateVisibility::Collapsed);
-        if (UMobileActionButtonPanel* ViewportActionPanel =
-            CreateWidget<UMobileActionButtonPanel>(GetOwningPlayer(), AuthoredActionPanel->GetClass()))
-        {
-            ActionButtonPanel = ViewportActionPanel;
-            ActionButtonPanel->SetDesiredSizeInViewport(FVector2D(1200.0f, 220.0f));
-            ActionButtonPanel->SetAnchorsInViewport(FAnchors(0.5f, 0.72f));
-            ActionButtonPanel->SetAlignmentInViewport(FVector2D(0.5f, 0.5f));
-            ActionButtonPanel->SetPositionInViewport(FVector2D::ZeroVector, false);
-            ActionButtonPanel->AddToPlayerScreen(200);
-        }
-        ActionButtonPanel->OnPlayTileRequested.AddUniqueDynamic(
-            this, &ThisClass::HandlePlayTileButtonRequested);
-        if (UCanvasPanelSlot* ActionSlot =
-            Cast<UCanvasPanelSlot>(ActionButtonPanel->Slot))
-        {
-            ActionSlot->SetAnchors(FAnchors(0.5f, 0.0f));
-            ActionSlot->SetAlignment(FVector2D(0.5f, 0.0f));
-            ActionSlot->SetPosition(FVector2D(0.0f, 760.0f));
-            // A wide transparent host prevents authored-size button images
-            // from being clipped while the inner row remains centred.
-            ActionSlot->SetSize(FVector2D(1200.0f, 160.0f));
-            // 响应按钮必须高于透明手牌命中层和牌桌辅助控件，否则服务端已下发碰/杠时仍会被后续 Canvas 子项遮挡。
-            ActionSlot->SetZOrder(200);
-        }
-        ActionButtonPanel->SetRenderOpacity(1.0f);
+        // 旧复合面板在运行时可形成 0×0 几何，仅保留资产兼容性；真实交互改由根画布按钮承担。
+        ActionButtonPanel->SetVisibility(ESlateVisibility::Collapsed);
     }
+    EnsureRuntimeActionButtons();
     SetCanvasY(Btn_Ready, 760.0f);
     SetCanvasY(Txt_ReadyStatus, 850.0f);
     const auto PlaceTopRight = [this](const FName WidgetName, const FVector2D Position,
@@ -457,13 +448,7 @@ void UMobileMahjongHUDWidget::NativeDestruct()
     }
     if (ActionButtonPanel)
     {
-        ActionButtonPanel->OnPlayTileRequested.RemoveDynamic(
-            this, &ThisClass::HandlePlayTileButtonRequested);
-        // 顶层操作面板不属于 HUD 的 WidgetTree，HUD 销毁时必须显式移除，避免返回大厅后残留命中区域。
-        if (ActionButtonPanel->IsInViewport())
-        {
-            ActionButtonPanel->RemoveFromParent();
-        }
+        ActionButtonPanel->SetVisibility(ESlateVisibility::Collapsed);
     }
     if (AGuiyangMahjongGameState* GS = GetWorld()->GetGameState<AGuiyangMahjongGameState>())
     {
@@ -684,6 +669,187 @@ void UMobileMahjongHUDWidget::EnsureTopRightInteractionButtons()
         *MenuCanvas->GetName());
 }
 
+void UMobileMahjongHUDWidget::EnsureRuntimeActionButtons()
+{
+    if (!WidgetTree || Btn_RuntimePass)
+    {
+        return;
+    }
+
+    UCanvasPanel* ActionCanvas = nullptr;
+    if (Txt_RoomId)
+    {
+        ActionCanvas = Cast<UCanvasPanel>(Txt_RoomId->GetParent());
+    }
+    if (!ActionCanvas)
+    {
+        ActionCanvas = Cast<UCanvasPanel>(WidgetTree->RootWidget);
+    }
+    if (!ActionCanvas)
+    {
+        UE_LOG(LogMahjongUI, Error, TEXT("游戏房间未找到根画布，无法创建碰杠胡操作按钮"));
+        return;
+    }
+
+    const auto AddActionButton = [this, ActionCanvas](
+        const FName Name, const FString& Kind, const TCHAR* Label) -> UButton*
+    {
+        UButton* Button = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), Name);
+        FButtonStyle Style;
+        Style.SetNormal(MakeRuntimeActionBrush(Kind, TEXT("Normal")));
+        Style.SetHovered(MakeRuntimeActionBrush(Kind, TEXT("Hovered")));
+        Style.SetPressed(MakeRuntimeActionBrush(Kind, TEXT("Pressed")));
+        Style.SetDisabled(MakeRuntimeActionBrush(Kind, TEXT("Disabled")));
+        Button->SetStyle(Style);
+
+        UTextBlock* LabelWidget = WidgetTree->ConstructWidget<UTextBlock>(
+            UTextBlock::StaticClass(), *FString::Printf(TEXT("%s_Label"), *Name.ToString()));
+        LabelWidget->SetText(FText::FromString(Label));
+        LabelWidget->SetJustification(ETextJustify::Center);
+        LabelWidget->SetColorAndOpacity(FSlateColor(FLinearColor(1.0f, 0.96f, 0.76f, 1.0f)));
+        FSlateFontInfo Font = LabelWidget->GetFont();
+        Font.Size = 30;
+        LabelWidget->SetFont(Font);
+        LabelWidget->SetVisibility(ESlateVisibility::HitTestInvisible);
+        Button->AddChild(LabelWidget);
+
+        UCanvasPanelSlot* Slot = ActionCanvas->AddChildToCanvas(Button);
+        Slot->SetAnchors(FAnchors(0.5f, 0.72f));
+        Slot->SetAlignment(FVector2D(0.5f, 0.5f));
+        Slot->SetPosition(FVector2D::ZeroVector);
+        Slot->SetSize(FVector2D(152.0f, 96.0f));
+        Slot->SetZOrder(250);
+        Button->SetVisibility(ESlateVisibility::Collapsed);
+        return Button;
+    };
+
+    Btn_RuntimePass = AddActionButton(TEXT("Btn_RuntimePass"), TEXT("Pass"), TEXT("过"));
+    Btn_RuntimePeng = AddActionButton(TEXT("Btn_RuntimePeng"), TEXT("Peng"), TEXT("碰"));
+    Btn_RuntimeGang = AddActionButton(TEXT("Btn_RuntimeGang"), TEXT("Gang"), TEXT("杠"));
+    Btn_RuntimeHu = AddActionButton(TEXT("Btn_RuntimeHu"), TEXT("Hu"), TEXT("胡"));
+    Btn_RuntimePlay = AddActionButton(TEXT("Btn_RuntimePlay"), TEXT("PlayTile"), TEXT("出牌"));
+    Btn_RuntimePass->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleRuntimePass);
+    Btn_RuntimePeng->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleRuntimePeng);
+    Btn_RuntimeGang->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleRuntimeGang);
+    Btn_RuntimeHu->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleRuntimeHu);
+    Btn_RuntimePlay->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleRuntimePlay);
+    UE_LOG(LogMahjongUI, Display,
+        TEXT("根画布操作按钮已创建：Canvas=%s，层级=250"), *ActionCanvas->GetName());
+}
+
+void UMobileMahjongHUDWidget::RefreshRuntimeActionButtons()
+{
+    if (!Btn_RuntimePass)
+    {
+        return;
+    }
+    const auto Has = [this](const EMahjongActionType Type)
+    {
+        return CachedAvailableActions.ContainsByPredicate(
+            [Type](const FMahjongAction& Action) { return Action.Type == Type; });
+    };
+    const bool bHasActions = !CachedAvailableActions.IsEmpty();
+    const bool bHasGang = Has(EMahjongActionType::MingGang)
+        || Has(EMahjongActionType::AnGang) || Has(EMahjongActionType::BuGang);
+    const bool bIsCurrentPlayer = bHasPrivateState
+        && CachedPublicState.Phase == EMahjongTablePhase::PlayerTurn
+        && CachedPublicState.CurrentTurnSeat == CachedPrivateState.SeatIndex;
+    const bool bCanPlay = bIsCurrentPlayer && SelectedHandTileId != INDEX_NONE
+        && Table3DActor && Table3DActor->IsLocalHandTileRaised(SelectedHandTileId);
+
+    const auto Apply = [](UButton* Button, const bool bVisible, const bool bEnabled)
+    {
+        Button->SetVisibility(bVisible ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+        Button->SetIsEnabled(bVisible && bEnabled);
+        Button->SetRenderOpacity(1.0f);
+    };
+    Apply(Btn_RuntimePass, bHasActions, bHasActions);
+    Apply(Btn_RuntimePeng, Has(EMahjongActionType::Peng), true);
+    Apply(Btn_RuntimeGang, bHasGang, true);
+    Apply(Btn_RuntimeHu, Has(EMahjongActionType::Hu), true);
+    Apply(Btn_RuntimePlay, bIsCurrentPlayer, bCanPlay);
+
+    TArray<UButton*> VisibleButtons;
+    for (UButton* Button : {Btn_RuntimePass.Get(), Btn_RuntimePeng.Get(),
+        Btn_RuntimeGang.Get(), Btn_RuntimeHu.Get(), Btn_RuntimePlay.Get()})
+    {
+        if (Button->GetVisibility() == ESlateVisibility::Visible)
+        {
+            VisibleButtons.Add(Button);
+        }
+    }
+    for (int32 Index = 0; Index < VisibleButtons.Num(); ++Index)
+    {
+        if (UCanvasPanelSlot* ButtonCanvasSlot =
+            Cast<UCanvasPanelSlot>(VisibleButtons[Index]->Slot))
+        {
+            const float OffsetX = (Index - (VisibleButtons.Num() - 1) * 0.5f) * 172.0f;
+            ButtonCanvasSlot->SetPosition(FVector2D(OffsetX, 0.0f));
+        }
+    }
+    ForceLayoutPrepass();
+}
+
+void UMobileMahjongHUDWidget::SubmitRuntimeResponseAction(const EMahjongActionType PreferredType)
+{
+    const FMahjongAction* Offered = CachedAvailableActions.FindByPredicate(
+        [PreferredType](const FMahjongAction& Action)
+        {
+            if (PreferredType != EMahjongActionType::MingGang)
+            {
+                return Action.Type == PreferredType;
+            }
+            return Action.Type == EMahjongActionType::MingGang
+                || Action.Type == EMahjongActionType::AnGang
+                || Action.Type == EMahjongActionType::BuGang;
+        });
+    if (!Offered && PreferredType != EMahjongActionType::Pass)
+    {
+        UE_LOG(LogMahjongUI, Warning, TEXT("操作按钮点击时权威候选已失效，拒绝发送动作"));
+        return;
+    }
+    if (AGuiyangMahjongPlayerController* PC =
+        Cast<AGuiyangMahjongPlayerController>(GetOwningPlayer()))
+    {
+        const EMahjongActionType ActualType = Offered ? Offered->Type : EMahjongActionType::Pass;
+        const EMahjongUISound Sound = ActualType == EMahjongActionType::Hu ? EMahjongUISound::Hu
+            : ActualType == EMahjongActionType::Peng ? EMahjongUISound::Peng
+            : (ActualType == EMahjongActionType::MingGang
+                || ActualType == EMahjongActionType::AnGang
+                || ActualType == EMahjongActionType::BuGang) ? EMahjongUISound::Gang
+            : EMahjongUISound::Pass;
+        UMahjongUISoundLibrary::PlayUISound(this, Sound);
+        PC->RequestTableAction(ActualType,
+            Offered ? Offered->TargetTile.UniqueId : INDEX_NONE);
+        CachedAvailableActions.Reset();
+        RefreshRuntimeActionButtons();
+    }
+}
+
+void UMobileMahjongHUDWidget::HandleRuntimePass()
+{
+    SubmitRuntimeResponseAction(EMahjongActionType::Pass);
+}
+void UMobileMahjongHUDWidget::HandleRuntimePeng()
+{
+    SubmitRuntimeResponseAction(EMahjongActionType::Peng);
+}
+void UMobileMahjongHUDWidget::HandleRuntimeGang()
+{
+    SubmitRuntimeResponseAction(EMahjongActionType::MingGang);
+}
+void UMobileMahjongHUDWidget::HandleRuntimeHu()
+{
+    SubmitRuntimeResponseAction(EMahjongActionType::Hu);
+}
+void UMobileMahjongHUDWidget::HandleRuntimePlay()
+{
+    if (SelectedHandTileId != INDEX_NONE)
+    {
+        HandlePlayTileButtonRequested(SelectedHandTileId);
+    }
+}
+
 void UMobileMahjongHUDWidget::UpdateTrusteeMenuLabel()
 {
     if (UTextBlock* TrusteeLabel = WidgetTree
@@ -740,9 +906,9 @@ void UMobileMahjongHUDWidget::RefreshRoomState(const FMahjongRoomState& State, c
     }
     if (ActionButtonPanel)
     {
-        ActionButtonPanel->SetVisibility(bReadyStage || State.Lifecycle == EMahjongRoomLifecycle::Starting
-            ? ESlateVisibility::Collapsed : ESlateVisibility::SelfHitTestInvisible);
+        ActionButtonPanel->SetVisibility(ESlateVisibility::Collapsed);
     }
+    RefreshRuntimeActionButtons();
     const FMahjongSeatInfo* LocalPlayerSeat = State.Seats.FindByPredicate([LocalSeat](const FMahjongSeatInfo& Seat)
     {
         return Seat.bOccupied && Seat.SeatIndex == LocalSeat;
@@ -1266,26 +1432,8 @@ void UMobileMahjongHUDWidget::RefreshJiDisplay()
 
 void UMobileMahjongHUDWidget::RefreshPlayTileButtonState()
 {
-    if (!ActionButtonPanel)
-    {
-        return;
-    }
-
-    const bool bIsCurrentPlayer = bHasPrivateState
-        && CachedPublicState.Phase == EMahjongTablePhase::PlayerTurn
-        && CachedPublicState.CurrentTurnSeat == CachedPrivateState.SeatIndex;
-    const bool bHasRaisedSelectedTile = bIsCurrentPlayer
-        && SelectedHandTile
-        && SelectedHandTileId != INDEX_NONE
-        && Table3DActor
-        && Table3DActor->IsLocalHandTileRaised(SelectedHandTileId);
-    if (bIsCurrentPlayer)
-    {
-        ActionButtonPanel->SetVisibility(
-            ESlateVisibility::SelfHitTestInvisible);
-    }
-    ActionButtonPanel->SetPlayTileState(
-        bIsCurrentPlayer, bHasRaisedSelectedTile, SelectedHandTileId);
+    // 出牌按钮与碰杠胡使用同一根画布布局，选择牌或轮转变化时统一刷新位置和可用状态。
+    RefreshRuntimeActionButtons();
 }
 
 void UMobileMahjongHUDWidget::HandleTileSelected(UMobileHandTileWidget* TileWidget)
@@ -1402,17 +1550,18 @@ void UMobileMahjongHUDWidget::HandlePublicTableState(const FMahjongPublicTableSt
 void UMobileMahjongHUDWidget::HandlePrivateHand(const FMahjongPrivatePlayerState& State){ RefreshPrivateHand(State); }
 void UMobileMahjongHUDWidget::HandleAvailableActions(const TArray<FMahjongAction>& Actions)
 {
-    if (!ActionButtonPanel)
+    // 客户端只缓存服务端实际下发的候选；根画布按钮不得自行根据手牌补充动作。
+    CachedAvailableActions = Actions;
+    RefreshRuntimeActionButtons();
+    const bool bHasGang = Actions.ContainsByPredicate([](const FMahjongAction& Action)
     {
-        return;
-    }
-    if (!Actions.IsEmpty())
-    {
-        // Visible 让面板本体参与命中；仅使用 SelfHitTestInvisible 时，运行时重排后的按钮可能没有稳定的 Slate 命中路径。
-        ActionButtonPanel->SetVisibility(ESlateVisibility::Visible);
-        ActionButtonPanel->SetRenderOpacity(1.0f);
-    }
-    ActionButtonPanel->ShowActions(Actions);
+        return Action.Type == EMahjongActionType::MingGang
+            || Action.Type == EMahjongActionType::AnGang
+            || Action.Type == EMahjongActionType::BuGang;
+    });
+    UE_LOG(LogMahjongUI, Log,
+        TEXT("根画布动作刷新：服务端下发 %d 项，杠=%s"),
+        Actions.Num(), bHasGang ? TEXT("是") : TEXT("否"));
 }
 
 void UMobileMahjongHUDWidget::HandleSettlement(const FMahjongSettlementResult& Result)

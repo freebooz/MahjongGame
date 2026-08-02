@@ -67,6 +67,12 @@ protected:
     UPROPERTY(Transient) TObjectPtr<UButton> Btn_MenuRules;
     UPROPERTY(Transient) TObjectPtr<UButton> Btn_MenuSettings;
     UPROPERTY(Transient) TObjectPtr<UButton> Btn_MenuTrustee;
+    /** 直接挂在 HUD 根画布上的权威动作按钮，避免旧复合控件的零尺寸布局分支。 */
+    UPROPERTY(Transient) TObjectPtr<UButton> Btn_RuntimePass;
+    UPROPERTY(Transient) TObjectPtr<UButton> Btn_RuntimePeng;
+    UPROPERTY(Transient) TObjectPtr<UButton> Btn_RuntimeGang;
+    UPROPERTY(Transient) TObjectPtr<UButton> Btn_RuntimeHu;
+    UPROPERTY(Transient) TObjectPtr<UButton> Btn_RuntimePlay;
     /** 动作按钮、弹层及按需创建的错误/结算控件。 */
     UPROPERTY(meta=(BindWidget)) TObjectPtr<UMobileActionButtonPanel> ActionButtonPanel;
     UPROPERTY(meta=(BindWidget)) TObjectPtr<UOverlay> PopupLayer;
@@ -90,6 +96,8 @@ protected:
     UPROPERTY() FMahjongPublicTableState CachedPublicState;
     UPROPERTY() FMahjongPrivatePlayerState CachedPrivateState;
     UPROPERTY() FMahjongRoomState CachedRoomState;
+    /** 最近一次服务端定向下发的动作；客户端只展示并原样提交，不自行推导资格。 */
+    UPROPERTY() TArray<FMahjongAction> CachedAvailableActions;
     int32 CachedDealerSeat = 0;
     bool bHasPrivateState = false;
     bool bVisualReviewMode = false;
@@ -121,6 +129,12 @@ protected:
     UFUNCTION() void HandleSettings();
     UFUNCTION() void HandleTrustee();
     UFUNCTION() void HandleTrusteeStateChanged(bool bEnabled);
+    /** 根画布动作按钮点击入口；杠会匹配服务端实际下发的明杠、暗杠或补杠类型。 */
+    UFUNCTION() void HandleRuntimePass();
+    UFUNCTION() void HandleRuntimePeng();
+    UFUNCTION() void HandleRuntimeGang();
+    UFUNCTION() void HandleRuntimeHu();
+    UFUNCTION() void HandleRuntimePlay();
 public:
     /** 由根 HUD 或蓝图显式刷新房间、公共牌桌和私有手牌。 */
     UFUNCTION(BlueprintCallable, Category="麻将|UI")
@@ -151,6 +165,11 @@ private:
     /** 当透明退出按钮没有形成 Slate 点击路径时，按其实际缓存几何补发一次退出意图。 */
     bool TryHandleExitButtonClick();
     void EnsureTopRightInteractionButtons();
+    /** 创建并刷新根画布动作按钮，所有按钮拥有明确尺寸、层级和可点击区域。 */
+    void EnsureRuntimeActionButtons();
+    void RefreshRuntimeActionButtons();
+    /** 从权威候选中选择实际动作并提交；找不到候选时不得发送 RPC。 */
+    void SubmitRuntimeResponseAction(EMahjongActionType PreferredType);
     void UpdateTrusteeMenuLabel();
     void SetTopRightButtonsEnabled(bool bEnabled);
     void ApplyPlaceholderAvatars();
