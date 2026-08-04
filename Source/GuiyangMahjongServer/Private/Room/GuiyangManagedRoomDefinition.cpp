@@ -152,6 +152,8 @@ bool FGuiyangManagedRoomDefinition::TryParse(const TSharedPtr<FJsonObject>& Boot
     READ_RULE_BOOL("wuGuCanChongFeng", bWuGuCanChongFeng);
     READ_RULE_BOOL("wuGuCanZeRen", bWuGuCanZeRen);
     READ_RULE_BOOL("enableQiangGangHu", bEnableQiangGangHu);
+    // Dedicated Server 必须从控制面启动定义恢复同一通行证规则，不能回退到进程本地默认值。
+    READ_RULE_BOOL("requireGangForDiscardHu", bRequireGangForDiscardHu);
     READ_RULE_BOOL("enableYiPaoDuoXiang", bEnableYiPaoDuoXiang);
     READ_RULE_BOOL("enableQiDui", bEnableQiDui);
     READ_RULE_BOOL("drawGameDealerContinues", bDrawGameDealerContinues);

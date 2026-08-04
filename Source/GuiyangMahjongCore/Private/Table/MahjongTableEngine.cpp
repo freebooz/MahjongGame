@@ -493,7 +493,7 @@ bool UMahjongTableEngine::ValidateRequestCommon(const int32 SeatIndex, const FMa
 
 void UMahjongTableEngine::OpenReactionWindow(const FMahjongTile& Discard, const int32 DiscardSeat)
 {
-    // 权威服务器逐家重新计算胡、明杠和碰资格。
+    // 权威服务器逐家重新计算胡、明杠和碰资格；接炮胡还必须满足本房间冻结的杠牌通行证规则。
     bQiangGangWindow = false;
     // 出牌落地后，公开的轮转指示立即指向顺位下一家；WaitingForAction 阶段仍禁止其出牌，
     // 若其他座位碰、杠或胡，解析响应时会再把 CurrentTurnSeat 改为实际声明者。
@@ -507,7 +507,9 @@ void UMahjongTableEngine::OpenReactionWindow(const FMahjongTile& Discard, const 
         TArray<FMahjongAction> Actions;
         FMahjongHand HuHand = Hands[Seat];
         HuHand.Tiles.Add(Discard);
-        if (UMahjongHuChecker::CanHu(HuHand, LockedRules.Config.bEnableQiDui))
+        const bool bHasDiscardHuPass = !LockedRules.Config.bRequireGangForDiscardHu
+            || HasCompletedGang(Seat);
+        if (bHasDiscardHuPass && UMahjongHuChecker::CanHu(HuHand, LockedRules.Config.bEnableQiDui))
             Actions.Add(BuildReactionAction(Seat, EMahjongActionType::Hu, Discard));
         if (UMahjongGangChecker::CanMingGang(Hands[Seat], Discard))
             Actions.Add(BuildReactionAction(Seat, EMahjongActionType::MingGang, Discard));
@@ -536,6 +538,8 @@ void UMahjongTableEngine::BeginBuGang(const int32 SeatIndex, const FMahjongTile&
         for (int32 Seat = 0; Seat < Hands.Num(); ++Seat)
         {
             if (Seat == SeatIndex) continue;
+            // 抢补杠仍属于使用他家牌胡牌，启用通行证规则时同样要求赢家此前已经完成杠牌。
+            if (LockedRules.Config.bRequireGangForDiscardHu && !HasCompletedGang(Seat)) continue;
             FMahjongHand HuHand = Hands[Seat];
             HuHand.Tiles.Add(Tile);
             if (!UMahjongHuChecker::CanHu(HuHand, LockedRules.Config.bEnableQiDui)) continue;
@@ -698,6 +702,8 @@ void UMahjongTableEngine::ResolveHuReactions(const TArray<int32>& HuSeats)
         }
         PublicState.WinningSeats.Add(ClosestSeat);
     }
+    // 胡牌张已从放炮者弃牌区转移给赢家，标记认领可避免内外鸡结算把同一实体牌计算两次。
+    if (!PublicState.Discards.IsEmpty()) PublicState.Discards.Last().bClaimed = true;
     SettleWin(PublicState.WinningSeats, LastDiscardSeat, false, PublicState.LastDiscard);
 }
 
@@ -831,12 +837,21 @@ void UMahjongTableEngine::SettleWin(const TArray<int32>& WinningSeats, const int
         PublicState.FlippedJiTile = FlippedJiTile;
         PublicState.RemainingTileCount = DeckManager->GetRemainingCount();
     }
-    const TArray<int32> JiCounts = CountJiForSettlement(FlippedJiTile, WinningSeats, bSelfDraw, WinningTile);
+    TArray<int32> InnerJiCounts;
+    TArray<int32> OuterJiCounts;
+    TArray<int32> WuGuJiCounts;
+    TArray<int32> ChongFengJiCounts;
+    const TArray<int32> JiCounts = CountJiForSettlement(FlippedJiTile, WinningSeats, bSelfDraw,
+        WinningTile, InnerJiCounts, OuterJiCounts, WuGuJiCounts, ChongFengJiCounts);
     SettlementResult = UMahjongScoreCalculator::CalculateWinsWithSpecialJi(WinningSeats, LoserSeat, bSelfDraw,
         JiCounts, SpecialJiDeltas, GangDeltas, CurrentScores, LockedRules.Config);
     SettlementResult.WinningTile = WinningTile;
     SettlementResult.FlippedJiTile = FlippedJiTile;
     SettlementResult.PlayerJiCounts = JiCounts;
+    SettlementResult.PlayerInnerJiCounts = MoveTemp(InnerJiCounts);
+    SettlementResult.PlayerOuterJiCounts = MoveTemp(OuterJiCounts);
+    SettlementResult.PlayerWuGuJiCounts = MoveTemp(WuGuJiCounts);
+    SettlementResult.PlayerChongFengJiCounts = MoveTemp(ChongFengJiCounts);
     SettlementResult.JiEvents = PublicState.JiEvents;
     PublicState.WinningSeats = WinningSeats;
     PublicState.CurrentTurnSeat = WinningSeats.IsEmpty() ? INDEX_NONE : WinningSeats[0];
@@ -882,6 +897,18 @@ void UMahjongTableEngine::ApplyGangScore(const int32 GangSeat)
         GangDeltas[Seat] -= LockedRules.Config.GangScore;
         GangDeltas[GangSeat] += LockedRules.Config.GangScore;
     }
+}
+
+bool UMahjongTableEngine::HasCompletedGang(const int32 SeatIndex) const
+{
+    if (!Hands.IsValidIndex(SeatIndex)) return false;
+    // 只有已经进入权威副露的杠才是通行证；等待确认的补杠仍保持 Peng，不能提前取得接炮资格。
+    return Hands[SeatIndex].Melds.ContainsByPredicate([](const FMahjongMeld& Meld)
+    {
+        return Meld.Type == EMahjongMeldType::MingGang
+            || Meld.Type == EMahjongMeldType::AnGang
+            || Meld.Type == EMahjongMeldType::BuGang;
+    });
 }
 
 void UMahjongTableEngine::RecordSpecialJiDiscard(const int32 SeatIndex, const FMahjongDiscardRecord& Record)
@@ -932,31 +959,80 @@ bool UMahjongTableEngine::IsSpecialJiTarget(const FMahjongTile& Tile, const bool
 }
 
 TArray<int32> UMahjongTableEngine::CountJiForSettlement(const FMahjongTile& FlippedJiTile,
-    const TArray<int32>& WinningSeats, const bool bSelfDraw, const FMahjongTile& WinningTile) const
+    const TArray<int32>& WinningSeats, const bool bSelfDraw, const FMahjongTile& WinningTile,
+    TArray<int32>& OutInnerJiCounts, TArray<int32>& OutOuterJiCounts,
+    TArray<int32>& OutWuGuJiCounts, TArray<int32>& OutChongFengJiCounts) const
 {
+    const int32 SeatCount = Hands.Num();
     TArray<int32> Counts;
-    Counts.Reserve(Hands.Num());
+    Counts.Init(0, SeatCount);
+    OutInnerJiCounts.Init(0, SeatCount);
+    OutOuterJiCounts.Init(0, SeatCount);
+    OutWuGuJiCounts.Init(0, SeatCount);
+    OutChongFengJiCounts.Init(0, SeatCount);
+
+    const bool bCountMelds = LockedRules.Config.JiCountingScope == EMahjongJiCountingScope::HandAndMeld
+        || LockedRules.Config.JiCountingScope == EMahjongJiCountingScope::HandMeldAndDiscard;
+    const bool bCountDiscards = LockedRules.Config.JiCountingScope == EMahjongJiCountingScope::HandAndDiscard
+        || LockedRules.Config.JiCountingScope == EMahjongJiCountingScope::HandMeldAndDiscard;
+    const auto AddTileUnits = [this, &FlippedJiTile](const FMahjongTile& Tile, int32& ZoneUnits,
+        int32& WuGuUnits)
+    {
+        ZoneUnits += UGuiyangJiCalculator::CountTileJiUnits(Tile, FlippedJiTile, LockedRules.Config);
+        if (LockedRules.Config.bEnableWuGuJi && UGuiyangJiCalculator::IsWuGuJi(Tile))
+            WuGuUnits += LockedRules.Config.WuGuJiValue;
+    };
+
     for (int32 Seat = 0; Seat < Hands.Num(); ++Seat)
     {
-        FMahjongHand ScoringHand = Hands[Seat];
-        if (!bSelfDraw && WinningSeats.Contains(Seat)) ScoringHand.Tiles.Add(WinningTile);
-        int32 Units = UGuiyangJiCalculator::CountJiUnits(ScoringHand, FlippedJiTile, LockedRules.Config);
-        const bool bCountDiscards = LockedRules.Config.JiCountingScope == EMahjongJiCountingScope::HandAndDiscard
-            || LockedRules.Config.JiCountingScope == EMahjongJiCountingScope::HandMeldAndDiscard;
+        // 接炮牌成为赢家完成手牌的一部分；放炮者对应弃牌已标记认领，因此不会在外鸡中重复出现。
+        for (const FMahjongTile& Tile : Hands[Seat].Tiles)
+            AddTileUnits(Tile, OutInnerJiCounts[Seat], OutWuGuJiCounts[Seat]);
+        if (!bSelfDraw && WinningSeats.Contains(Seat))
+            AddTileUnits(WinningTile, OutInnerJiCounts[Seat], OutWuGuJiCounts[Seat]);
+        if (bCountMelds)
+        {
+            for (const FMahjongMeld& Meld : Hands[Seat].Melds)
+                for (const FMahjongTile& Tile : Meld.Tiles)
+                    AddTileUnits(Tile, OutOuterJiCounts[Seat], OutWuGuJiCounts[Seat]);
+        }
+    }
+    if (bCountDiscards)
+    {
+        for (const FMahjongDiscardRecord& Discard : PublicState.Discards)
+        {
+            if (!Discard.bClaimed && OutOuterJiCounts.IsValidIndex(Discard.SeatIndex))
+                AddTileUnits(Discard.Tile, OutOuterJiCounts[Discard.SeatIndex],
+                    OutWuGuJiCounts[Discard.SeatIndex]);
+        }
+    }
+
+    for (const FMahjongJiEvent& Event : PublicState.JiEvents)
+    {
+        if (Event.Type != EMahjongJiEventType::ChongFeng
+            || !OutOuterJiCounts.IsValidIndex(Event.ActorSeat)) continue;
+
+        OutChongFengJiCounts[Event.ActorSeat] += Event.ValueUnits;
+        int32 AlreadyCountedUnits = 0;
         if (bCountDiscards)
         {
-            for (const FMahjongDiscardRecord& Discard : PublicState.Discards)
+            const FMahjongDiscardRecord* EventDiscard = PublicState.Discards.FindByPredicate([&Event](const FMahjongDiscardRecord& Discard)
             {
-                if (Discard.SeatIndex == Seat && !Discard.bClaimed)
-                    Units += UGuiyangJiCalculator::CountTileJiUnits(Discard.Tile, FlippedJiTile, LockedRules.Config);
-            }
+                return Discard.Sequence == Event.DiscardSequence && Discard.SeatIndex == Event.ActorSeat;
+            });
+            if (EventDiscard && !EventDiscard->bClaimed)
+                AlreadyCountedUnits = UGuiyangJiCalculator::CountTileJiUnits(
+                    EventDiscard->Tile, FlippedJiTile, LockedRules.Config);
         }
-        for (const FMahjongJiEvent& Event : PublicState.JiEvents)
-        {
-            if (Event.Type == EMahjongJiEventType::ChongFeng && Event.ActorSeat == Seat) Units += Event.ValueUnits;
-        }
-        Counts.Add(Units);
+        // 冲锋配置表示该牌的最终单位值；这里只补足与普通内外鸡单位的差额，杜绝重复加分。
+        const int32 ChongFengBonus = FMath::Max(0, Event.ValueUnits - AlreadyCountedUnits);
+        OutOuterJiCounts[Event.ActorSeat] += ChongFengBonus;
+        if (UGuiyangJiCalculator::IsWuGuJi(Event.Tile))
+            OutWuGuJiCounts[Event.ActorSeat] += ChongFengBonus;
     }
+
+    for (int32 Seat = 0; Seat < SeatCount; ++Seat)
+        Counts[Seat] = OutInnerJiCounts[Seat] + OutOuterJiCounts[Seat];
     return Counts;
 }
 

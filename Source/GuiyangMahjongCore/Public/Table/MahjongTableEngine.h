@@ -90,12 +90,23 @@ private:
     void SettleWin(const TArray<int32>& WinningSeats, int32 LoserSeat, bool bSelfDraw, const FMahjongTile& WinningTile);
     void SettleDrawGame();
     void ApplyGangScore(int32 GangSeat);
+    /**
+     * 判断座位是否已经完成至少一次杠牌并取得接炮通行证。
+     * 仅副露中的明杠、暗杠、补杠有效；尚未执行的四张手牌和等待确认的补杠均不算。
+     */
+    bool HasCompletedGang(int32 SeatIndex) const;
     /** 记录冲锋鸡/责任鸡并累计特殊分。 */
     void RecordSpecialJiDiscard(int32 SeatIndex, const FMahjongDiscardRecord& Record);
     void RecordZeRenJiClaim(int32 ClaimSeat, EMahjongActionType ClaimType);
     bool IsSpecialJiTarget(const FMahjongTile& Tile, bool bForZeRen) const;
+    /**
+     * 按冻结规则统计总鸡、内鸡、外鸡、黑八和冲锋鸡单位。
+     * 黑八、冲锋鸡属于总数的审计子集；内鸡与外鸡之和必须等于总鸡，调用方不得重复加分。
+     */
     TArray<int32> CountJiForSettlement(const FMahjongTile& FlippedJiTile, const TArray<int32>& WinningSeats,
-        bool bSelfDraw, const FMahjongTile& WinningTile) const;
+        bool bSelfDraw, const FMahjongTile& WinningTile, TArray<int32>& OutInnerJiCounts,
+        TArray<int32>& OutOuterJiCounts, TArray<int32>& OutWuGuJiCounts,
+        TArray<int32>& OutChongFengJiCounts) const;
     void RefreshSeatCounts();
     FMahjongAction BuildReactionAction(int32 SeatIndex, EMahjongActionType Type, const FMahjongTile& Discard) const;
     int32 FindBestReactionSeat() const;

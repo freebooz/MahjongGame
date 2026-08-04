@@ -167,7 +167,12 @@ bool FMahjongReactionPriorityTest::RunTest(const FString& Parameters)
     FMahjongHand Discarder = MahjongTest::MakeHand({0,1,2,3,4,5,6,7,8,9,10,11,12,13});
     // 座位1持有三张同牌，出牌落地后必须同时收到明杠和碰候选；这覆盖“规则可杠但客户端无按钮”的服务端前半链路。
     FMahjongHand PengPlayer = MahjongTest::MakeHand({0,0,0,3,4,5,6,7,8,9,10,11,12});
-    const FMahjongHand WaitingHu = MahjongTest::MakeHand({1,2, 3,4,5, 9,10,11, 18,18,18, 31,31});
+    FMahjongHand WaitingHu = MahjongTest::MakeHand({1,2, 3,4,5, 9,10,11, 31,31});
+    FMahjongMeld CompletedGang;
+    CompletedGang.Type = EMahjongMeldType::AnGang;
+    CompletedGang.Tiles = { MahjongTest::MakeTile(24, 220), MahjongTest::MakeTile(24, 221),
+        MahjongTest::MakeTile(24, 222), MahjongTest::MakeTile(24, 223) };
+    WaitingHu.Melds.Add(CompletedGang);
     TestTrue(TEXT("注入出牌者测试手牌"), Engine->SetHandForServerTest(0, Discarder));
     TestTrue(TEXT("注入碰牌候选手牌"), Engine->SetHandForServerTest(1, PengPlayer));
     TestTrue(TEXT("注入第一胡家手牌"), Engine->SetHandForServerTest(2, WaitingHu));
@@ -204,6 +209,46 @@ bool FMahjongReactionPriorityTest::RunTest(const FString& Parameters)
     TestTrue(TEXT("第一胡家在赢家列表"), Engine->GetPublicState().WinningSeats.Contains(2));
     TestTrue(TEXT("第二胡家在赢家列表"), Engine->GetPublicState().WinningSeats.Contains(3));
     TestFalse(TEXT("碰牌玩家不得成为赢家"), Engine->GetPublicState().WinningSeats.Contains(1));
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMahjongDiscardHuPassTest,
+    "GuiyangMahjong.Table.DiscardHuRequiresCompletedGang",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMahjongDiscardHuPassTest::RunTest(const FString& Parameters)
+{
+    TArray<FMahjongSeatInfo> Seats;
+    Seats.SetNum(4);
+    for (int32 Seat = 0; Seat < 4; ++Seat)
+    {
+        Seats[Seat].SeatIndex = Seat;
+        Seats[Seat].PlayerId = FString::Printf(TEXT("discard-pass-p%d"), Seat);
+        Seats[Seat].bOccupied = true;
+    }
+    UMahjongTableEngine* Engine = NewObject<UMahjongTableEngine>();
+    FString Error;
+    TestTrue(TEXT("点炮通行证测试牌桌必须开局"), Engine->StartRound(
+        UGuiyangRuleSnapshotLibrary::CreateSnapshot(FMahjongRuleConfig()), Seats, 0, 100, Error));
+
+    Engine->SetHandForServerTest(0, MahjongTest::MakeHand({0,1,2,3,4,5,6,7,8,9,10,11,12,13}));
+    // 该牌型接到一万即可胡，但没有任何已完成杠牌，只能等待自摸。
+    Engine->SetHandForServerTest(1, MahjongTest::MakeHand({1,2, 3,4,5, 9,10,11, 18,18,18, 13,13}));
+    // 保留另一个碰候选，使响应窗口不立即结束，便于直接检查无杠座位的权威候选列表。
+    Engine->SetHandForServerTest(2, MahjongTest::MakeHand({0,0, 6,8,10,12,14,16,18,20,22,24,26}));
+    Engine->SetHandForServerTest(3, FMahjongHand());
+
+    FMahjongActionRequest Play;
+    Play.Type = EMahjongActionType::Play;
+    Play.RoundId = Engine->GetPublicState().RoundId;
+    Play.TurnId = Engine->GetPublicState().TurnId;
+    Play.TargetTileId = 0;
+    Play.ClientSequence = 1;
+    TestTrue(TEXT("放炮牌必须成功落地"), Engine->SubmitPlayTile(0, Play).bSuccess);
+    TestEqual(TEXT("其他碰牌资格应保持响应窗口"),
+        Engine->GetPublicState().Phase, EMahjongTablePhase::WaitingForAction);
+    TestFalse(TEXT("没有完成杠牌的玩家不得收到点炮胡候选"),
+        Engine->GetAvailableActions(1).ContainsByPredicate(
+            [](const FMahjongAction& Action) { return Action.Type == EMahjongActionType::Hu; }));
     return true;
 }
 
@@ -353,7 +398,13 @@ bool FMahjongQiangGangHuTest::RunTest(const FString& Parameters)
     Peng.FromSeat = 3;
     Peng.Tiles = { MahjongTest::MakeTile(0, 210), MahjongTest::MakeTile(0, 211), MahjongTest::MakeTile(0, 212) };
     GangHand.Melds.Add(Peng);
-    const FMahjongHand WaitingHu = MahjongTest::MakeHand({1,2, 3,4,5, 9,10,11, 18,18,18, 13,13});
+    FMahjongHand WaitingHu = MahjongTest::MakeHand({1,2, 3,4,5, 9,10,11, 13,13});
+    FMahjongMeld WaitingPlayerGang;
+    WaitingPlayerGang.Type = EMahjongMeldType::MingGang;
+    WaitingPlayerGang.FromSeat = 2;
+    WaitingPlayerGang.Tiles = { MahjongTest::MakeTile(24, 230), MahjongTest::MakeTile(24, 231),
+        MahjongTest::MakeTile(24, 232), MahjongTest::MakeTile(24, 233) };
+    WaitingHu.Melds.Add(WaitingPlayerGang);
     const FMahjongHand NoHu = MahjongTest::MakeHand({6,8,10,12,14,16,18,20,22,24,26,5,7});
     Engine->SetHandForServerTest(0, GangHand);
     Engine->SetHandForServerTest(1, WaitingHu);

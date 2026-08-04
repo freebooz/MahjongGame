@@ -558,6 +558,8 @@ FString FGuiyangRemoteLobbyCodec::SerializeCreateRoom(const FMahjongCreateRoomRe
     WRITE_RULE_BOOL("wuGuCanChongFeng", bWuGuCanChongFeng);
     WRITE_RULE_BOOL("wuGuCanZeRen", bWuGuCanZeRen);
     WRITE_RULE_BOOL("enableQiangGangHu", bEnableQiangGangHu);
+    // 通行证规则必须随建房请求进入冻结快照，避免客户端显示允许点炮而牌桌服采用不同判定。
+    WRITE_RULE_BOOL("requireGangForDiscardHu", bRequireGangForDiscardHu);
     WRITE_RULE_BOOL("enableYiPaoDuoXiang", bEnableYiPaoDuoXiang);
     WRITE_RULE_BOOL("enableQiDui", bEnableQiDui);
     WRITE_RULE_BOOL("drawGameDealerContinues", bDrawGameDealerContinues);

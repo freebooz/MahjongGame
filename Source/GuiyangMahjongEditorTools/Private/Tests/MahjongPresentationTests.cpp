@@ -22,6 +22,9 @@ bool FMahjongRuleSummaryTest::RunTest(const FString& Parameters)
     TestTrue(TEXT("规则摘要显示局数和密码房"), Summary.Contains(TEXT("8 局")) && Summary.Contains(TEXT("密码房")));
     TestTrue(TEXT("规则摘要显示关闭的冲锋鸡"), Summary.Contains(TEXT("冲锋鸡关")));
     TestTrue(TEXT("规则摘要显示关闭的七对"), Summary.Contains(TEXT("七对关")));
+    TestTrue(TEXT("规则摘要显示黑八和内外鸡"),
+        Summary.Contains(TEXT("黑八开")) && Summary.Contains(TEXT("内外鸡全算")));
+    TestTrue(TEXT("规则摘要显示接炮必须先杠"), Summary.Contains(TEXT("接炮须先杠")));
     TestTrue(TEXT("规则摘要显示分数和超时"), Summary.Contains(TEXT("底分 3")) && Summary.Contains(TEXT("出牌 20 秒")));
     return true;
 }

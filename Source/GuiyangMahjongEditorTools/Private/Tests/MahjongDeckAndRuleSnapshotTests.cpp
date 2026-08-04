@@ -105,6 +105,11 @@ bool FMahjongRuleSnapshotTest::RunTest(const FString& Parameters)
     const FGuiyangRuleSnapshot Second = UGuiyangRuleSnapshotLibrary::CreateSnapshot(Requested);
 
     TestEqual(TEXT("默认规则快照必须锁定 108 张牌"), First.GetTileCount(), 108);
+    TestTrue(TEXT("默认贵阳规则必须要求杠牌通行证后才能接炮"),
+        First.Config.bRequireGangForDiscardHu);
+    TestEqual(TEXT("默认黑八必须按两鸡计算"), First.Config.WuGuJiValue, 2);
+    TestEqual(TEXT("默认规则必须统计内外鸡"), First.Config.JiCountingScope,
+        EMahjongJiCountingScope::HandMeldAndDiscard);
     TestEqual(TEXT("非法底分必须规范化"), First.Config.BaseScore, 1);
     TestEqual(TEXT("重连超时必须限制在服务端允许范围"), First.Config.ReconnectTimeoutSeconds, 600);
     TestEqual(TEXT("相同配置必须产生相同规则哈希"), First.RuleHash, Second.RuleHash);

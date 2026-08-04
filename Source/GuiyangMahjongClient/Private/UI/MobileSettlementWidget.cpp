@@ -18,9 +18,7 @@ namespace
 void UMobileSettlementWidget::NativeConstruct()
 {
     Super::NativeConstruct();
-    // Settlement is an overlay on the live 3D room. Older serialized assets
-    // may still contain a full-screen background image or mask; hide every
-    // legacy backing layer so the table, wall and tiles remain visible.
+    // 结算控件叠加在仍存活的 3D 牌桌上；隐藏旧资产残留的全屏底图和遮罩，避免结算时遮住牌墙与手牌。
     for (const FName BackgroundName : {
         FName(TEXT("Scale_BackgroundFill")),
         FName(TEXT("Size_BackgroundDesign")),
@@ -62,7 +60,17 @@ void UMobileSettlementWidget::SetSettlementResult(const FMahjongSettlementResult
         ? FString::Printf(TEXT("翻鸡牌：%s"), *Result.FlippedJiTile.ToDebugString())
         : TEXT("本局未翻鸡");
     for (int32 Seat = 0; Seat < Result.PlayerJiCounts.Num(); ++Seat)
-        JiSummary += FString::Printf(TEXT("  座位%d：%d鸡"), Seat, Result.PlayerJiCounts[Seat]);
+    {
+        const auto ReadCount = [Seat](const TArray<int32>& Counts)
+        {
+            return Counts.IsValidIndex(Seat) ? Counts[Seat] : 0;
+        };
+        // 黑八和冲锋鸡是总鸡中的审计子集，文案按分项展示但不暗示需要再次相加。
+        JiSummary += FString::Printf(TEXT("\n座位%d：总%d（内鸡%d·外鸡%d·黑八%d·冲锋鸡%d）"),
+            Seat, Result.PlayerJiCounts[Seat], ReadCount(Result.PlayerInnerJiCounts),
+            ReadCount(Result.PlayerOuterJiCounts), ReadCount(Result.PlayerWuGuJiCounts),
+            ReadCount(Result.PlayerChongFengJiCounts));
+    }
     Txt_JiResult->SetText(FText::FromString(JiSummary));
     Panel_PlayerScores->ClearChildren();
     for (const FMahjongPlayerScoreResult& Player : Result.PlayerResults)
@@ -112,8 +120,7 @@ void UMobileSettlementWidget::HandleAutoNextRound()
 
 void UMobileSettlementWidget::AcknowledgeRoundAndClose()
 {
-    // Close only the result overlay. The room HUD, camera, table, walls and
-    // tiles stay alive while the authoritative server advances the round.
+    // 只关闭结算遮罩，房间 HUD、摄像机、牌桌与牌墙继续存活，由权威服务端推进下一局。
     if (!bRoundSettlementActive || bNextRoundRequested)
     {
         return;

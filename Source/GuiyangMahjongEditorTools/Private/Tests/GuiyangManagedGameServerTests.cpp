@@ -119,6 +119,7 @@ namespace GuiyangManagedGameServerTests
         Rules->SetNumberField(TEXT("turnTimeoutSeconds"), 21);
         Rules->SetNumberField(TEXT("reactionTimeoutSeconds"), 9);
         Rules->SetBoolField(TEXT("enableChongFengJi"), true);
+        Rules->SetBoolField(TEXT("requireGangForDiscardHu"), true);
 
         const TSharedRef<FJsonObject> Bootstrap = MakeShared<FJsonObject>();
         Bootstrap->SetStringField(TEXT("roomId"), BackendRoomId);
@@ -271,6 +272,8 @@ bool FGuiyangManagedRoomBootstrapTest::RunTest(const FString& Parameters)
     TestEqual(TEXT("固定房号不得重生成"), Definition.RoomCode, FString(TEXT("654321")));
     TestEqual(TEXT("规则快照应采用 Lobby 分数"), Definition.RuleSnapshot.Config.BaseScore, 3);
     TestEqual(TEXT("规则快照应采用 Lobby 超时"), Definition.RuleSnapshot.Config.TurnTimeoutSeconds, 21);
+    TestTrue(TEXT("规则快照应采用 Lobby 下发的接炮杠牌通行证"),
+        Definition.RuleSnapshot.Config.bRequireGangForDiscardHu);
     TestTrue(TEXT("自动开始属性必须保持"), Definition.bAutoStart);
     TestTrue(TEXT("解析后的规则快照必须自洽"),
         UGuiyangRuleSnapshotLibrary::VerifySnapshot(Definition.RuleSnapshot));

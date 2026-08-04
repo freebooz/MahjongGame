@@ -714,7 +714,10 @@ void UMobileMahjongHUDWidget::EnsureRuntimeActionButtons()
         Button->AddChild(LabelWidget);
 
         UCanvasPanelSlot* Slot = ActionCanvas->AddChildToCanvas(Button);
-        Slot->SetAnchors(FAnchors(0.5f, 0.72f));
+        // Windows 150% 缩放下，1280×720 物理窗口可能仍保留 1920×1080 的逻辑画布；
+        // 61% 高度可保证 96px 按钮完整落在物理窗口内，同时仍位于南方手牌上方。
+        // 同一缩放问题也会把 1920 逻辑宽度裁成 1280 物理宽度，45% 水平锚点可保证四个按钮均完整落入安全区。
+        Slot->SetAnchors(FAnchors(0.45f, 0.61f));
         Slot->SetAlignment(FVector2D(0.5f, 0.5f));
         Slot->SetPosition(FVector2D::ZeroVector);
         Slot->SetSize(FVector2D(152.0f, 96.0f));
@@ -749,6 +752,7 @@ void UMobileMahjongHUDWidget::RefreshRuntimeActionButtons()
             [Type](const FMahjongAction& Action) { return Action.Type == Type; });
     };
     const bool bHasActions = !CachedAvailableActions.IsEmpty();
+    const bool bIsReactionWindow = CachedPublicState.Phase == EMahjongTablePhase::WaitingForAction;
     const bool bHasGang = Has(EMahjongActionType::MingGang)
         || Has(EMahjongActionType::AnGang) || Has(EMahjongActionType::BuGang);
     const bool bIsCurrentPlayer = bHasPrivateState
@@ -763,7 +767,8 @@ void UMobileMahjongHUDWidget::RefreshRuntimeActionButtons()
         Button->SetIsEnabled(bVisible && bEnabled);
         Button->SetRenderOpacity(1.0f);
     };
-    Apply(Btn_RuntimePass, bHasActions, bHasActions);
+    // “过”只属于他家出牌/抢杠响应窗口；自己回合的暗杠、补杠或自摸候选可直接改为出牌，不能发送无效 Pass。
+    Apply(Btn_RuntimePass, bIsReactionWindow && bHasActions, true);
     Apply(Btn_RuntimePeng, Has(EMahjongActionType::Peng), true);
     Apply(Btn_RuntimeGang, bHasGang, true);
     Apply(Btn_RuntimeHu, Has(EMahjongActionType::Hu), true);

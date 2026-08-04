@@ -238,8 +238,17 @@ struct GUIYANGMAHJONGCORE_API FMahjongSettlementResult
     UPROPERTY(EditAnywhere, BlueprintReadWrite) int32 LoserSeat = INDEX_NONE;
     UPROPERTY(EditAnywhere, BlueprintReadWrite) FMahjongTile WinningTile;
     UPROPERTY(EditAnywhere, BlueprintReadWrite) FMahjongTile FlippedJiTile;
-    /** 鸡牌统计、事件明细和最终逐座位分数。 */
+    /**
+     * 各座位鸡牌单位总数及结算分项。
+     * 内鸡只统计结算时仍在手中的牌；外鸡统计副露、未被认领的弃牌以及冲锋鸡升级单位。
+     * 黑八和冲锋鸡数组是总数的可重叠审计子集，不能再次相加到 PlayerJiCounts。
+     */
     UPROPERTY(EditAnywhere, BlueprintReadWrite) TArray<int32> PlayerJiCounts;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite) TArray<int32> PlayerInnerJiCounts;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite) TArray<int32> PlayerOuterJiCounts;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite) TArray<int32> PlayerWuGuJiCounts;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite) TArray<int32> PlayerChongFengJiCounts;
+    /** 冲锋鸡、责任鸡事件明细和最终逐座位分数。 */
     UPROPERTY(EditAnywhere, BlueprintReadWrite) TArray<FMahjongJiEvent> JiEvents;
     UPROPERTY(EditAnywhere, BlueprintReadWrite) TArray<FMahjongTile> JiTiles;
     UPROPERTY(EditAnywhere, BlueprintReadWrite) TArray<FMahjongPlayerScoreResult> PlayerResults;
@@ -253,7 +262,7 @@ struct GUIYANGMAHJONGCORE_API FMahjongRuleConfig
     GENERATED_BODY()
     /** 规则族标识和版本会写入房间规则快照，开局后不得修改。 */
     UPROPERTY(EditAnywhere, BlueprintReadWrite) FName RuleId = TEXT("GuiyangMainstreamV1");
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta=(ClampMin="1")) int32 RuleVersion = 1;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta=(ClampMin="1")) int32 RuleVersion = 2;
     UPROPERTY(EditAnywhere, BlueprintReadWrite) EMahjongTileSetMode TileSetMode = EMahjongTileSetMode::Suited108;
     /** 贵阳特殊鸡、抢杠胡、一炮多响、七对及超时托管开关。 */
     UPROPERTY(EditAnywhere, BlueprintReadWrite) bool bEnableChongFengJi = true;
@@ -262,6 +271,11 @@ struct GUIYANGMAHJONGCORE_API FMahjongRuleConfig
     UPROPERTY(EditAnywhere, BlueprintReadWrite) bool bWuGuCanChongFeng = true;
     UPROPERTY(EditAnywhere, BlueprintReadWrite) bool bWuGuCanZeRen = true;
     UPROPERTY(EditAnywhere, BlueprintReadWrite) bool bEnableQiangGangHu = true;
+    /**
+     * 贵阳平胡通行证：接他家弃牌或抢杠胡前，赢家必须已经完成至少一次明杠、暗杠或补杠。
+     * 自摸不受该限制；仅持有四张同牌但尚未执行杠牌不算取得通行证。
+     */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite) bool bRequireGangForDiscardHu = true;
     UPROPERTY(EditAnywhere, BlueprintReadWrite) bool bEnableYiPaoDuoXiang = true;
     UPROPERTY(EditAnywhere, BlueprintReadWrite) bool bEnableQiDui = true;
     UPROPERTY(EditAnywhere, BlueprintReadWrite) bool bDrawGameDealerContinues = true;
@@ -271,12 +285,12 @@ struct GUIYANGMAHJONGCORE_API FMahjongRuleConfig
     UPROPERTY(EditAnywhere, BlueprintReadWrite) int32 JiScore = 1;
     UPROPERTY(EditAnywhere, BlueprintReadWrite) int32 BasicJiValue = 1;
     UPROPERTY(EditAnywhere, BlueprintReadWrite) int32 FlippedJiValue = 1;
-    UPROPERTY(EditAnywhere, BlueprintReadWrite) int32 WuGuJiValue = 1;
-    UPROPERTY(EditAnywhere, BlueprintReadWrite) int32 ChongFengJiValue = 1;
-    UPROPERTY(EditAnywhere, BlueprintReadWrite) int32 WuGuChongFengJiValue = 1;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite) int32 WuGuJiValue = 2;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite) int32 ChongFengJiValue = 2;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite) int32 WuGuChongFengJiValue = 4;
     UPROPERTY(EditAnywhere, BlueprintReadWrite) int32 ZeRenJiValue = 1;
     UPROPERTY(EditAnywhere, BlueprintReadWrite) int32 WuGuZeRenJiValue = 1;
-    UPROPERTY(EditAnywhere, BlueprintReadWrite) EMahjongJiCountingScope JiCountingScope = EMahjongJiCountingScope::HandAndMeld;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite) EMahjongJiCountingScope JiCountingScope = EMahjongJiCountingScope::HandMeldAndDiscard;
     UPROPERTY(EditAnywhere, BlueprintReadWrite) int32 GangScore = 1;
     UPROPERTY(EditAnywhere, BlueprintReadWrite) int32 ZiMoMultiplier = 2;
     UPROPERTY(EditAnywhere, BlueprintReadWrite) int32 DianPaoMultiplier = 1;

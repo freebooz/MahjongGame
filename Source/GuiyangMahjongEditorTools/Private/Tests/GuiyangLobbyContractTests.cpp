@@ -110,6 +110,8 @@ bool FGuiyangRemoteLobbyCodecTest::RunTest(const FString& Parameters)
     {
         TestEqual(TEXT("分数规则必须保持"), static_cast<int32>((*Rules)->GetNumberField(TEXT("baseScore"))), 3);
         TestEqual(TEXT("出牌超时必须保持"), static_cast<int32>((*Rules)->GetNumberField(TEXT("turnTimeoutSeconds"))), 21);
+        TestTrue(TEXT("接炮杠牌通行证必须进入建房规则快照"),
+            (*Rules)->GetBoolField(TEXT("requireGangForDiscardHu")));
     }
 
     const FString ReconnectJson = FGuiyangRemoteLobbyCodec::SerializeReconnectRouteRequest(

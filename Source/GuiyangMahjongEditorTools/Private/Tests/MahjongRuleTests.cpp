@@ -151,6 +151,64 @@ bool FMahjongJiTest::RunTest(const FString& Parameters)
     return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMahjongJiSettlementBreakdownTest,
+    "GuiyangMahjong.Table.JiSettlementBreakdown",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMahjongJiSettlementBreakdownTest::RunTest(const FString& Parameters)
+{
+    TArray<FMahjongSeatInfo> Seats;
+    Seats.SetNum(4);
+    for (int32 Seat = 0; Seat < 4; ++Seat)
+    {
+        Seats[Seat].SeatIndex = Seat;
+        Seats[Seat].PlayerId = FString::Printf(TEXT("ji-breakdown-p%d"), Seat);
+        Seats[Seat].bOccupied = true;
+    }
+    FMahjongRuleConfig Config;
+    Config.JiCountingScope = EMahjongJiCountingScope::HandMeldAndDiscard;
+    UMahjongTableEngine* Engine = NewObject<UMahjongTableEngine>();
+    FString Error;
+    TestTrue(TEXT("内外鸡结算测试牌桌必须开局"), Engine->StartRound(
+        UGuiyangRuleSnapshotLibrary::CreateSnapshot(Config), Seats, 0, 108, Error));
+
+    // 庄家第一张只打出黑八，确保该实体牌稳定成为黑八冲锋鸡，且不会被其他座位认领。
+    Engine->SetHandForServerTest(0, MahjongTest::MakeHand({25}));
+    Engine->SetHandForServerTest(1, FMahjongHand());
+    Engine->SetHandForServerTest(2, FMahjongHand());
+    Engine->SetHandForServerTest(3, FMahjongHand());
+    FMahjongActionRequest Play;
+    Play.Type = EMahjongActionType::Play;
+    Play.RoundId = Engine->GetPublicState().RoundId;
+    Play.TurnId = Engine->GetPublicState().TurnId;
+    Play.TargetTileId = 0;
+    Play.ClientSequence = 1;
+    TestTrue(TEXT("黑八冲锋鸡必须成功打出"), Engine->SubmitPlayTile(0, Play).bSuccess);
+
+    const FMahjongHand WinningHand = MahjongTest::MakeHand({0,1,2, 9,10,11, 18,18,18, 3,4,5, 13,13});
+    TestTrue(TEXT("下一座位注入自摸牌型"), Engine->SetHandForServerTest(1, WinningHand));
+    FMahjongActionRequest Hu;
+    Hu.Type = EMahjongActionType::Hu;
+    Hu.RoundId = Engine->GetPublicState().RoundId;
+    Hu.TurnId = Engine->GetPublicState().TurnId;
+    Hu.ClientSequence = 1;
+    TestTrue(TEXT("自摸必须触发鸡牌分项结算"), Engine->SubmitTurnAction(1, Hu).bSuccess);
+
+    FMahjongSettlementResult Settlement;
+    TestTrue(TEXT("必须读取权威鸡牌结算"), Engine->GetSettlementResult(Settlement));
+    TestEqual(TEXT("总鸡必须按四个座位发布"), Settlement.PlayerJiCounts.Num(), 4);
+    TestEqual(TEXT("黑八基础二鸡并按冲锋翻倍为四鸡"), Settlement.PlayerJiCounts[0], 4);
+    TestEqual(TEXT("打出的黑八属于外鸡"), Settlement.PlayerOuterJiCounts[0], 4);
+    TestEqual(TEXT("庄家没有剩余内鸡"), Settlement.PlayerInnerJiCounts[0], 0);
+    TestEqual(TEXT("黑八审计分项必须包含冲锋升级"), Settlement.PlayerWuGuJiCounts[0], 4);
+    TestEqual(TEXT("冲锋鸡分项必须记录最终四鸡单位"), Settlement.PlayerChongFengJiCounts[0], 4);
+    for (int32 Seat = 0; Seat < 4; ++Seat)
+    {
+        TestEqual(TEXT("每座位总鸡必须等于内鸡加外鸡"), Settlement.PlayerJiCounts[Seat],
+            Settlement.PlayerInnerJiCounts[Seat] + Settlement.PlayerOuterJiCounts[Seat]);
+    }
+    return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMahjongScoreTest, "GuiyangMahjong.Rules.ScoreZeroSum", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FMahjongScoreTest::RunTest(const FString& Parameters)
 {

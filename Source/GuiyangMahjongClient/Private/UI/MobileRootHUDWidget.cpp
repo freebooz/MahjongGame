@@ -148,6 +148,10 @@ namespace
         Result.WinningTile = MakeReviewTile(EMahjongSuit::Characters, 9, 500);
         Result.FlippedJiTile = MakeReviewTile(EMahjongSuit::Characters, 1, 501);
         Result.PlayerJiCounts = {3, 1, 2, 0};
+        Result.PlayerInnerJiCounts = {1, 1, 0, 0};
+        Result.PlayerOuterJiCounts = {2, 0, 2, 0};
+        Result.PlayerWuGuJiCounts = {0, 0, 2, 0};
+        Result.PlayerChongFengJiCounts = {2, 0, 0, 0};
         const int32 Scores[] = {18, -6, 3, -15};
         for (int32 SeatIndex = 0; SeatIndex < 4; ++SeatIndex)
         {
